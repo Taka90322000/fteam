@@ -1,85 +1,100 @@
-﻿
-$ErrorActionPreference = "Stop"
+﻿# -*- coding: utf-8 -*-
+# Build exploded webapp, launch Tomcat if needed, then check the endpoint.
+# Save as UTF-8 with BOM for Windows PowerShell 5.1.
 
-# Tomcatの配置先を取得
-$tomcat = $env:CATALINA_HOME
+param(
+    [switch]$NoBrowser,
+    [string]$HealthPath = '/machiriku/hello'
+)
 
-if (-not $tomcat) {
-    throw "CATALINA_HOMEが設定されていません"
+$ErrorActionPreference = 'Stop'
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$tomcatHome = $env:CATALINA_HOME
+
+if ([string]::IsNullOrWhiteSpace($tomcatHome)) {
+    throw 'CATALINA_HOME is not set. Restart VS Code after updating environment variables.'
+}
+$startup = Join-Path $tomcatHome 'bin\startup.bat'
+if (-not (Test-Path $startup)) {
+    throw "startup.bat not found: $startup"
+}
+if (-not (Get-Command mvn -ErrorAction SilentlyContinue)) {
+    throw 'mvn not found on PATH.'
 }
 
-$webapps = Join-Path $tomcat "webapps"
-
-if (-not (Test-Path $webapps)) {
-    throw "Tomcatのwebappsが見つかりません"
+$contextFile = Join-Path $tomcatHome 'conf\Catalina\localhost\machiriku.xml'
+if (-not (Test-Path $contextFile)) {
+    throw "machiriku.xml not found. Run scripts/setup-dev.ps1 first: $contextFile"
 }
 
-# プロジェクトのルートに移動
-Set-Location (Join-Path $PSScriptRoot "..")
-
-# Javaをコンパイルして展開形式で配置
-Write-Host "Building application..." -ForegroundColor Cyan
-
-& mvn compile war:exploded
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Maven build failed."
+$expectedDocBase = (Join-Path $projectRoot 'target\machiriku').Replace('\', '/')
+try {
+    [xml]$config = Get-Content -LiteralPath $contextFile -Raw -Encoding UTF8
+}
+catch {
+    throw "machiriku.xml is not valid XML: $($_.Exception.Message)"
+}
+$configuredDocBase = $config.DocumentElement.GetAttribute('docBase').Replace('\', '/')
+if ($configuredDocBase -ne $expectedDocBase) {
+    throw "docBase mismatch: $configuredDocBase . Expected: $expectedDocBase . Run setup after fixing/removing old context."
 }
 
-Write-Host "Build completed!" -ForegroundColor Green
+Push-Location $projectRoot
+try {
+    Write-Host 'Building Maven exploded application...' -ForegroundColor Cyan
+    & mvn compile war:exploded
+    if ($LASTEXITCODE -ne 0) {
+        throw "Maven build failed with code $LASTEXITCODE"
+    }
+}
+finally {
+    Pop-Location
+}
 
+$explodedWebInf = Join-Path $projectRoot 'target\machiriku\WEB-INF'
+if (-not (Test-Path $explodedWebInf)) {
+    throw "Exploded web application not found: $explodedWebInf . Check pom.xml <finalName>machiriku</finalName>."
+}
 
-# Tomcatにデプロイ
-$war = "target\machiriku.war"
-$destination = Join-Path $webapps "machiriku.war"
-
-Copy-Item -LiteralPath $war -Destination $destination -Force
-
-Write-Host "デプロイ完了！" -ForegroundColor Green
-
-
-# Tomcatの起動確認
-$port = 8080
-
-$running = Get-NetTCPConnection `
-    -LocalPort $port `
-    -State Listen `
-    -ErrorAction SilentlyContinue
-
-if (-not $running) {
-    Write-Host "Starting Tomcat..." -ForegroundColor Cyan
-
-    $startup = Join-Path $tomcat "bin\startup.bat"
+# This tests only whether port 8080 is being listened to, not whether it belongs to Tomcat.
+$listener = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
+if (-not $listener) {
+    Write-Host 'Starting Tomcat...' -ForegroundColor Cyan
     & $startup
-} else {
-    Write-Host "Port 8080 is already in use." -ForegroundColor Yellow
+    if ($LASTEXITCODE -ne 0) {
+        throw "Tomcat startup.bat failed with code $LASTEXITCODE"
+    }
+}
+else {
+    Write-Host 'Port 8080 is already in use. Checking the application URL...' -ForegroundColor Yellow
 }
 
-# アプリケーションの起動を待機
-$url = "http://localhost:8080/machiriku/hello"
+if (-not $HealthPath.StartsWith('/')) {
+    throw "HealthPath must begin with / : $HealthPath"
+}
+$url = "http://localhost:8080$HealthPath"
 $ready = $false
+$lastError = ''
 
-for ($i = 0; $i -lt 30; $i++) {
+for ($i = 0; $i -lt 60; $i++) {
     try {
-        $response = Invoke-WebRequest `
-            -Uri $url `
-            -UseBasicParsing `
-            -TimeoutSec 2
-
+        $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 3
         if ($response.StatusCode -eq 200) {
             $ready = $true
             break
         }
     }
     catch {
-        Start-Sleep -Seconds 1
+        $lastError = $_.Exception.Message
     }
+    Start-Sleep -Seconds 1
 }
 
 if (-not $ready) {
-    throw "Application startup failed: $url"
+    throw "Application startup check failed: $url`nLast error: $lastError`nCheck Tomcat logs and confirm the health endpoint exists."
 }
 
-# ブラウザを開く
-Write-Host "Opening browser..." -ForegroundColor Green
-Start-Process $url
+Write-Host "Application ready: $url" -ForegroundColor Green
+if (-not $NoBrowser) {
+    Start-Process $url
+}
