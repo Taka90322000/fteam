@@ -1,0 +1,23 @@
+# Maven
+target/
+*.class
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# IntelliJ IDEA
+.idea/
+
+# VS Code
+.vscode/*
+!.vscode/tasks.json
+
+# Logs
+*.log
+
+# Environment / Secrets
+.env
+.env.*
+*.local
