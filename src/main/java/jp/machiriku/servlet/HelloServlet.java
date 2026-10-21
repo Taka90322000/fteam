@@ -17,7 +17,7 @@ public class HelloServlet extends HttpServlet {
             HttpServletResponse response)
             throws ServletException, IOException {
 
-        request.setAttribute("message", "Servlet動作確認3");
+        request.setAttribute("message", "Servlet動作確認4");
 
         request.getRequestDispatcher("/WEB-INF/views/hello.jsp")
                .forward(request, response);
