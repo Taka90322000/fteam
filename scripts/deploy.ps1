@@ -4,11 +4,14 @@
 
 param(
     [switch]$NoBrowser,
-    [string]$HealthPath = '/machiriku/hello'
+    [string]$HealthPath = '/machiriku/hello',
+    [string]$ActiveFile
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'resolve-page.ps1')
+$browserPath = Get-ActivePagePath -ProjectRoot $projectRoot -ActiveFile $ActiveFile -FallbackPath $HealthPath
 $tomcatHome = $env:CATALINA_HOME
 
 if ([string]::IsNullOrWhiteSpace($tomcatHome)) {
@@ -96,5 +99,7 @@ if (-not $ready) {
 
 Write-Host "Application ready: $url" -ForegroundColor Green
 if (-not $NoBrowser) {
-    Start-Process $url
+    $browserUrl = "http://localhost:8080$browserPath"
+    Write-Host "Opening: $browserUrl" -ForegroundColor Cyan
+    Start-Process $browserUrl
 }

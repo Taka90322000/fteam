@@ -10,7 +10,9 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\deploy.ps1"
+        "${workspaceFolder}\\scripts\\deploy.ps1",
+        "-ActiveFile",
+        "${file}"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
