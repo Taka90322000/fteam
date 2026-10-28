@@ -8,7 +8,6 @@ public class User implements Serializable {
     private int userId;
     private String displayName;
     private String email;
-    private String passwordHash;
     private String userRole;
     private String phoneE164;
     private String lineSubject;
@@ -40,14 +39,6 @@ public class User implements Serializable {
 
     public void setEmail(String email) {
         this.email = email;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public void setPasswordHash(String passwordHash) {
-        this.passwordHash = passwordHash;
     }
 
     public String getUserRole() {
