@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="skyK" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ecfdf5"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="400" fill="url(#skyK)"/>
+  
+  <!-- Kamagawa River Stream Foreground -->
+  <path d="M 0 330 Q 300 310 600 340 L 600 400 L 0 400 Z" fill="#67e8f9" opacity="0.6"/>
+  <text x="300" y="380" font-family="sans-serif" font-size="12" font-weight="700" fill="#0891b2" text-anchor="middle">〜 釜川のせせらぎと親水テラス 〜</text>
+  
+  <!-- Renovated Machiya Townhouse -->
+  <polygon points="100,160 300,70 500,160 500,330 100,330" fill="#451a03"/>
+  <polygon points="110,165 300,80 490,165 490,325 110,325" fill="#fef3c7"/>
+  
+  <!-- Wood Paneling & Open Terrace -->
+  <rect x="130" y="200" width="340" height="120" fill="#78350f" rx="4"/>
+  <rect x="145" y="215" width="310" height="90" fill="#ffffff" rx="4"/>
+  
+  <text x="300" y="248" font-family="sans-serif" font-size="16" font-weight="900" fill="#b91c1c" text-anchor="middle">釜川クラフトピッツァ＆クラフトビール</text>
+  <text x="300" y="272" font-family="sans-serif" font-size="11" font-weight="700" fill="#047857" text-anchor="middle">祝・営業中！ 来店アンケート＆15% OFFクーポン配布中！</text>
+  
+  <!-- Pizza & Beer Icons -->
+  <text x="300" y="295" font-family="sans-serif" font-size="14" text-anchor="middle">🍕 🍺 🥗</text>
+</svg>
