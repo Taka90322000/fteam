@@ -88,7 +88,7 @@ public class LineCallbackAction extends Action {
             LineLoginSupport.error(req, res, registration, "LINEとの通信が中断されました。もう一度お試しください。");
         } catch (IOException e) {
             LineLoginSupport.error(req, res, registration,
-                    "LINE認証またはメールアドレスの取得に失敗しました。メールアドレスの登録と共有の許可を確認し、もう一度お試しください。");
+                    "LINE認証に失敗しました。もう一度お試しください。");
         } catch (SQLException e) {
             // Do not log SQLException details: PostgreSQL may include email/phone values.
             req.getServletContext().log("LINE login database operation failed (SQLState=" + e.getSQLState() + ").");

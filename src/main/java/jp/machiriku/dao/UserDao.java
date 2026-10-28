@@ -38,7 +38,8 @@ public class UserDao extends Dao {
                         "INSERT INTO users (display_name, email, user_role, line_subject, phone_e164) "
                         + "VALUES (?, ?, ?, ?, ?) RETURNING " + COLUMNS)) {
             statement.setString(1, user.getDisplayName());
-            statement.setString(2, user.getEmail());
+            String email = user.getEmail();
+            statement.setString(2, email == null || email.isBlank() ? null : email);
             statement.setString(3, user.getUserRole());
             statement.setString(4, user.getLineSubject());
             statement.setString(5, user.getPhoneE164());
@@ -51,7 +52,8 @@ public class UserDao extends Dao {
 
     private static void validate(User user) {
         if (user == null || !validText(user.getDisplayName(), 100)
-                || !validText(user.getEmail(), 254) || !validText(user.getLineSubject(), 255)
+                || (user.getEmail() != null && !user.getEmail().isBlank() && !validText(user.getEmail(), 254))
+                || !validText(user.getLineSubject(), 255)
                 || user.getUserRole() == null || !ROLES.contains(user.getUserRole())) {
             throw new IllegalArgumentException("User registration fields are invalid.");
         }

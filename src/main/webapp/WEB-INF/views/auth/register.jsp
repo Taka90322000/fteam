@@ -58,7 +58,7 @@
           <span>LINEで登録・ログイン</span>
         </button>
         <p style="font-size:0.8125rem; color:var(--text-sub); text-align:center; margin-top:0.75rem; line-height:1.5;">
-          本アプリでは、登録時にLINEに登録されているメールアドレスを取得します。<br>
+          本アプリでは、登録時にLINEに登録されているメールアドレスを、取得できる場合に利用します。取得できない場合も登録できます。<br>
           取得したメールアドレスは、本人確認・サポート対応の目的でのみ利用し、第三者への提供は行いません。<br>
           <span style="font-size:0.75rem; color:var(--text-muted);">※利用規約・プライバシーポリシーに同意の上、次へお進みください。</span>
         </p>

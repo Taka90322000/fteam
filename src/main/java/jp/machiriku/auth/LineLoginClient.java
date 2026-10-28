@@ -94,7 +94,8 @@ public class LineLoginClient {
         }
         String subject = requiredText(verified, "sub", "LINE did not return a user identifier.");
         String name = requiredText(verified, "name", "LINE did not return a display name.");
-        String email = requiredText(verified, "email", "LINE did not provide an email address. Check email permission and consent.");
+        String email = text(verified, "email");
+        if (email == null || email.isBlank()) { email = null; }
         return new Profile(name, email, subject);
     }
 

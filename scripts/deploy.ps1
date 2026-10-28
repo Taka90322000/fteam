@@ -4,7 +4,7 @@
 
 param(
     [switch]$NoBrowser,
-    [string]$HealthPath = '/machiriku/hello',
+    [string]$HealthPath = '/machiriku/index.jsp',
     [string]$ActiveFile
 )
 

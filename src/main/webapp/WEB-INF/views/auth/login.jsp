@@ -30,7 +30,7 @@
         <span>LINEでログイン</span>
       </a>
       <p style="font-size:0.8125rem; color:var(--text-sub); text-align:center; margin-top:0.75rem; line-height:1.5;">
-        LINEの表示名・メールアドレス・ユーザーIDを取得し、会員情報の確認に利用します。
+        LINEの表示名・ユーザーIDと、取得できる場合はメールアドレスを取得し、会員情報の確認に利用します。
       </p>
     </div>
 
