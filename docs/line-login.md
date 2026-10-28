@@ -1,9 +1,20 @@
 # LINEログインの設定
 
-Tomcatを起動するユーザーの環境変数に、次の3項目を設定してください。チャネルシークレットをソースコード・JSP・Gitへ保存しないでください。
+プロジェクト直下の `.env` にLINEとDBの設定をまとめます。`.env` はGitの対象外です。共有用の `.env.example` には実際のパスワードやシークレットを記入しないでください。
 
-| 環境変数 | 設定内容 |
+今回、既存のDB用環境変数から `.env` へ値を移しています。別の環境では、まず `.env.example` を `.env` にコピーしてください（既存の `.env` は上書きしないでください）。
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`.env` はUTF-8（BOMなし）で保存し、次の項目を設定します。
+
+| 設定名 | 設定内容 |
 | --- | --- |
+| `MACHIRIKU_DB_URL` | PostgreSQLのJDBC URL（例：`jdbc:postgresql://localhost:5432/machiriku`） |
+| `MACHIRIKU_DB_USER` | DB接続ユーザー |
+| `MACHIRIKU_DB_PASSWORD` | DB接続パスワード |
 | `LINE_CHANNEL_ID` | LINE LoginチャネルのチャネルID |
 | `LINE_CHANNEL_SECRET` | 同じチャネルのチャネルシークレット |
 | `LINE_REDIRECT_URI` | LINE Developersに登録するコールバックURLと完全に同じ値 |
@@ -14,7 +25,21 @@ Tomcatを起動するユーザーの環境変数に、次の3項目を設定し�
 http://localhost:8080/machiriku/jp/machiriku/servlet/auth/LineCallback.action
 ```
 
-公開環境ではHTTPSを使います。環境変数を変更したら、VS CodeとTomcatを再起動してください。
+公開環境ではHTTPSを使います。`.env` を変更したらTomcatを再起動し、VS Codeで `Ctrl+Shift+B` を実行してください。VS Codeの再起動は不要です。
+
+`.env` にある項目はOSの環境変数より優先します。項目がなければ従来のOS環境変数を使用します。`KEY=` のような空欄は空の設定として扱うため、古いOSの値では補いません。
+
+パスワードに `#` や空白を含む場合は、値をダブルクォートで囲んでください。値はPowerShellとして実行されず、変数展開も行いません。
+
+```dotenv
+MACHIRIKU_DB_PASSWORD="password with # and spaces"
+```
+
+## 読み込み場所
+
+現行の開発構成では、Javaクラスの配置先からプロジェクトの `.env` を自動で見つけます。Tomcatを別の作業フォルダーから起動した場合も利用でき、起動スクリプトの変更は不要です。`.env` を `src/main/webapp` や `src/main/resources` に置かないでください。プロジェクト直下の `.env` はWARに含まれません。
+
+WARを別のサーバーへ配置する場合は、サーバー内の `.env` の絶対パスを `MACHIRIKU_ENV_FILE` またはJavaの `-Dmachiriku.env.file=...` で指定できます。Javaのシステムプロパティが優先します。明示したファイルが存在しない場合は設定エラーになり、別ファイルへ自動で切り替えません。
 
 LINE Developers Consoleで以下を設定します。
 
@@ -45,7 +70,7 @@ SQLは `public` スキーマの利用権限と、`users` の読取・登録、�
 - ログイン画面からの未登録アカウントは登録画面へ案内する。メールアドレスが同じでも、別のLINEアカウントを自動で既存会員に紐付けない。
 - `state` はセッションに紐付けて10分間・1回限りで使用する。nonceとPKCE S256も検証し、ログイン成功時には新しいセッションを作成する。
 
-デモ用のロール選択ログインは標準で無効です。審査用の隔離されたデモ環境で必要な場合のみ `MACHIRIKU_DEMO_LOGIN_ENABLED=true` を設定します。実利用環境では有効にしないでください。
+デモ用のロール選択ログインは標準で無効です。審査用の隔離されたデモ環境で必要な場合のみ `.env` に `MACHIRIKU_DEMO_LOGIN_ENABLED=true` を設定します。実利用環境では有効にしないでください。
 
 ## 検証
 
@@ -53,7 +78,7 @@ SQLは `public` スキーマの利用権限と、`users` の読取・登録、�
 mvn test
 ```
 
-実DBの接続を含むDAOテストは、設定済みの `MACHIRIKU_DB_URL`、`MACHIRIKU_DB_USER`、`MACHIRIKU_DB_PASSWORD` に加えて次を指定します。DBテストは `users` の定義を複製した一時テーブルだけを使用し、ロールバックします。
+実DBの接続を含むDAOテストは、`.env` の `MACHIRIKU_DB_URL`、`MACHIRIKU_DB_USER`、`MACHIRIKU_DB_PASSWORD` を使用します。テストの有効化は誤実行を避けるためOSの `MACHIRIKU_RUN_DB_TESTS` で指定します。DBテストは `users` の定義を複製した一時テーブルだけを使用し、ロールバックします。
 
 ```powershell
 $env:MACHIRIKU_RUN_DB_TESTS = 'true'

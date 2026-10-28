@@ -1,4 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="jp.machiriku.config.AppConfig" %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="ログイン | マチリク" />
   <jsp:param name="activeNav" value="login" />
@@ -37,7 +38,7 @@
       アカウントをお持ちでない方は <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action" style="color:var(--primary-700); font-weight:700; text-decoration:underline;">新規会員登録</a>
     </div>
 
-    <% if ("true".equalsIgnoreCase(System.getenv("MACHIRIKU_DEMO_LOGIN_ENABLED"))) { %>
+    <% if ("true".equalsIgnoreCase(AppConfig.get("MACHIRIKU_DEMO_LOGIN_ENABLED"))) { %>
     <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px dashed var(--border-color); text-align:center;">
       <div style="font-size:0.8125rem; color:var(--text-sub); margin-bottom:0.75rem; font-weight:700;">
         【デモ・審査確認用】ロール別 1クリックログイン

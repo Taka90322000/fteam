@@ -2,6 +2,8 @@ package jp.machiriku.auth;
 
 import java.net.URI;
 
+import jp.machiriku.config.AppConfig;
+
 /** Server-only LINE Login settings. Never expose the channel secret to the browser. */
 public record LineLoginConfig(String channelId, String channelSecret, String redirectUri) {
 
@@ -36,9 +38,9 @@ public record LineLoginConfig(String channelId, String channelSecret, String red
     }
 
     private static String environment(String key) {
-        String value = System.getenv(key);
+        String value = AppConfig.get(key);
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Missing LINE Login environment variable: " + key);
+            throw new IllegalStateException("Missing LINE Login setting in .env: " + key);
         }
         return value;
     }
