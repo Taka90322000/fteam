@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="skyS" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="400" fill="url(#skyS)"/>
+  
+  <!-- Station Plaza Commercial Building (Tobu Utsunomiya Station Front) -->
+  <rect x="70" y="50" width="460" height="350" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  
+  <!-- PR Banner Top Ribbon -->
+  <rect x="70" y="50" width="460" height="30" fill="#d97706"/>
+  <text x="300" y="70" font-family="sans-serif" font-size="11" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="2">★ PR注目物件 / 東武宇都宮駅前通り旧書店ビル ★</text>
+  
+  <!-- 2F Glass Terrace Area -->
+  <rect x="90" y="95" width="420" height="110" fill="#e0f2fe" stroke="#38bdf8" stroke-width="2"/>
+  <text x="300" y="155" font-family="sans-serif" font-size="13" font-weight="800" fill="#0369a1" text-anchor="middle">2F カウンター席＆コワーキングスペース（施工中）</text>
+  
+  <!-- 1F Coffee Stand Under Construction -->
+  <rect x="90" y="220" width="420" height="175" fill="#fef3c7" stroke="#b45309" stroke-width="3"/>
+  <rect x="150" y="240" width="300" height="70" rx="8" fill="#1b4332"/>
+  <text x="300" y="270" font-family="sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle">日光焙煎珈琲スタンド 宇都宮店</text>
+  <text x="300" y="295" font-family="sans-serif" font-size="11" font-weight="700" fill="#a7f3d0" text-anchor="middle">2026年11月15日(日) GRAND OPEN予定！</text>
+  
+  <rect x="130" y="330" width="340" height="40" rx="4" fill="#ffffff" stroke="#d97706" stroke-width="2"/>
+  <text x="300" y="355" font-family="sans-serif" font-size="11" font-weight="800" fill="#b45309" text-anchor="middle">【出店決定】住民投票第1位(64.2pt)のカフェが実現！</text>
+</svg>

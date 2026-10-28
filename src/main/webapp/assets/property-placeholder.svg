@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-labelledby="title desc">
+  <title id="title">物件写真は未登録です</title>
+  <desc id="desc">建物の外観を示す画像ではありません。写真は掲載元でご確認ください。</desc>
+  <rect width="600" height="400" fill="#f3f4ee"/>
+  <path d="M270 132h60m-30-30v60" stroke="#47554e" stroke-width="2"/>
+  <text x="300" y="215" text-anchor="middle" fill="#18201c" font-family="Meiryo,sans-serif" font-size="26">写真未登録</text>
+  <text x="300" y="255" text-anchor="middle" fill="#47554e" font-family="Meiryo,sans-serif" font-size="18">物件写真は掲載元でご確認ください</text>
+</svg>
