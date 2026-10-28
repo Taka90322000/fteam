@@ -21,7 +21,7 @@
       </div>
     <% } %>
 
-    <form id="registerForm" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/LineLogin.action" method="GET">
+    <form id="registerForm" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/LineLogin.action" method="POST">
       <div class="form-group" style="margin-bottom:1.5rem;">
         <label style="font-size:0.9rem; font-weight:800; display:block; margin-bottom:0.5rem; color:var(--text-main);">
           利用区分を選択してください <span style="color:#ef4444; font-size:0.8rem;">*必須</span>
@@ -42,6 +42,14 @@
         </div>
       </div>
 
+      <div class="form-group" style="margin-bottom:1.5rem;">
+        <label for="phoneE164" style="font-weight:700; display:block; margin-bottom:0.5rem;">電話番号（事業主・オーナーは必須）</label>
+        <input id="phoneE164" name="phoneE164" type="tel" autocomplete="tel" maxlength="16"
+               pattern="\+[1-9][0-9]{7,14}" placeholder="+819012345678" aria-describedby="phoneHelp"
+               style="width:100%; box-sizing:border-box; padding:0.75rem; border:1px solid var(--border-color); border-radius:var(--radius-md);">
+        <!-- <p id="phoneHelp" style="font-size:0.8125rem; color:var(--text-sub);">国番号を含む形式で入力してください。日本の090-1234-5678の場合は +819012345678 です。地域住民は任意です。</p> -->
+      </div>
+
       <div style="margin-top:1.5rem;">
         <button type="submit" class="btn-line-login" style="display:flex; align-items:center; justify-content:center; gap:0.6rem; background:#06C755; color:#ffffff; font-weight:700; font-size:1rem; padding:0.85rem 1.25rem; border-radius:var(--radius-md); border:none; width:100%; cursor:pointer;">
           <svg class="line-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="width:24px; height:24px; flex-shrink:0;">
@@ -50,7 +58,8 @@
           <span>LINEで登録・ログイン</span>
         </button>
         <p style="font-size:0.8125rem; color:var(--text-sub); text-align:center; margin-top:0.75rem; line-height:1.5;">
-          LINEアカウントを使って簡単・安全に登録できます。<br>
+          本アプリでは、登録時にLINEに登録されているメールアドレスを取得します。<br>
+          取得したメールアドレスは、本人確認・サポート対応の目的でのみ利用し、第三者への提供は行いません。<br>
           <span style="font-size:0.75rem; color:var(--text-muted);">※利用規約・プライバシーポリシーに同意の上、次へお進みください。</span>
         </p>
       </div>

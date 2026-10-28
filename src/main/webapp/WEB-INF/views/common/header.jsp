@@ -1,4 +1,12 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="jp.machiriku.bean.User" %>
+<%!
+  private String escapeHtml(String value) {
+    return value == null ? "" : value.replace("&", "&amp;").replace("<", "&lt;")
+        .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;");
+  }
+%>
+<% User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null; %>
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -20,7 +28,7 @@
       </a>
       <div class="header-nav-right">
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
-          <span>ログイン</span>
+          <span><%= currentUser == null ? "ログイン" : escapeHtml(currentUser.getDisplayName()) + " でログイン中" %></span>
         </a>
       </div>
     </div>
@@ -28,8 +36,10 @@
   <nav class="header-subnav" aria-label="メインメニュー">
     <div class="subnav-links">
       <a href="${pageContext.request.contextPath}/index.jsp" class="subnav-link">ホーム</a>
+      <% if (currentUser == null) { %>
       <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="subnav-link <%= "login".equals(request.getParameter("activeNav")) ? "is-active" : "" %>">ログイン</a>
       <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action" class="subnav-link <%= "register".equals(request.getParameter("activeNav")) ? "is-active" : "" %>">新規会員登録</a>
+      <% } %>
     </div>
   </nav>
   <main class="main-content" id="main-app-container" tabindex="-1">

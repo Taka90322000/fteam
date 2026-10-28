@@ -10,7 +10,9 @@ public class LoginAction extends Action {
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
         // デモ用ログインのパラメータ判定 (demoRole)
         String demoRole = req.getParameter("demoRole");
-        if (demoRole != null && !demoRole.trim().isEmpty()) {
+        if ("true".equalsIgnoreCase(System.getenv("MACHIRIKU_DEMO_LOGIN_ENABLED"))
+                && java.util.Set.of("resident", "business", "owner", "admin").contains(demoRole == null ? "" : demoRole)) {
+            req.getSession().invalidate();
             req.getSession().setAttribute("userRole", demoRole);
             res.sendRedirect(req.getContextPath() + "/index.jsp");
             return;

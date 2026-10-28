@@ -29,7 +29,7 @@
         <span>LINEでログイン</span>
       </a>
       <p style="font-size:0.8125rem; color:var(--text-sub); text-align:center; margin-top:0.75rem; line-height:1.5;">
-        LINEアカウントを使って簡単・安全にログインできます。
+        LINEの表示名・メールアドレス・ユーザーIDを取得し、会員情報の確認に利用します。
       </p>
     </div>
 
@@ -37,6 +37,7 @@
       アカウントをお持ちでない方は <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action" style="color:var(--primary-700); font-weight:700; text-decoration:underline;">新規会員登録</a>
     </div>
 
+    <% if ("true".equalsIgnoreCase(System.getenv("MACHIRIKU_DEMO_LOGIN_ENABLED"))) { %>
     <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px dashed var(--border-color); text-align:center;">
       <div style="font-size:0.8125rem; color:var(--text-sub); margin-bottom:0.75rem; font-weight:700;">
         【デモ・審査確認用】ロール別 1クリックログイン
@@ -51,6 +52,7 @@
       </form>
     </div>
 
+    <% } %>
   </div>
 </section>
 
