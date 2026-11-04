@@ -44,9 +44,7 @@
 
       <div style="margin-top:1.5rem;">
         <button type="submit" class="btn-line-login" style="display:flex; align-items:center; justify-content:center; gap:0.6rem; background:#06C755; color:#ffffff; font-weight:700; font-size:1rem; padding:0.85rem 1.25rem; border-radius:var(--radius-md); border:none; width:100%; cursor:pointer;">
-          <svg class="line-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="width:24px; height:24px; flex-shrink:0;">
-            <path fill-rule="evenodd" clip-rule="evenodd" d="M19.365 9.864c0-.28-.242-.508-.54-.508h-1.977V7.884h1.977c.298 0 .54-.228.54-.508 0-.28-.242-.508-.54-.508h-2.518a.52.52 0 0 0-.54.508v5.188c0 .28.242.508.54.508h2.518c.298 0 .54-.228.54-.508 0-.28-.242-.508-.54-.508h-1.977v-1.472h1.977c.298 0 .54-.228.54-.508zm-4.37-2.488a.52.52 0 0 0-.54.508v2.969L12.35 7.575a.514.514 0 0 0-.414-.207h-.057a.52.52 0 0 0-.54.508v5.188c0 .28.242.508.54.508.298 0 .54-.228.54-.508V10.1l2.106 3.279c.1.156.273.25.46.25h.011a.52.52 0 0 0 .54-.508V7.884a.52.52 0 0 0-.54-.508zM9.593 7.376a.52.52 0 0 0-.54.508v5.188c0 .28.242.508.54.508.298 0 .54-.228.54-.508V7.884a.52.52 0 0 0-.54-.508zm-2.488 0a.52.52 0 0 0-.54.508v4.68h2.008c.298 0 .54-.228.54-.508 0-.28-.242-.508-.54-.508H7.645V7.884a.52.52 0 0 0-.54-.508zM12 2C6.477 2 2 5.918 2 10.75c0 4.303 3.535 7.896 8.307 8.611.324.07.766.215.877.493.102.253.067.65.033.905l-.147.884c-.045.272-.209 1.064.923.58 1.132-.483 6.113-3.628 8.34-6.216C21.498 14.584 22 12.753 22 10.75 22 5.918 17.523 2 12 2z" fill="#ffffff"/>
-          </svg>
+          <img src="${pageContext.request.contextPath}/assets/line_icon.svg" alt="LINE" style="width:24px; height:24px; flex-shrink:0;">
           <span>LINEで登録・ログイン</span>
         </button>
         <p style="font-size:0.8125rem; color:var(--text-sub); text-align:center; margin-top:0.75rem; line-height:1.5;">
