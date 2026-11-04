@@ -4,15 +4,24 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
+import jp.machiriku.config.AppConfig;
+
 public class Dao {
     public static Connection getConnection() throws SQLException {
-        String url = System.getenv("MACHIRIKU_DB_URL");
-        String user = System.getenv("MACHIRIKU_DB_USER");
-        String password = System.getenv("MACHIRIKU_DB_PASSWORD");
+        String url;
+        String user;
+        String password;
+        try {
+            url = AppConfig.get("MACHIRIKU_DB_URL");
+            user = AppConfig.get("MACHIRIKU_DB_USER");
+            password = AppConfig.get("MACHIRIKU_DB_PASSWORD");
+        } catch (IllegalStateException e) {
+            throw new SQLException("DB configuration could not be read from .env.");
+        }
 
         if (url == null || user == null || password == null
                 || url.isBlank() || user.isBlank() || password.isBlank()) {
-            throw new SQLException("DB environment variables are missing.");
+            throw new SQLException("DB settings are missing. Configure MACHIRIKU_DB_URL, MACHIRIKU_DB_USER and MACHIRIKU_DB_PASSWORD in .env.");
         }
         
         try {

@@ -1,8 +1,19 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="jp.machiriku.bean.User" %>
+<%!
+  private String escapeHtml(String value) {
+    return value == null ? "" : value.replace("&", "&amp;").replace("<", "&lt;")
+        .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;");
+  }
+%>
 <%
   boolean isOnboarding = "true".equalsIgnoreCase(request.getParameter("isOnboarding"));
   String roleLabel = request.getParameter("roleLabel") != null ? request.getParameter("roleLabel") : "地域住民";
   String userName = request.getParameter("userName") != null ? request.getParameter("userName") : "LINEユーザー";
+  User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
+  if (currentUser != null && (request.getParameter("userName") == null)) {
+    userName = currentUser.getDisplayName();
+  }
 %>
 <!DOCTYPE html>
 <html lang="ja">
@@ -27,9 +38,13 @@
         <% if (isOnboarding) { %>
           <span id="header-role-badge" class="header-role-badge">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <span id="header-role-badge-text"><%= roleLabel %></span>
+            <span id="header-role-badge-text"><%= escapeHtml(roleLabel) %></span>
           </span>
-          <span class="btn-header-action profile-link" style="cursor:default;"><span id="header-user-name"><%= userName %></span></span>
+          <span class="btn-header-action profile-link" style="cursor:default;"><span id="header-user-name"><%= escapeHtml(userName) %></span></span>
+        <% } else if (currentUser != null) { %>
+          <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
+            <span><%= escapeHtml(currentUser.getDisplayName()) %> でログイン中</span>
+          </a>
         <% } else { %>
           <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
             <span>ログイン</span>
@@ -42,8 +57,10 @@
   <nav class="header-subnav" aria-label="メインメニュー">
     <div class="subnav-links">
       <a href="${pageContext.request.contextPath}/index.jsp" class="subnav-link">ホーム</a>
+      <% if (currentUser == null) { %>
       <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="subnav-link <%= "login".equals(request.getParameter("activeNav")) ? "is-active" : "" %>">ログイン</a>
       <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action" class="subnav-link <%= "register".equals(request.getParameter("activeNav")) ? "is-active" : "" %>">新規会員登録</a>
+      <% } %>
     </div>
   </nav>
   <% } %>
