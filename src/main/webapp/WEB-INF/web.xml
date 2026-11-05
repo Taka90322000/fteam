@@ -6,6 +6,7 @@
                              https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd"
          version="6.0">
 
+    <!-- Webアプリケーションの表示名。ServletとFilterのURL設定はJava側のアノテーションで定義する。 -->
     <display-name>マチリク</display-name>
 
 </web-app>

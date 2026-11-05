@@ -1,4 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%-- 会員登録の入口画面。利用区分と連絡先を受け取り、LINE認証へ進む。 --%>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="新規会員登録 | マチリク" />
   <jsp:param name="activeNav" value="register" />
@@ -15,12 +16,14 @@
 
   <div class="form-stepper-box" style="max-width:540px; margin:0 auto; background:var(--bg-card); padding:2rem; border-radius:var(--radius-lg); border:1px solid var(--border-color); box-shadow:var(--shadow-sm);">
     
+    <%-- 認証開始時や登録処理でActionから戻された案内文を表示する。 --%>
     <% if (request.getAttribute("errorMessage") != null) { %>
       <div style="background:#fee2e2; border:1px solid #f87171; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-md); font-size:0.875rem; margin-bottom:1.25rem;">
         <%= request.getAttribute("errorMessage") %>
       </div>
     <% } %>
 
+    <%-- 電話番号などがURLのクエリへ残らないよう、登録開始情報をPOSTで送信する。 --%>
     <form id="registerForm" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/LineLogin.action" method="POST">
       <div class="form-group" style="margin-bottom:1.5rem;">
         <label style="font-size:0.9rem; font-weight:800; display:block; margin-bottom:0.5rem; color:var(--text-main);">
@@ -44,6 +47,7 @@
 
       <div class="form-group" style="margin-bottom:1.5rem;">
         <label for="phoneE164" style="font-weight:700; display:block; margin-bottom:0.5rem;">電話番号（事業主・オーナーは必須）</label>
+        <%-- 国番号から始まる電話番号を受け付ける。利用区分ごとの必須判定はサーバー側でも行う。 --%>
         <input id="phoneE164" name="phoneE164" type="tel" autocomplete="tel" maxlength="16"
                pattern="\+[1-9][0-9]{7,14}" placeholder="+819012345678" aria-describedby="phoneHelp"
                style="width:100%; box-sizing:border-box; padding:0.75rem; border:1px solid var(--border-color); border-radius:var(--radius-md);">

@@ -1,12 +1,15 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@ page import="jp.machiriku.bean.User" %>
+<%-- 各画面からincludeする共通ヘッダー。画面名・初期設定中の表示・ログイン状態を受け取る。 --%>
 <%!
+  // 表示名や利用区分などの文字列をHTML向けに置換し、タグとして解釈されることを防ぐ。
   private String escapeHtml(String value) {
     return value == null ? "" : value.replace("&", "&amp;").replace("<", "&lt;")
         .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;");
   }
 %>
 <%
+  // include元の指定を優先し、指定がなければセッションの会員情報や既定値を使う。
   boolean isOnboarding = "true".equalsIgnoreCase(request.getParameter("isOnboarding"));
   String roleLabel = request.getParameter("roleLabel") != null ? request.getParameter("roleLabel") : "地域住民";
   String userName = request.getParameter("userName") != null ? request.getParameter("userName") : "LINEユーザー";
@@ -35,6 +38,7 @@
         </span>
       </a>
       <div class="header-nav-right">
+        <%-- 初期設定中は利用区分と編集中の名前を、通常時はログイン状態を表示する。 --%>
         <% if (isOnboarding) { %>
           <span id="header-role-badge" class="header-role-badge">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -53,6 +57,7 @@
       </div>
     </div>
   </header>
+  <%-- 初期設定を進めている間は、通常ページ用の下段ナビゲーションを表示しない。 --%>
   <% if (!isOnboarding) { %>
   <nav class="header-subnav" aria-label="メインメニュー">
     <div class="subnav-links">

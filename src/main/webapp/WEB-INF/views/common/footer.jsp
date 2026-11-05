@@ -1,4 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+  <%-- 共通ヘッダーで開始したmain要素を閉じ、全画面共通のフッターを表示する。 --%>
   </main>
   <footer class="site-footer">
     <div class="footer-content">

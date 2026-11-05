@@ -12,11 +12,14 @@ import jp.machiriku.bean.User;
 import jp.machiriku.dao.UserDao;
 import jp.machiriku.tool.Action;
 
+/** LINEからの認証結果を検証し、会員登録または既存会員のログインを完了する。 */
 public class LineCallbackAction extends Action {
+    /** 通信処理を差し替え可能にし、テストでLINEへの接続を不要にする。 */
     protected LineLoginClient createClient() {
         return new LineLoginClient(LineLoginConfig.fromEnvironment());
     }
 
+    /** 会員の永続化処理を取得する。テストではDBを使わないDAOに差し替える。 */
     protected UserDao createUserDao() { return new UserDao(); }
 
     @Override
@@ -27,6 +30,7 @@ public class LineCallbackAction extends Action {
             res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
             return;
         }
+        // stateと有効期限を確認して認証情報を一度だけ消費し、不正な応答では外部APIやDBへ進まない。
         var attempt = LineLoginSupport.consume(req.getSession(false), req.getParameter("state"));
         if (attempt == null) {
             LineLoginSupport.error(req, res, false, "認証の有効期限が切れたか、認証情報が一致しません。ログインからやり直してください。");
@@ -43,14 +47,18 @@ public class LineCallbackAction extends Action {
             return;
         }
         try {
+            // nonceとPKCE検証値は開始時のセッションから使い、LINE検証済みの本人情報だけを受け取る。
             var profile = createClient().authenticate(code, attempt.nonce(), attempt.codeVerifier());
             UserDao dao = createUserDao();
+            // メールが同じでも別人の可能性があるため、LINEのsubjectで既存会員を識別する。
             User user = dao.findByLineSubject(profile.lineSubject());
             if (user == null) {
                 if (!registration) {
                     LineLoginSupport.error(req, res, true, "このLINEアカウントは未登録です。利用区分を選んで新規会員登録してください。");
                     return;
                 }
+                // 本人情報はLINEの検証結果、登録区分と電話番号は認証開始時のセッションから保存する。
+                // メール未取得時のnullもそのまま渡し、DB用の役割は大文字に統一する。
                 User newUser = new User();
                 newUser.setDisplayName(profile.displayName());
                 newUser.setEmail(profile.email());
@@ -60,8 +68,8 @@ public class LineCallbackAction extends Action {
                 try {
                     user = dao.insert(newUser);
                 } catch (SQLException e) {
-                    // A parallel callback may already have registered this LINE account.
-                    // Never link a different LINE subject just because its email matches.
+                    // 同時に届いた別のコールバックが先に登録した場合は、同じsubjectの会員だけを再取得する。
+                    // メールの一致を理由に別のLINEアカウントへ紐付けない。
                     if (!"23505".equals(e.getSQLState())) { throw e; }
                     user = dao.findByLineSubject(profile.lineSubject());
                     if (user == null) {
@@ -71,17 +79,19 @@ public class LineCallbackAction extends Action {
                     }
                 }
             }
+            // 既存の役割・利用状態を維持し、利用可能なPENDING/ACTIVE以外や退会済み会員は拒否する。
             if ((!"ACTIVE".equals(user.getAccountStatus()) && !"PENDING".equals(user.getAccountStatus()))
                     || user.getWithdrawnAt() != null) {
                 LineLoginSupport.error(req, res, false, "このアカウントは利用できません。管理者にお問い合わせください。");
                 return;
             }
-            // Replace any demo/previous user's session and rotate its identifier.
+            // デモや前の利用者の情報を引き継がず、セッションを作り直して固定化攻撃を防ぐ。
             req.getSession().invalidate();
             var session = req.getSession(true);
             session.setAttribute("user", user);
             session.setAttribute("userId", user.getUserId());
             session.setAttribute("userRole", user.getUserRole().toLowerCase(Locale.ROOT));
+            // 登録経由の住民・事業主は、それぞれの追加設定画面へ進める。
             if (registration && "RESIDENT".equalsIgnoreCase(user.getUserRole())) {
                 res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/ResidentSetup.action");
                 return;
@@ -92,13 +102,14 @@ public class LineCallbackAction extends Action {
             }
             res.sendRedirect(req.getContextPath() + "/index.jsp");
         } catch (InterruptedException e) {
+            // 通信中断の状態を上位の処理にも伝えられるよう、割り込みフラグを戻す。
             Thread.currentThread().interrupt();
             LineLoginSupport.error(req, res, registration, "LINEとの通信が中断されました。もう一度お試しください。");
         } catch (IOException e) {
             LineLoginSupport.error(req, res, registration,
                     "LINE認証に失敗しました。もう一度お試しください。");
         } catch (SQLException e) {
-            // Do not log SQLException details: PostgreSQL may include email/phone values.
+            // DBの例外詳細にはメールや電話番号が含まれる場合があるため、SQLStateだけを記録する。
             req.getServletContext().log("LINE login database operation failed (SQLState=" + e.getSQLState() + ").");
             LineLoginSupport.error(req, res, registration, "会員情報の保存・取得に失敗しました。時間をおいて再度お試しください。");
         } catch (IllegalStateException | IllegalArgumentException e) {

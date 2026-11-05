@@ -1,3 +1,4 @@
+<%-- 住民の初期設定画面。Actionから渡されたLINE表示名と任意のメールアドレスを初期表示に使う。 --%>
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%
   String displayName = (String) request.getAttribute("displayName");
@@ -39,6 +40,7 @@
       </div>
     </div>
 
+    <%-- 入力内容と居住地・職場などの座標を、初期設定のActionへ送信する。 --%>
     <form id="resident-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/ResidentSetup.action" method="POST" onsubmit="return validateResidentForm();">
       <!-- ニックネーム (表示名) -->
       <div class="form-group" style="margin-bottom:1.25rem;">
@@ -211,11 +213,13 @@
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNWrNbVnBfZsjuTJ3sHCKDemfkxNsIv7w&libraries=marker"></script>
 
 <script>
+  // 居住地と職場・学校は別々の地図とピンで管理し、フォームの座標欄と同期する。
   let s18LivingMap = null;
   let s18LivingMarker = null;
   let s18WorkMap = null;
   let s18WorkMarker = null;
 
+  // 送信前にニックネームと居住地の入力を確認し、不足していれば該当欄へ戻す。
   function validateResidentForm() {
     const nameInput = document.getElementById('s18-name');
     const addrInput = document.getElementById('s18-living-address');
@@ -232,6 +236,7 @@
     return true;
   }
 
+  // 緯度・経度から住所名を非同期で取得し、取得できない場合は既定の地域名を返す。
   function reverseGeocodeWithGoogle(lat, lng, callback) {
     if (typeof google !== 'undefined' && google.maps && google.maps.Geocoder) {
       const geocoder = new google.maps.Geocoder();
@@ -250,6 +255,7 @@
     }
   }
 
+  // 居住地の現在値を地図へ反映し、地図クリックとピン移動のイベントを登録する。
   function initLivingMapPicker() {
     const container = document.getElementById('s18-map-picker');
     if (!container) return;
@@ -266,6 +272,7 @@
       currentLng = 139.8830;
     }
 
+    // 居住地の選択結果を送信用座標・住所欄・選択状況の表示へ反映する。
     function onLocationSelected(lat, lng) {
       if (latInput) latInput.value = lat;
       if (lngInput) lngInput.value = lng;
@@ -319,6 +326,7 @@
     }
   }
 
+  // 端末の現在地を取得し、利用できない場合は既定の宇都宮の地点を設定する。
   function handleLivingCurrentLocation() {
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -336,6 +344,7 @@
     }
   }
 
+  // 居住地の座標・ピン・表示を一緒に更新し、住所の指定がなければ住所名を調べる。
   function setLivingCoords(lat, lng, manualAddr = null) {
     const latInput = document.getElementById('s18-living-lat');
     const lngInput = document.getElementById('s18-living-lng');
@@ -364,6 +373,7 @@
     });
   }
 
+  // 任意項目の職場・学校の地図を開閉し、表示後の地図サイズと選択位置を調整する。
   function toggleWorkMap(forceOpen) {
     const triggerCard = document.getElementById('s18-work-trigger-card');
     const area = document.getElementById('s18-work-map-area');
@@ -404,6 +414,7 @@
     }
   }
 
+  // 職場・学校の地図を初回に作成し、再表示時は既存の地図とピンを再利用する。
   function initWorkMapPicker() {
     const container = document.getElementById('s18-work-map-picker');
     if (!container) return;
@@ -420,6 +431,7 @@
       currentLng = 139.8980;
     }
 
+    // 職場・学校の選択結果を送信用座標と住所欄へ反映する。
     function onWorkLocationSelected(lat, lng) {
       if (latInput) latInput.value = lat;
       if (lngInput) lngInput.value = lng;
@@ -479,6 +491,7 @@
     }
   }
 
+  // 端末の現在地を職場・学校の候補へ設定し、取得失敗時は既定地点を利用する。
   function handleWorkCurrentLocation() {
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -496,6 +509,7 @@
     }
   }
 
+  // 職場・学校の座標入力・地図・住所表示を同じ位置へ揃える。
   function setWorkCoords(lat, lng, manualAddr = null) {
     const latInput = document.getElementById('s18-work-lat');
     const lngInput = document.getElementById('s18-work-lng');
@@ -524,6 +538,7 @@
     });
   }
 
+  // フォームのDOMが揃ってから居住地マップの初期化を開始する。
   document.addEventListener('DOMContentLoaded', function() {
     initLivingMapPicker();
   });

@@ -1,4 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%-- 開発中の入口画面。共通ヘッダーとフッターでページ全体の枠を揃える。 --%>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="マチリク | 宇都宮の空き店舗と、欲しいお店" />
 </jsp:include>
@@ -11,6 +12,7 @@
       バックエンド（JSP / Servlet）連携の動作確認用ポータルです。
     </p>
 
+    <%-- 各Actionへの画面遷移とDB接続確認を、開発時にまとめて試せるようにする。 --%>
     <div style="display:flex; justify-content:center; gap:1rem; flex-wrap:wrap;">
       <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-primary" style="display:inline-block; padding:0.75rem 1.75rem; font-weight:700; border-radius:var(--radius-md); text-decoration:none; background:var(--primary-700); color:#ffffff;">
         ログイン画面へ (S16)

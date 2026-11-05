@@ -3,14 +3,20 @@ package jp.machiriku.bean;
 import java.io.Serializable;
 import java.time.OffsetDateTime;
 
+/** DBから取得した会員情報を画面やセッションへ渡すためのデータクラス。 */
 public class User implements Serializable {
 
+    // usersテーブルの主キー。ログイン中の会員を特定するときに使用する。
     private int userId;
     private String displayName;
+    // メールアドレスはLINEから取得できない場合があるため、nullを許容する。
     private String email;
+    // DBではRESIDENT・BUSINESS・OWNERの大文字で保持する。
     private String userRole;
     private String phoneE164;
+    // 検証済みIDトークンのsub。メールアドレスではなく、この値で会員を照合する。
     private String lineSubject;
+    // 会員の利用状態と日時。認証時の利用可否判定にも使う。
     private String accountStatus;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;

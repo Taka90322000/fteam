@@ -1,27 +1,27 @@
-# Maven
+# Mavenのビルド成果物
 target/
 *.class
 
-# Eclipse
+# Eclipseの個人設定
 .classpath
 .project
 .settings/
 
-# IntelliJ IDEA
+# IntelliJ IDEAの個人設定
 .idea/
 
-# VS Code
+# VS Codeの個人設定（共有用のタスク設定は除く）
 .vscode/*
 !.vscode/tasks.json
 
-# Logs
+# 実行時のログ
 *.log
 
-# Environment / Secrets
+# 実際の接続情報は除外し、記入例の.env.exampleだけを共有する
 .env
 .env.*
 !.env.example
 *.local
 
-# test
+# テスト用ディレクトリ
 test/

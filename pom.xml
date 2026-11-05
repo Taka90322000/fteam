@@ -10,9 +10,10 @@
   <packaging>war</packaging>
 
   <name>machiriku Maven Webapp</name>
-  <!-- FIXME change it to the project's website -->
+  <!-- FIXME: 公開するプロジェクトのWebサイトURLが決まったら置き換える。 -->
   <url>http://www.example.com</url>
 
+  <!-- ソースコードの文字コードと、コンパイルに使用するJavaのバージョンをそろえる。 -->
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>21</maven.compiler.source>
@@ -21,29 +22,33 @@
 
   <dependencies>
     <dependency>
+        <!-- Web公開ディレクトリ外に置いた.envを読み込むためのライブラリ。 -->
         <groupId>io.github.cdimascio</groupId>
         <artifactId>dotenv-java</artifactId>
         <version>3.2.0</version>
     </dependency>
     <dependency>
+        <!-- 自動テストでのみ使用し、実行用のWARには含めない。 -->
         <groupId>junit</groupId>
         <artifactId>junit</artifactId>
         <version>4.13.2</version>
         <scope>test</scope>
     </dependency>
     <dependency>
+        <!-- Servlet APIの実装は配置先のTomcatが提供する。 -->
         <groupId>jakarta.servlet</groupId>
         <artifactId>jakarta.servlet-api</artifactId>
         <version>6.0.0</version>
         <scope>provided</scope>
     </dependency>
-    <!-- PostgreSQL JDBC Driver -->
+    <!-- PostgreSQLへJDBCで接続するためのドライバー。 -->
     <dependency>
         <groupId>org.postgresql</groupId>
         <artifactId>postgresql</artifactId>
         <version>42.7.14</version>
     </dependency>
     <dependency>
+        <!-- LINEの認証APIから返るJSONを解析する。 -->
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
         <version>2.19.0</version>
@@ -51,14 +56,15 @@
   </dependencies>
 
   <build>
+    <!-- Tomcatのコンテキスト設定と一致するWAR名・展開先名を使用する。 -->
     <finalName>machiriku</finalName>
-    <pluginManagement><!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) -->
+    <pluginManagement><!-- Mavenの既定値に依存しないよう、各ビルドプラグインのバージョンを固定する。 -->
       <plugins>
         <plugin>
           <artifactId>maven-clean-plugin</artifactId>
           <version>3.1.0</version>
         </plugin>
-        <!-- see http://maven.apache.org/ref/current/maven-core/default-bindings.html#Plugin_bindings_for_war_packaging -->
+        <!-- WAR形式の標準ビルドで使用するプラグインを指定する。 -->
         <plugin>
           <artifactId>maven-resources-plugin</artifactId>
           <version>3.0.2</version>

@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jp.machiriku.tool.Action;
 
+/** 地域住民の初期設定画面を表示し、送信内容をセッションへ保持する。 */
 public class ResidentSetupAction extends Action {
 
     @Override
@@ -12,13 +13,14 @@ public class ResidentSetupAction extends Action {
         String method = req.getMethod();
 
         if ("POST".equalsIgnoreCase(method)) {
-            // 初期設定フォーム送信時の処理
+            // POSTはフォーム送信。文字コードを指定してから各入力値を取り出す。
             req.setCharacterEncoding("UTF-8");
             String name = req.getParameter("name");
             String email = req.getParameter("email");
             String ageGroup = req.getParameter("ageGroup");
             String gender = req.getParameter("gender");
             String industry = req.getParameter("industry");
+            // 住所の表示文字列と、地図上で選んだ緯度・経度をそれぞれ受け取る。
             String livingAddress = req.getParameter("livingAddress");
             String livingLat = req.getParameter("livingLat");
             String livingLng = req.getParameter("livingLng");
@@ -27,6 +29,7 @@ public class ResidentSetupAction extends Action {
             String workLng = req.getParameter("workLng");
             boolean emailNotify = "on".equalsIgnoreCase(req.getParameter("emailNotify")) || "true".equalsIgnoreCase(req.getParameter("emailNotify"));
 
+            // 現時点ではDB保存せず、画面用の会員情報と初期設定完了状態を保持する。
             HttpSession session = req.getSession();
             session.setAttribute("userName", (name != null && !name.trim().isEmpty()) ? name.trim() : "LINEユーザー");
             session.setAttribute("userRole", "resident");
@@ -38,7 +41,7 @@ public class ResidentSetupAction extends Action {
             return;
         }
 
-        // GET時の処理: LINE連携から渡された（またはセッションの）初期値を設定
+        // GETは画面表示。LINE連携時のセッション値を優先し、なければリクエスト値を使う。
         HttpSession session = req.getSession();
         String displayName = (String) session.getAttribute("lineDisplayName");
         if (displayName == null || displayName.trim().isEmpty()) {
@@ -53,7 +56,7 @@ public class ResidentSetupAction extends Action {
             email = req.getParameter("email");
         }
         if (email == null || email.trim().isEmpty()) {
-            email = "tanaka.line@example.com"; // デモ初期値
+            email = "tanaka.line@example.com"; // 実データがない場合に使う、画面確認用のデモ初期値。
         }
 
         req.setAttribute("displayName", displayName);

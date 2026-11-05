@@ -1,3 +1,4 @@
+<%-- 事業主の初期設定画面。Actionが用意したLINE表示名と任意のメールアドレスを初期表示する。 --%>
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%
   String displayName = (String) request.getAttribute("displayName");
@@ -39,6 +40,7 @@
       </div>
     </div>
 
+    <%-- 事業者情報と希望条件を送信する。なぞった座標はpreferredAreaPointsのJSON文字列にまとめる。 --%>
     <form id="business-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/BusinessSetup.action" method="POST" onsubmit="return validateBusinessForm();">
       <!-- 事業者名 / 屋号 -->
       <div class="form-group" style="margin-bottom:1.25rem;">
@@ -135,6 +137,7 @@
             出店希望エリア名 (地図をなぞると自動入力・手動修正可):
           </label>
           <input id="s18-biz-area" name="preferredArea" type="text" class="form-control" value="" required placeholder="地図上を指やマウスで囲むと自動入力されます（手入力も可能）" style="width:100%;">
+          <%-- 地図をなぞった場合は座標JSONを送る。エリア名の手入力だけなら、この項目は空のままでも送信できる。 --%>
           <input id="s18-biz-area-points" name="preferredAreaPoints" type="hidden" value="">
           <div id="s18-biz-map-status" style="font-size:0.75rem; color:var(--primary-700); margin-top:0.35rem; font-weight:600;">
             ※地図上をなぞるか、直接エリア名を入力してください
@@ -222,10 +225,11 @@
   </div>
 </section>
 
-<!-- Google Maps JavaScript API -->
+<!-- Google Mapsの地図表示・座標変換に使う外部APIを読み込む。 -->
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNWrNbVnBfZsjuTJ3sHCKDemfkxNsIv7w&libraries=marker"></script>
 
 <script>
+  // 地図・座標変換用のオーバーレイ・表示中のポリゴンと操作状態を、この画面内で管理する。
   let s18BizMap = null;
   let s18BizOverlay = null;
   let s18BizPolygon = null;
@@ -233,6 +237,7 @@
   let s18BizMode = 'draw';
   let s18BizIsDrawing = false;
 
+  // 送信前に事業者名・代表者名・電話番号・希望エリア・業種の必須入力を確認する。
   function validateBusinessForm() {
     const bizName = document.getElementById('s18-biz-name');
     const repName = document.getElementById('s18-rep-name');
@@ -254,6 +259,7 @@
       if (phone) phone.focus();
       return false;
     }
+    // エリア名だけの手入力も許可しているため、ここでは座標JSONの有無を必須条件にしない。
     if (!areaInput || !areaInput.value.trim()) {
       alert('出店希望エリアをマップ上でなぞって指定するか、エリア名を入力してください');
       if (areaInput) areaInput.focus();
@@ -269,6 +275,7 @@
     return true;
   }
 
+  // 範囲の代表点から住所名を調べ、取得できなければ既定の周辺名を返す。
   function reverseGeocodeWithGoogle(lat, lng, callback) {
     if (typeof google !== 'undefined' && google.maps && google.maps.Geocoder) {
       const geocoder = new google.maps.Geocoder();
@@ -286,11 +293,13 @@
     }
   }
 
+  // Google Mapsの読み込み完了を待ち、希望エリアを描く地図を初期化する。
   function initS18BizAreaMap() {
     const container = document.getElementById('s18-biz-map-picker');
     const wrap = document.getElementById('s18-biz-map-wrap');
     if (!container || !wrap) return;
 
+    // 最初はなぞる操作を優先し、地図移動を止めた状態で描画用の投影変換を用意する。
     function mountMap() {
       s18BizPoints = [];
       s18BizIsDrawing = false;
@@ -310,6 +319,7 @@
         disableDoubleClickZoom: true
       });
 
+      // 画面上のピクセル位置を緯度・経度へ変換するため、地図の投影情報を取得できるようにする。
       s18BizOverlay = new google.maps.OverlayView();
       s18BizOverlay.draw = function() {};
       s18BizOverlay.setMap(s18BizMap);
@@ -328,6 +338,7 @@
       return;
     }
 
+    // 外部APIが後から読み込まれた場合にも初期化できるよう、一定回数だけ再確認する。
     let retries = 0;
     const timer = setInterval(() => {
       retries++;
@@ -339,6 +350,7 @@
     }, 100);
   }
 
+  // マウスとタッチをPointer Eventsで扱い、描画中の画面座標を集める。
   function setupBizDrawingListeners(wrap) {
     let surface = document.getElementById('s18-biz-draw-surface');
     let canvas = document.getElementById('s18-biz-draw-canvas');
@@ -349,8 +361,10 @@
     canvas.height = rect.height || wrap.clientHeight || 270;
     const ctx = canvas.getContext ? canvas.getContext('2d') : null;
 
+    // ここで保持するx・yは地図コンテナ内の画面座標で、まだ緯度・経度ではない。
     let pixelPoints = [];
 
+    // 描画開始位置を記録し、ポインターを捕捉して枠外へ動いても操作を継続する。
     surface.onpointerdown = (e) => {
       if (s18BizMode !== 'draw') return;
       if (surface.setPointerCapture) {
@@ -374,6 +388,7 @@
       }
     };
 
+    // 移動した画面座標を追加し、キャンバス上へ途中の線を表示する。
     surface.onpointermove = (e) => {
       if (!s18BizIsDrawing || s18BizMode !== 'draw') return;
       const bRect = wrap.getBoundingClientRect();
@@ -387,6 +402,7 @@
       }
     };
 
+    // 指やマウスを離した時点で線を確定し、画面座標を地理座標へ変換する。
     const finishDraw = (e) => {
       if (!s18BizIsDrawing || s18BizMode !== 'draw') return;
       s18BizIsDrawing = false;
@@ -404,6 +420,7 @@
       const proj = s18BizOverlay.getProjection();
       if (!proj) return;
 
+      // 移動点を間引き、送信用の座標数とポリゴン描画の負荷を抑える。
       const sampled = [];
       const step = Math.max(1, Math.floor(pixelPoints.length / 60));
       for (let i = 0; i < pixelPoints.length; i += step) {
@@ -413,6 +430,7 @@
         sampled.push(pixelPoints[pixelPoints.length - 1]);
       }
 
+      // 地図の投影情報を使ってx・yを緯度・経度へ変換し、住所検索用の座標合計も求める。
       const latLngs = [];
       let sumLat = 0;
       let sumLng = 0;
@@ -431,6 +449,7 @@
         s18BizPolygon.setMap(null);
       }
 
+      // 変換した点列を地図上のポリゴンとして表示する。見た目の閉じ方はGoogle Mapsに任せる。
       s18BizPolygon = new google.maps.Polygon({
         paths: latLngs,
         strokeColor: 'rgb(45, 106, 79)',
@@ -441,16 +460,20 @@
         map: s18BizMap
       });
 
+      // 各頂点の単純平均を住所検索の代表点として使う。面積から求めた重心ではない。
       const centerLat = sumLat / latLngs.length;
       const centerLng = sumLng / latLngs.length;
 
+      // lat・lngを小数点以下6桁に丸めたオブジェクト配列にする。GeoJSONの経度・緯度配列にはまだ変換しない。
       const rawPoints = latLngs.map(ll => ({ lat: Number(ll.lat().toFixed(6)), lng: Number(ll.lng().toFixed(6)) }));
       const pointsInput = document.getElementById('s18-biz-area-points');
+      // 座標配列をJSON文字列にしてhidden項目へ入れ、フォームPOSTでサーバーへ渡す。
       if (pointsInput) pointsInput.value = JSON.stringify(rawPoints);
 
       const areaInput = document.getElementById('s18-biz-area');
       const statusEl = document.getElementById('s18-biz-map-status');
 
+      // 代表点の住所から希望エリア名を補い、指定した点数とともに選択状況を表示する。
       reverseGeocodeWithGoogle(centerLat, centerLng, (res) => {
         const cleanName = res + ' 周辺 (なぞり範囲指定)';
         if (areaInput) {
@@ -466,6 +489,7 @@
     surface.onpointercancel = finishDraw;
   }
 
+  // なぞるモードと地図移動モードを切り替え、描画面への入力と地図操作を排他的に切り替える。
   function setBizMapMode(mode) {
     s18BizMode = mode;
     const btnDraw = document.getElementById('s18-draw-btn-draw');
@@ -530,6 +554,7 @@
     }
   }
 
+  // 表示中の範囲と送信用座標をリセットする。エリア名の入力値は現行仕様どおり残す。
   function clearBizDraw() {
     if (s18BizPolygon) {
       s18BizPolygon.setMap(null);
@@ -547,6 +572,7 @@
     }
   }
 
+  // 用意済みのエリア名を選んだ場合に、代表地点の周囲へ簡易的な範囲を作るための処理。
   function setBizAreaFromSelect(areaName) {
     if (!areaName) return;
     const areaInput = document.getElementById('s18-biz-area');
@@ -572,6 +598,7 @@
       if (s18BizPolygon) {
         s18BizPolygon.setMap(null);
       }
+      // 代表地点の周りに8個の点を並べ、自由描画と同じJSON形式へ変換できるようにする。
       const polyPts = [];
       const numPts = 8;
       const d = target.delta;
@@ -597,6 +624,7 @@
     }
   }
 
+  // 画面要素を取得できるようになってから、希望エリアマップの準備を始める。
   window.addEventListener('DOMContentLoaded', () => {
     initS18BizAreaMap();
   });

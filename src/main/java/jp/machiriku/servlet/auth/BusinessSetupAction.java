@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jp.machiriku.tool.Action;
 
+/** 事業者の初期設定画面を表示し、送信内容をセッションへ保持する。 */
 public class BusinessSetupAction extends Action {
 
     @Override
@@ -12,12 +13,13 @@ public class BusinessSetupAction extends Action {
         String method = req.getMethod();
 
         if ("POST".equalsIgnoreCase(method)) {
-            // 初期設定フォーム送信時の処理
+            // POSTはフォーム送信。文字コードを指定してから各入力値を取り出す。
             req.setCharacterEncoding("UTF-8");
             String businessName = req.getParameter("businessName");
             String repName = req.getParameter("representativeName");
             String email = req.getParameter("email");
             String phone = req.getParameter("phone");
+            // エリア名と、なぞった点列のJSON文字列は別の項目として受け取る。
             String preferredArea = req.getParameter("preferredArea");
             String preferredAreaPoints = req.getParameter("preferredAreaPoints");
             String employeeCount = req.getParameter("employeeCount");
@@ -27,6 +29,7 @@ public class BusinessSetupAction extends Action {
             String[] qualifications = req.getParameterValues("qualification");
             boolean emailNotify = "on".equalsIgnoreCase(req.getParameter("emailNotify")) || "true".equalsIgnoreCase(req.getParameter("emailNotify"));
 
+            // 現時点ではDB保存せず、表示に使う入力値と初期設定完了状態をセッションへ保持する。
             HttpSession session = req.getSession();
             session.setAttribute("userName", (repName != null && !repName.trim().isEmpty()) ? repName.trim() : "LINEユーザー");
             session.setAttribute("userRole", "business");
@@ -41,14 +44,14 @@ public class BusinessSetupAction extends Action {
             return;
         }
 
-        // GET時の処理: LINE連携から渡された（またはセッションの）初期値を設定
+        // GETは画面表示。LINE連携時のセッション値を優先し、なければリクエスト値を使う。
         HttpSession session = req.getSession();
         String displayName = (String) session.getAttribute("lineDisplayName");
         if (displayName == null || displayName.trim().isEmpty()) {
             displayName = req.getParameter("displayName");
         }
         if (displayName == null || displayName.trim().isEmpty()) {
-            displayName = "佐藤 健一"; // 事業主初期値
+            displayName = "佐藤 健一"; // 実データがない場合に使う、事業者画面のデモ初期値。
         }
 
         String email = (String) session.getAttribute("lineEmail");
@@ -56,6 +59,7 @@ public class BusinessSetupAction extends Action {
             email = req.getParameter("email");
         }
         if (email == null || email.trim().isEmpty()) {
+            // メール未設定時の画面確認用デモ値。DBから取得したアドレスではない。
             email = "sato.business@example.com";
         }
 

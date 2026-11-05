@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jp.machiriku.dao.Dao;
 
+/** アプリと同じ接続設定で、PostgreSQLへ接続できるかを確認する開発用Servlet。 */
 @WebServlet("/db-check")
 public class DbCheckServlet extends HttpServlet {
 
@@ -23,8 +24,10 @@ public class DbCheckServlet extends HttpServlet {
             HttpServletResponse response)
             throws ServletException, IOException {
 
+        // 会員データを参照せず、接続先DB名と接続ユーザーだけを確認する。
         String sql = "SELECT current_database(), current_user";
 
+        // try-with-resourcesにより、接続・SQL・結果を処理終了時に解放する。
         try (Connection conn = Dao.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -42,6 +45,7 @@ public class DbCheckServlet extends HttpServlet {
             }
 
         } catch (SQLException e) {
+            // 詳細はサーバーログに記録し、ブラウザーには接続失敗だけを返す。
             getServletContext().log("DB connection failed", e);
             response.sendError(
                 HttpServletResponse.SC_INTERNAL_SERVER_ERROR,

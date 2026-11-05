@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+/** ServletからJSPへの表示を確認する。起動スクリプトの応答確認にも使う。 */
 @WebServlet("/hello")
 public class HelloServlet extends HttpServlet {
 
@@ -17,8 +18,10 @@ public class HelloServlet extends HttpServlet {
             HttpServletResponse response)
             throws ServletException, IOException {
 
+        // リクエスト属性に入れた値は、転送先のJSPから参照できる。
         request.setAttribute("message", "Servlet動作確認5");
 
+        // WEB-INF内のJSPは、ブラウザーから直接開かずServlet経由で表示する。
         request.getRequestDispatcher("/WEB-INF/views/hello.jsp")
                .forward(request, response);
     }

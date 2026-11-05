@@ -4,9 +4,10 @@ import java.net.URI;
 
 import jp.machiriku.config.AppConfig;
 
-/** Server-only LINE Login settings. Never expose the channel secret to the browser. */
+/** LINEログインのサーバー用設定。チャネルシークレットはブラウザーへ渡さない。 */
 public record LineLoginConfig(String channelId, String channelSecret, String redirectUri) {
 
+    /** 必須項目とコールバックURLを検証し、HTTPはローカル開発時だけ許可する。 */
     public LineLoginConfig {
         requireValue(channelId, "LINE_CHANNEL_ID");
         requireValue(channelSecret, "LINE_CHANNEL_SECRET");
@@ -28,6 +29,7 @@ public record LineLoginConfig(String channelId, String channelSecret, String red
         }
     }
 
+    /** 共通設定からLINE用の値を読み込む。.envと環境変数の優先順位はAppConfigに従う。 */
     public static LineLoginConfig fromEnvironment() {
         try {
             return new LineLoginConfig(environment("LINE_CHANNEL_ID"),
@@ -37,6 +39,7 @@ public record LineLoginConfig(String channelId, String channelSecret, String red
         }
     }
 
+    // 未設定の場合も、秘密の値ではなく設定項目名だけをエラーに含める。
     private static String environment(String key) {
         String value = AppConfig.get(key);
         if (value == null || value.isBlank()) {
@@ -51,6 +54,7 @@ public record LineLoginConfig(String channelId, String channelSecret, String red
         }
     }
 
+    // 設定オブジェクトがログへ出力されても、シークレットを漏らさない。
     @Override
     public String toString() {
         return "LineLoginConfig[channelId=" + channelId + ", channelSecret=[REDACTED], redirectUri=" + redirectUri + "]";

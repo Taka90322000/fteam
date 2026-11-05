@@ -10,7 +10,7 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.annotation.WebFilter;
 
-// 全リクエストに適用するフィルター
+// 下記URLパターンに一致するリクエストへ適用する文字コード設定フィルター。
 @WebFilter("/scoremanager/main/*")
 public class EncodingFilter implements Filter {
 
@@ -18,14 +18,14 @@ public class EncodingFilter implements Filter {
     public void init(FilterConfig filterConfig) throws ServletException {
     }
 
-    // リクエスト処理（ここがメイン）
+    // 後続の画面処理がフォームの日本語を読み取る前に文字コードを設定する。
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
 
-        // リクエストの文字コードをUTF-8に設定（これが超重要）
+        // リクエストの本文をUTF-8として解釈する。
         request.setCharacterEncoding("UTF-8");
 
-        // 次の処理へ進める（これ書かないと画面止まる）
+        // フィルター処理だけで終了せず、次のフィルターまたはServletへ渡す。
         chain.doFilter(request, response);
     }
 

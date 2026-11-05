@@ -22,7 +22,7 @@
   --shadow-floating: 0 4px 16px rgb(24 32 28 / 12%);
   --font-sans: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, system-ui, -apple-system, sans-serif;
   
-  /* Primary & Palette */
+  /* 主要色と配色の共通変数 */
   --primary-900: #0f241a;
   --primary-800: #16382b;
   --primary-700: #1b4332;
@@ -31,7 +31,7 @@
   --primary-100: #d8f3dc;
   --primary-50:  #eaf4ec;
 
-  /* Neutrals */
+  /* 背景・境界線などの無彩色 */
   --bg-page: #fcfbf7;
   --bg-card: #ffffff;
   --bg-subtle: #f3f4ee;
@@ -39,13 +39,13 @@
   --border-subtle: #f0f0eb;
   --border-strong: #d1d5db;
 
-  /* Typography Colors */
+  /* 文字色の使い分け */
   --text-main: #18201c;
   --text-sub: #47554e;
   --text-muted: #47554e;
   --text-inverse: #ffffff;
 
-  /* Status & Accent */
+  /* 状態表示とアクセントの色 */
   --status-voting-bg: #e8f5e9;
   --status-voting-text: #1b5e20;
   --status-voting-border: #a5d6a7;
@@ -84,7 +84,7 @@
   --demand-seg-2: #10b981;
   --demand-seg-3: #2563eb;
 
-  /* Elevation (Crisp, subtle, no blurry glows) */
+  /* カードや浮いた要素の影。強いぼかしを避けて境界を見やすくする。 */
 
   --radius-sm: 4px;
   --radius-md: 8px;
@@ -111,7 +111,7 @@ body {
 }
 
 /* ==========================================================================
-   Global Header & Role Bar
+   共通ヘッダーと利用区分の表示
    ========================================================================== */
 .site-header {
   position: relative;
@@ -167,7 +167,7 @@ body {
   gap: 0.85rem;
 }
 
-/* Role Selector Badge Bar */
+/* 利用区分を選択・表示するバッジの並び */
 .role-switch-container {
   display: flex;
   align-items: center;
@@ -244,7 +244,7 @@ body {
   line-height: 1;
 }
 
-/* Sub Navigation Bar for Direct Screen Jumping (Sticky Top) */
+/* 画面を直接切り替える下段ナビゲーション。上部へ固定する。 */
 .header-subnav {
   position: sticky;
   top: 0;
@@ -300,7 +300,7 @@ body {
 }
 
 /* ==========================================================================
-   Layout Containers
+   画面レイアウトの共通コンテナ
    ========================================================================== */
 .main-content {
   flex: 1;
@@ -320,7 +320,7 @@ body {
 
 
 
-/* Breadcrumbs & Header Banner */
+/* パンくずと画面上部の案内バナー */
 .page-header-banner {
   margin-bottom: 1.5rem;
 }
@@ -1530,7 +1530,7 @@ body {
   margin-bottom: 0.4rem;
 }
 
-/* Category Quick Filter Pills */
+/* 業種を素早く絞り込む丸形の選択ボタン */
 .category-pills-bar {
   display: flex;
   align-items: center;
@@ -1563,7 +1563,7 @@ body {
   border-color: var(--primary-700);
 }
 
-/* Split View: List & Map */
+/* 物件一覧と地図を並べる分割レイアウト */
 .portal-split-layout {
   display: grid;
   grid-template-columns: 580px 1fr;
@@ -1571,7 +1571,7 @@ body {
   align-items: start;
 }
 
-/* Property Cards Column */
+/* 物件カードを縦に並べる領域 */
 .property-cards-column {
   display: flex;
   flex-direction: column;
@@ -1626,7 +1626,7 @@ body {
   box-sizing: border-box;
 }
 
-/* Property Card (アットホーム × さかさま不動産 仕様) */
+/* 物件カード（アットホーム・さかさま不動産を参考にした表示） */
 .property-card {
   position: relative;
   background: transparent;
@@ -1775,7 +1775,7 @@ body {
   margin-bottom: var(--space-3);
 }
 
-/* Civic Demand Badge in Property Card (Decidim風) */
+/* 物件カード内の住民需要を示すバッジ（Decidim風） */
 .card-demand-summary {
   display: flex;
   align-items: baseline;
@@ -1799,7 +1799,7 @@ body {
   font-weight: 600;
 }
 
-/* S01 Civic Demand Preview Box (Image 1 style: compact with accordion) */
+/* S01の住民需要プレビュー。折りたたみでコンパクトに表示する。 */
 .demand-preview-box {
   position: relative;
   z-index: 2;
@@ -1963,7 +1963,7 @@ body {
   text-decoration: underline;
 }
 
-/* Interactive Map Pane (Mapbox風) */
+/* 操作できる地図の表示領域（Mapbox風） */
 .portal-map-iframe {
   width: 100%;
   height: 100%;
@@ -1972,7 +1972,7 @@ body {
   flex: 1;
 }
 
-/* Google Maps API Canvas */
+/* Google Mapsの描画領域 */
 .google-map-canvas {
   width: 100%;
   height: 100%;
@@ -1980,7 +1980,7 @@ body {
   background-color: var(--bg-subtle);
 }
 
-/* Google Maps Custom Pin (賃料バッジ付きピン) */
+/* Google Maps上の賃料バッジ付きピン */
 .gmap-custom-pin {
   position: absolute;
   transform: translate(-50%, -100%);
@@ -2043,7 +2043,7 @@ body {
   box-shadow: var(--shadow-floating);
 }
 
-/* Google Maps Cluster Badge (深緑円形・件数表示) */
+/* Google Maps上の物件集約バッジ（深緑の円形・件数表示） */
 .gmap-cluster-badge {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -2084,7 +2084,7 @@ body {
   line-height: 1;
 }
 
-/* Spiderfier (同一・近接座標の放射状展開) */
+/* 同一または近接する座標のピンを放射状に展開する表示 */
 .gmap-spider-overlay {
   position: absolute;
   pointer-events: none;
@@ -2114,7 +2114,7 @@ body {
   z-index: 250 !important;
 }
 
-/* Cluster Tooltip (ホバー時地域・件数案内) */
+/* 集約バッジにマウスを重ねた際の地域名・件数の案内 */
 .gmap-cluster-tooltip {
   position: absolute;
   background-color: var(--primary-900);
@@ -2131,7 +2131,7 @@ body {
   z-index: 600;
 }
 
-/* Google Maps InfoWindow (物件ミニカード吹き出し) */
+/* Google Mapsの物件ミニカード吹き出し */
 .gmap-info-window {
   max-width: 270px;
   font-family: inherit;
@@ -2338,7 +2338,7 @@ body {
   height: 100%;
 }
 
-/* Map Markers Styling */
+/* 地図上のマーカー表示 */
 .map-marker {
   cursor: pointer;
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -2787,7 +2787,7 @@ body {
   }
 }
 
-/* Overview Specs Table */
+/* 物件概要と条件をまとめる表 */
 .detail-card {
   padding: var(--space-6) 0;
   border-top: 1px solid var(--border-color);
@@ -2828,7 +2828,7 @@ body {
   color: var(--text-main);
 }
 
-/* Decidim Style Demand Visualization Box */
+/* Decidim風の住民需要の可視化パネル */
 .demand-civic-box {
   border-top: 1px solid var(--border-color);
   padding: var(--space-6) 0;
@@ -2860,7 +2860,7 @@ body {
   margin-top: 0.25rem;
 }
 
-/* Category Demand Progress Bars */
+/* 業種別の需要を表す棒グラフ */
 .demand-bar-list {
   display: flex;
   flex-direction: column;
@@ -2895,7 +2895,7 @@ body {
   transition: width 0.6s ease;
 }
 
-/* Resident Quotes Stream */
+/* 住民の声を縦に並べる領域 */
 .resident-quotes-stream {
   display: flex;
   flex-direction: column;
@@ -2917,7 +2917,7 @@ body {
   margin-top: 0.4rem;
 }
 
-/* Side Action Sticky Panel (S02) */
+/* S02の操作ボタンを表示する追従サイドパネル */
 .detail-side-pane {
   position: sticky;
   top: 68px;
@@ -3077,7 +3077,7 @@ body {
 .trend-up { background-color: var(--primary-50); color: var(--primary-700); }
 .trend-down { background-color: var(--danger-bg); color: var(--danger-text); }
 
-/* Data Table (shadcn/ui Data Table) */
+/* 一覧データの表（shadcn/uiの表示を参考にした構成） */
 .data-table-wrapper {
   overflow-x: auto;
   border-block: 1px solid var(--border-color);
@@ -3246,7 +3246,7 @@ body {
   gap: 1.25rem;
 }
 
-/* Ticket Style Coupon Card */
+/* チケット風のクーポンカード */
 .coupon-ticket-card {
   background: var(--bg-card);
   border: 1px solid var(--border-strong);
@@ -3304,7 +3304,7 @@ body {
   margin-bottom: 0.5rem;
 }
 
-/* S31: In-store Redemption Screen */
+/* S31: 店頭でのクーポン利用画面 */
 .redemption-panel {
   padding: var(--space-6) 0;
   max-width: 480px;
@@ -3348,7 +3348,7 @@ body {
   background-color: var(--primary-50) !important;
 }
 
-/* Modal Dialogs */
+/* モーダルダイアログ */
 .modal-backdrop {
   position: fixed;
   top: 0;
@@ -3407,7 +3407,7 @@ body {
   background-color: var(--bg-subtle);
 }
 
-/* Toast System */
+/* 一時的な通知メッセージ */
 .toast-container {
   position: fixed;
   bottom: 24px;
@@ -3434,7 +3434,7 @@ body {
 
 
 
-/* Mobile Responsive */
+/* 画面幅に応じたレイアウト調整 */
 @media (max-width: 1024px) {
   .portal-split-layout {
     grid-template-columns: 1fr;
@@ -3483,7 +3483,7 @@ body {
   }
 }
 
-/* Print Styles for S25 (卓上POP印刷) */
+/* S25の卓上POPを印刷する際の表示調整 */
 @media print {
   body {
     background-color: var(--bg-card);
@@ -3505,7 +3505,7 @@ body {
 
 .m-icon { width: 1.1rem; height: 1.1rem; display: inline-block; vertical-align: -0.18em; stroke: currentColor; fill: none; }
 
-/* Shared controls: the visible size also defines the touch target. */
+/* 共通の操作部品。見た目の大きさをタッチ操作の対象範囲にも使う。 */
 html { scroll-padding-top: 24px; }
 body { line-height: 1.7; }
 button, input, select, textarea { font: inherit; }
