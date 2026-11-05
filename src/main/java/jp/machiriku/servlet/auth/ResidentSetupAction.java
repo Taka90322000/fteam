@@ -1,70 +1,66 @@
 package jp.machiriku.servlet.auth;
 
+import java.sql.SQLException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
+import jp.machiriku.bean.User;
+import jp.machiriku.dao.ProfileDao;
+import jp.machiriku.registration.RegistrationForms;
 import jp.machiriku.tool.Action;
 
-/** 地域住民の初期設定画面を表示し、送信内容をセッションへ保持する。 */
+/** LINE取得値を初期表示し、住民の入力をプロフィール・住所・通知設定へまとめて保存する。 */
 public class ResidentSetupAction extends Action {
+    protected ProfileDao createProfileDao() { return new ProfileDao(); }
 
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        String method = req.getMethod();
-
-        if ("POST".equalsIgnoreCase(method)) {
-            // POSTはフォーム送信。文字コードを指定してから各入力値を取り出す。
-            req.setCharacterEncoding("UTF-8");
-            String name = req.getParameter("name");
-            String email = req.getParameter("email");
-            String ageGroup = req.getParameter("ageGroup");
-            String gender = req.getParameter("gender");
-            String industry = req.getParameter("industry");
-            // 住所の表示文字列と、地図上で選んだ緯度・経度をそれぞれ受け取る。
-            String livingAddress = req.getParameter("livingAddress");
-            String livingLat = req.getParameter("livingLat");
-            String livingLng = req.getParameter("livingLng");
-            String workAddress = req.getParameter("workAddress");
-            String workLat = req.getParameter("workLat");
-            String workLng = req.getParameter("workLng");
-            boolean emailNotify = "on".equalsIgnoreCase(req.getParameter("emailNotify")) || "true".equalsIgnoreCase(req.getParameter("emailNotify"));
-
-            // 現時点ではDB保存せず、画面用の会員情報と初期設定完了状態を保持する。
-            HttpSession session = req.getSession();
-            session.setAttribute("userName", (name != null && !name.trim().isEmpty()) ? name.trim() : "LINEユーザー");
-            session.setAttribute("userRole", "resident");
-            session.setAttribute("userEmail", email != null ? email.trim() : "");
-            session.setAttribute("isOnboarded", true);
-
-            // 完了後はトップページ（index.jsp）へリダイレクト
-            res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+        User user = OnboardingSupport.requireUser(req, res, "RESIDENT");
+        if (user == null) { return; }
+        if (!"GET".equalsIgnoreCase(req.getMethod()) && !"POST".equalsIgnoreCase(req.getMethod())) {
+            res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
             return;
         }
-
-        // GETは画面表示。LINE連携時のセッション値を優先し、なければリクエスト値を使う。
-        HttpSession session = req.getSession();
-        String displayName = (String) session.getAttribute("lineDisplayName");
-        if (displayName == null || displayName.trim().isEmpty()) {
-            displayName = req.getParameter("displayName");
+        boolean posting = "POST".equalsIgnoreCase(req.getMethod());
+        Map<String, String> fields;
+        if (posting) {
+            req.setCharacterEncoding("UTF-8");
+            if (!OnboardingSupport.validCsrf(req)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
+            fields = OnboardingSupport.fields(req, "name", "email", "ageGroup", "gender", "industry", "livingAddress", "livingLat",
+                    "livingLng", "workAddress", "workLat", "workLng", "emailNotify");
+            try {
+                var input = RegistrationForms.resident(fields);
+                User saved = createProfileDao().saveResident(user.getUserId(), input);
+                // DBのcommitが成功してから、画面用の会員情報と初期設定完了状態を更新する。
+                OnboardingSupport.completed(req, saved, saved.getDisplayName());
+                res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+                return;
+            } catch (IllegalArgumentException e) {
+                req.setAttribute("errorMessage", e.getMessage());
+            } catch (SQLException e) {
+                OnboardingSupport.logDatabaseError(req, e);
+                if ("28000".equals(e.getSQLState())) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
+                req.setAttribute("errorMessage", "23505".equals(e.getSQLState())
+                        ? "このメールアドレスは既に登録されています。入力内容を確認してください。"
+                        : "登録内容を保存できませんでした。入力内容を保持していますので、もう一度お試しください。");
+            }
+        } else {
+            // クエリの表示名やメールを信用せず、認証済みセッション内のLINE取得値を使う。
+            fields = new LinkedHashMap<>();
+            fields.put("name", OnboardingSupport.lineValue(req.getSession(), "lineDisplayName", user.getDisplayName()));
+            fields.put("email", OnboardingSupport.lineValue(req.getSession(), "lineEmail", user.getEmail()));
+            fields.put("ageGroup", "未設定");
+            fields.put("gender", "回答しない");
+            fields.put("emailNotify", "on");
         }
-        if (displayName == null || displayName.trim().isEmpty()) {
-            displayName = "LINEユーザー";
-        }
-
-        String email = (String) session.getAttribute("lineEmail");
-        if (email == null || email.trim().isEmpty()) {
-            email = req.getParameter("email");
-        }
-        if (email == null || email.trim().isEmpty()) {
-            email = "tanaka.line@example.com"; // 実データがない場合に使う、画面確認用のデモ初期値。
-        }
-
-        req.setAttribute("displayName", displayName);
-        req.setAttribute("email", email);
+        req.setAttribute("formValues", fields);
+        req.setAttribute("displayName", fields.get("name"));
+        req.setAttribute("email", fields.get("email"));
         req.setAttribute("role", "resident");
         req.setAttribute("roleLabel", "地域住民");
-
-        // JSPへフォワード
+        req.setAttribute("csrfToken", OnboardingSupport.csrfToken(req.getSession()));
         req.getRequestDispatcher("/WEB-INF/views/auth/resident_setup.jsp").forward(req, res);
     }
 }

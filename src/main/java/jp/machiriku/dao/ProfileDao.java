@@ -1,0 +1,258 @@
+package jp.machiriku.dao;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+
+import jp.machiriku.bean.BusinessProfileInput;
+import jp.machiriku.bean.LocationInput;
+import jp.machiriku.bean.RegistrationChoice;
+import jp.machiriku.bean.ResidentProfileInput;
+import jp.machiriku.bean.User;
+
+/** 初期設定の関連テーブルを1トランザクションで保存する。途中失敗時に一部だけ登録されることを防ぐ。 */
+public class ProfileDao extends Dao {
+    private static final String USER_COLUMNS = "user_id, display_name, email, user_role, phone_e164, "
+            + "line_subject, account_status, created_at, updated_at, withdrawn_at";
+
+    protected Connection openConnection() throws SQLException { return getConnection(); }
+
+    /** 有効な業種だけを、DBのマスターID付きで画面へ渡す。 */
+    public List<RegistrationChoice> listIndustries() throws SQLException {
+        String sql = "SELECT i.industry_type_id, c.category_name || ' / ' || i.industry_name AS label "
+                + "FROM industry_types i JOIN industry_categories c ON c.category_id=i.category_id "
+                + "WHERE i.is_active AND c.is_active ORDER BY c.category_id,i.industry_type_id";
+        try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(sql);
+                ResultSet rows = statement.executeQuery()) {
+            List<RegistrationChoice> choices = new ArrayList<>();
+            while (rows.next()) { choices.add(new RegistrationChoice(rows.getInt(1), rows.getString(2))); }
+            return List.copyOf(choices);
+        }
+    }
+
+    public List<RegistrationChoice> listQualifications() throws SQLException {
+        try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(
+                "SELECT qualification_id,qualification_name FROM qualifications WHERE is_active ORDER BY qualification_id");
+                ResultSet rows = statement.executeQuery()) {
+            List<RegistrationChoice> choices = new ArrayList<>();
+            while (rows.next()) { choices.add(new RegistrationChoice(rows.getInt(1), rows.getString(2))); }
+            return List.copyOf(choices);
+        }
+    }
+
+    public User saveResident(int userId, ResidentProfileInput input) throws SQLException {
+        if (input == null || input.home() == null || !"HOME".equals(input.home().kind())
+                || (input.work() != null && !"WORK".equals(input.work().kind()))) {
+            throw new IllegalArgumentException("居住地と職場の入力内容を確認してください。");
+        }
+        return save(userId, "RESIDENT", (connection, user) -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE users SET display_name=?,email=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
+                statement.setString(1, input.displayName());
+                statement.setString(2, nullable(input.email()));
+                statement.setInt(3, userId);
+                statement.executeUpdate();
+            }
+            // 職業はユーザー指定で保存対象外。既存のプロフィール列だけを使用する。
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO resident_profiles (user_id,age_group,gender) VALUES (?,?,?) "
+                    + "ON CONFLICT (user_id) DO UPDATE SET age_group=EXCLUDED.age_group,gender=EXCLUDED.gender,updated_at=CURRENT_TIMESTAMP")) {
+                statement.setInt(1, userId);
+                statement.setString(2, input.ageGroup());
+                statement.setString(3, input.gender());
+                statement.executeUpdate();
+            }
+            saveLocation(connection, userId, input.home());
+            if (input.work() != null) {
+                saveLocation(connection, userId, input.work());
+            } else {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM user_locations WHERE user_id=? AND location_kind='WORK'")) {
+                    statement.setInt(1, userId);
+                    statement.executeUpdate();
+                }
+            }
+            saveNotifications(connection, userId, input.emailNotify() && nullable(input.email()) != null);
+        });
+    }
+
+    public User saveBusiness(int userId, BusinessProfileInput input) throws SQLException {
+        if (input == null || input.areaGeoJson() == null || input.areaGeoJson().isBlank()
+                || input.industryTypeIds() == null || input.industryTypeIds().isEmpty()) {
+            throw new IllegalArgumentException("希望業種と地図上の希望範囲を指定してください。");
+        }
+        return save(userId, "BUSINESS", (connection, user) -> {
+            List<Integer> industries = uniqueIds(input.industryTypeIds());
+            List<Integer> qualifications = uniqueIds(input.qualificationIds());
+            validateMasterIds(connection, industries, true);
+            validateMasterIds(connection, qualifications, false);
+            // 自己交差など、数値の範囲だけでは検出できない不正なポリゴンもPostGISで確認する。
+            validatePolygon(connection, input.areaGeoJson());
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE users SET email=?,phone_e164=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
+                statement.setString(1, nullable(input.email()));
+                statement.setString(2, input.phoneE164());
+                statement.setInt(3, userId);
+                statement.executeUpdate();
+            }
+            // LINEの表示名は保持し、本人が入力した代表者名は事業主プロフィールへ保存する。
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,area) "
+                    + "VALUES (?,?,?,?,?,?,?,ST_SetSRID(ST_GeomFromGeoJSON(?),4326)) "
+                    + "ON CONFLICT (user_id) DO UPDATE SET business_name=EXCLUDED.business_name,representative_name=EXCLUDED.representative_name,"
+                    + "employee_count=EXCLUDED.employee_count,preferred_area=EXCLUDED.preferred_area,industry_experience=EXCLUDED.industry_experience,"
+                    + "management_experience=EXCLUDED.management_experience,area=EXCLUDED.area,updated_at=CURRENT_TIMESTAMP")) {
+                statement.setInt(1, userId);
+                statement.setString(2, input.businessName());
+                statement.setString(3, input.representativeName());
+                statement.setInt(4, input.employeeCount());
+                statement.setString(5, input.preferredArea());
+                statement.setString(6, input.industryExperience());
+                statement.setString(7, input.managementExperience());
+                statement.setString(8, input.areaGeoJson());
+                statement.executeUpdate();
+            }
+            try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_industry_preferences WHERE user_id=?")) {
+                statement.setInt(1, userId);
+                statement.executeUpdate();
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO user_industry_preferences (user_id,industry_type_id) VALUES (?,?)")) {
+                for (int industryId : industries) {
+                    statement.setInt(1, userId);
+                    statement.setInt(2, industryId);
+                    statement.addBatch();
+                }
+                statement.executeBatch();
+            }
+            // 選択解除した資格は非表示にし、資格番号や取得日など既存の詳細は消さない。
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE business_qualifications SET is_active=false,updated_at=CURRENT_TIMESTAMP WHERE business_user_id=?")) {
+                statement.setInt(1, userId);
+                statement.executeUpdate();
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO business_qualifications (business_user_id,qualification_id) VALUES (?,?) "
+                    + "ON CONFLICT (business_user_id,qualification_id) DO UPDATE SET is_active=true,updated_at=CURRENT_TIMESTAMP")) {
+                for (int qualificationId : qualifications) {
+                    statement.setInt(1, userId);
+                    statement.setInt(2, qualificationId);
+                    statement.addBatch();
+                }
+                if (!qualifications.isEmpty()) { statement.executeBatch(); }
+            }
+            saveNotifications(connection, userId, input.emailNotify() && nullable(input.email()) != null);
+        });
+    }
+
+    /** 同じ会員の同時送信を直列化し、権限をDBでも再確認してから関連情報を保存する。 */
+    private User save(int userId, String requiredRole, SaveWork work) throws SQLException {
+        try (Connection connection = openConnection()) {
+            boolean autoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                User current;
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT " + USER_COLUMNS + " FROM users WHERE user_id=? FOR UPDATE")) {
+                    statement.setInt(1, userId);
+                    try (ResultSet rows = statement.executeQuery()) { current = rows.next() ? UserDao.readUser(rows) : null; }
+                }
+                if (current == null || !requiredRole.equals(current.getUserRole()) || current.getWithdrawnAt() != null
+                        || (!"PENDING".equals(current.getAccountStatus()) && !"ACTIVE".equals(current.getAccountStatus()))) {
+                    throw new SQLException("This account cannot complete the requested registration.", "28000");
+                }
+                work.run(connection, current);
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "UPDATE users SET account_status='ACTIVE',updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
+                    statement.setInt(1, userId);
+                    statement.executeUpdate();
+                }
+                User saved;
+                try (PreparedStatement statement = connection.prepareStatement("SELECT " + USER_COLUMNS + " FROM users WHERE user_id=?")) {
+                    statement.setInt(1, userId);
+                    try (ResultSet rows = statement.executeQuery()) {
+                        if (!rows.next()) { throw new SQLException("The saved user could not be read."); }
+                        saved = UserDao.readUser(rows);
+                    }
+                }
+                connection.commit();
+                return saved;
+            } catch (SQLException | RuntimeException error) {
+                try { connection.rollback(); } catch (SQLException rollbackError) { error.addSuppressed(rollbackError); }
+                throw error;
+            } finally {
+                connection.setAutoCommit(autoCommit);
+            }
+        }
+    }
+
+    private void saveLocation(Connection connection, int userId, LocationInput location) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO user_locations (user_id,location_kind,prefecture,municipality,address_line,latitude,longitude) VALUES (?,?,?,?,?,?,?) "
+                + "ON CONFLICT (user_id,location_kind) DO UPDATE SET prefecture=EXCLUDED.prefecture,municipality=EXCLUDED.municipality,"
+                + "address_line=EXCLUDED.address_line,latitude=EXCLUDED.latitude,longitude=EXCLUDED.longitude,updated_at=CURRENT_TIMESTAMP")) {
+            statement.setInt(1, userId);
+            statement.setString(2, location.kind());
+            statement.setString(3, location.prefecture());
+            statement.setString(4, location.municipality());
+            statement.setString(5, location.addressLine());
+            statement.setBigDecimal(6, location.latitude());
+            statement.setBigDecimal(7, location.longitude());
+            statement.executeUpdate();
+        }
+    }
+
+    private void saveNotifications(Connection connection, int userId, boolean emailEnabled) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO notification_settings (user_id,email_enabled) VALUES (?,?) "
+                + "ON CONFLICT (user_id) DO UPDATE SET email_enabled=EXCLUDED.email_enabled,updated_at=CURRENT_TIMESTAMP")) {
+            statement.setInt(1, userId);
+            statement.setBoolean(2, emailEnabled);
+            statement.executeUpdate();
+        }
+    }
+
+    private List<Integer> uniqueIds(List<Integer> ids) {
+        if (ids == null) { return List.of(); }
+        if (ids.size() > 200 || ids.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new IllegalArgumentException("業種・資格の選択内容を確認してください。");
+        }
+        return List.copyOf(new LinkedHashSet<>(ids));
+    }
+
+    private void validateMasterIds(Connection connection, List<Integer> ids, boolean industries) throws SQLException {
+        String sql = industries
+                ? "SELECT 1 FROM industry_types i JOIN industry_categories c ON c.category_id=i.category_id WHERE i.industry_type_id=? AND i.is_active AND c.is_active"
+                : "SELECT 1 FROM qualifications WHERE qualification_id=? AND is_active";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int id : ids) {
+                statement.setInt(1, id);
+                try (ResultSet rows = statement.executeQuery()) {
+                    if (!rows.next()) { throw new IllegalArgumentException("業種・資格の選択肢が変更されました。選び直してください。"); }
+                }
+            }
+        }
+    }
+
+    private void validatePolygon(Connection connection, String geoJson) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT ST_IsValid(g) AND NOT ST_IsEmpty(g) AND GeometryType(g)='POLYGON' FROM "
+                + "(SELECT ST_SetSRID(ST_GeomFromGeoJSON(?),4326) AS g) AS shape")) {
+            statement.setString(1, geoJson);
+            try (ResultSet rows = statement.executeQuery()) {
+                if (!rows.next() || !rows.getBoolean(1)) {
+                    throw new IllegalArgumentException("希望範囲が交差しているか、正しく囲まれていません。地図で指定し直してください。");
+                }
+            }
+        }
+    }
+
+    private static String nullable(String value) { return value == null || value.isBlank() ? null : value; }
+
+    @FunctionalInterface
+    private interface SaveWork { void run(Connection connection, User current) throws SQLException; }
+}

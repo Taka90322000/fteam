@@ -77,7 +77,7 @@ public class UserDao extends Dao {
     }
 
     /** DBの列をUserへ詰め替え、保存済みの役割・利用状態も呼び出し元へ返す。 */
-    private static User readUser(ResultSet row) throws SQLException {
+    static User readUser(ResultSet row) throws SQLException {
         User user = new User();
         user.setUserId(row.getInt("user_id"));
         user.setDisplayName(row.getString("display_name"));

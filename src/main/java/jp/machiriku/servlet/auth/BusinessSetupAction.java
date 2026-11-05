@@ -1,74 +1,91 @@
 package jp.machiriku.servlet.auth;
 
+import java.sql.SQLException;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
+import jp.machiriku.bean.User;
+import jp.machiriku.dao.ProfileDao;
+import jp.machiriku.registration.RegistrationForms;
 import jp.machiriku.tool.Action;
 
-/** 事業者の初期設定画面を表示し、送信内容をセッションへ保持する。 */
+/** 事業主はメールだけをLINEから初期設定し、事業者情報と希望条件をDBへ保存する。 */
 public class BusinessSetupAction extends Action {
+    protected ProfileDao createProfileDao() { return new ProfileDao(); }
 
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        String method = req.getMethod();
-
-        if ("POST".equalsIgnoreCase(method)) {
-            // POSTはフォーム送信。文字コードを指定してから各入力値を取り出す。
-            req.setCharacterEncoding("UTF-8");
-            String businessName = req.getParameter("businessName");
-            String repName = req.getParameter("representativeName");
-            String email = req.getParameter("email");
-            String phone = req.getParameter("phone");
-            // エリア名と、なぞった点列のJSON文字列は別の項目として受け取る。
-            String preferredArea = req.getParameter("preferredArea");
-            String preferredAreaPoints = req.getParameter("preferredAreaPoints");
-            String employeeCount = req.getParameter("employeeCount");
-            String[] preferredIndustries = req.getParameterValues("preferredIndustry");
-            String mgmtExperience = req.getParameter("mgmtExperience");
-            String industryExperience = req.getParameter("industryExperience");
-            String[] qualifications = req.getParameterValues("qualification");
-            boolean emailNotify = "on".equalsIgnoreCase(req.getParameter("emailNotify")) || "true".equalsIgnoreCase(req.getParameter("emailNotify"));
-
-            // 現時点ではDB保存せず、表示に使う入力値と初期設定完了状態をセッションへ保持する。
-            HttpSession session = req.getSession();
-            session.setAttribute("userName", (repName != null && !repName.trim().isEmpty()) ? repName.trim() : "LINEユーザー");
-            session.setAttribute("userRole", "business");
-            session.setAttribute("userEmail", email != null ? email.trim() : "");
-            session.setAttribute("businessName", businessName != null ? businessName.trim() : "");
-            session.setAttribute("preferredArea", preferredArea != null ? preferredArea.trim() : "");
-            session.setAttribute("preferredAreaPoints", preferredAreaPoints != null ? preferredAreaPoints.trim() : "");
-            session.setAttribute("isOnboarded", true);
-
-            // 完了後はトップページ（index.jsp）へリダイレクト
-            res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+        User user = OnboardingSupport.requireUser(req, res, "BUSINESS");
+        if (user == null) { return; }
+        if (!"GET".equalsIgnoreCase(req.getMethod()) && !"POST".equalsIgnoreCase(req.getMethod())) {
+            res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
             return;
         }
-
-        // GETは画面表示。LINE連携時のセッション値を優先し、なければリクエスト値を使う。
-        HttpSession session = req.getSession();
-        String displayName = (String) session.getAttribute("lineDisplayName");
-        if (displayName == null || displayName.trim().isEmpty()) {
-            displayName = req.getParameter("displayName");
+        boolean posting = "POST".equalsIgnoreCase(req.getMethod());
+        Map<String, String> fields;
+        Set<String> industries = Set.of(), qualifications = Set.of();
+        if (posting) {
+            req.setCharacterEncoding("UTF-8");
+            if (!OnboardingSupport.validCsrf(req)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
+            fields = OnboardingSupport.fields(req, "businessName", "representativeName", "email", "phone", "preferredArea", "preferredAreaPoints",
+                    "employeeCount", "mgmtExperience", "industryExperience", "emailNotify");
+            industries = OnboardingSupport.selection(req, "preferredIndustry");
+            qualifications = OnboardingSupport.selection(req, "qualification");
+            try {
+                var input = RegistrationForms.business(fields, OnboardingSupport.values(req, "preferredIndustry"),
+                        OnboardingSupport.values(req, "qualification"));
+                User saved = createProfileDao().saveBusiness(user.getUserId(), input);
+                OnboardingSupport.completed(req, saved, input.representativeName());
+                req.getSession().setAttribute("businessName", input.businessName());
+                req.getSession().setAttribute("preferredArea", input.preferredArea());
+                req.getSession().setAttribute("preferredAreaPoints", fields.get("preferredAreaPoints"));
+                res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+                return;
+            } catch (IllegalArgumentException e) {
+                req.setAttribute("errorMessage", e.getMessage());
+            } catch (SQLException e) {
+                OnboardingSupport.logDatabaseError(req, e);
+                if ("28000".equals(e.getSQLState())) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
+                req.setAttribute("errorMessage", "23505".equals(e.getSQLState())
+                        ? "このメールアドレスまたは電話番号は既に登録されています。入力内容を確認してください。"
+                        : "登録内容を保存できませんでした。入力内容と地図の範囲を確認して、もう一度お試しください。");
+            }
+        } else {
+            fields = new LinkedHashMap<>();
+            fields.put("email", OnboardingSupport.lineValue(req.getSession(), "lineEmail", user.getEmail()));
+            fields.put("businessName", "");
+            fields.put("representativeName", "");
+            fields.put("phone", user.getPhoneE164() == null ? "" : user.getPhoneE164());
+            fields.put("employeeCount", "1");
+            fields.put("mgmtExperience", "");
+            fields.put("industryExperience", "");
+            fields.put("emailNotify", "on");
         }
-        if (displayName == null || displayName.trim().isEmpty()) {
-            displayName = "佐藤 健一"; // 実データがない場合に使う、事業者画面のデモ初期値。
-        }
-
-        String email = (String) session.getAttribute("lineEmail");
-        if (email == null || email.trim().isEmpty()) {
-            email = req.getParameter("email");
-        }
-        if (email == null || email.trim().isEmpty()) {
-            // メール未設定時の画面確認用デモ値。DBから取得したアドレスではない。
-            email = "sato.business@example.com";
-        }
-
-        req.setAttribute("displayName", displayName);
-        req.setAttribute("email", email);
+        req.setAttribute("formValues", fields);
+        req.setAttribute("displayName", fields.get("representativeName"));
+        req.setAttribute("email", fields.get("email"));
         req.setAttribute("role", "business");
         req.setAttribute("roleLabel", "出店事業主");
-
-        // JSPへフォワード
+        req.setAttribute("selectedIndustries", industries);
+        req.setAttribute("selectedQualifications", qualifications);
+        req.setAttribute("csrfToken", OnboardingSupport.csrfToken(req.getSession()));
+        // 選択肢のIDを固定配列で推測せず、実際の業種・資格マスターから取得する。
+        try {
+            ProfileDao dao = createProfileDao();
+            req.setAttribute("industryChoices", dao.listIndustries());
+            req.setAttribute("qualificationChoices", dao.listQualifications());
+        } catch (SQLException e) {
+            OnboardingSupport.logDatabaseError(req, e);
+            req.setAttribute("industryChoices", List.of());
+            req.setAttribute("qualificationChoices", List.of());
+            if (req.getAttribute("errorMessage") == null) {
+                req.setAttribute("errorMessage", "業種・資格の選択肢を取得できませんでした。時間をおいて画面を開き直してください。");
+            }
+        }
         req.getRequestDispatcher("/WEB-INF/views/auth/business_setup.jsp").forward(req, res);
     }
 }

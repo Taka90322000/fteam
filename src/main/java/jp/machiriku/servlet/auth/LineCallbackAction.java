@@ -91,6 +91,9 @@ public class LineCallbackAction extends Action {
             session.setAttribute("user", user);
             session.setAttribute("userId", user.getUserId());
             session.setAttribute("userRole", user.getUserRole().toLowerCase(Locale.ROOT));
+            // 初期設定では、DBの過去の編集値ではなく今回のLINE取得値を初期表示する。
+            session.setAttribute("lineDisplayName", profile.displayName());
+            session.setAttribute("lineEmail", profile.email() == null ? "" : profile.email());
             // 登録経由の住民・事業主は、それぞれの追加設定画面へ進める。
             if (registration && "RESIDENT".equalsIgnoreCase(user.getUserRole())) {
                 res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/ResidentSetup.action");

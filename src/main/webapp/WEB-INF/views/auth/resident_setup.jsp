@@ -1,10 +1,17 @@
 <%-- 住民の初期設定画面。Actionから渡されたLINE表示名と任意のメールアドレスを初期表示に使う。 --%>
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="java.util.Map,jp.machiriku.tool.Html" %>
 <%
   String displayName = (String) request.getAttribute("displayName");
-  if (displayName == null) displayName = "LINEユーザー";
+  if (displayName == null) displayName = "";
   String email = (String) request.getAttribute("email");
   if (email == null) email = "";
+  // 再表示時はPOSTされた値を優先し、初回だけLINEの実際のプロフィールを使用する。
+  Map<String, String> formValues = request.getAttribute("formValues") instanceof Map
+      ? (Map<String, String>) request.getAttribute("formValues") : java.util.Collections.emptyMap();
+  displayName = formValues.getOrDefault("name", displayName);
+  email = formValues.getOrDefault("email", email);
+  boolean formSubmitted = "POST".equals(request.getMethod());
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="アカウントの初期設定 | マチリク" />
@@ -23,6 +30,9 @@
   </div>
 
   <div class="form-stepper-box" style="max-width: 680px; margin:0 auto; background:var(--bg-card); padding:2rem; border-radius:var(--radius-lg); border:1px solid var(--border-color); box-shadow:var(--shadow-sm);">
+    <% if (request.getAttribute("errorMessage") != null) { %>
+      <div role="alert" style="background:#fee2e2; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-md); margin-bottom:1rem;"><%= Html.escape(request.getAttribute("errorMessage")) %></div>
+    <% } %>
     
     <!-- LINEログイン完了カード -->
     <div class="onboarding-welcome-card" style="background: var(--bg-subtle); border: 1.5px solid var(--border-color); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4);">
@@ -42,12 +52,13 @@
 
     <%-- 入力内容と居住地・職場などの座標を、初期設定のActionへ送信する。 --%>
     <form id="resident-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/ResidentSetup.action" method="POST" onsubmit="return validateResidentForm();">
+      <input type="hidden" name="csrfToken" value="<%= Html.escape(request.getAttribute("csrfToken")) %>">
       <!-- ニックネーム (表示名) -->
       <div class="form-group" style="margin-bottom:1.25rem;">
         <label for="s18-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           ニックネーム (表示名) <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-        <input id="s18-name" name="name" type="text" class="form-control" value="<%= displayName %>" required placeholder="例: 山田 太郎" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) h.textContent = this.value.trim();">
+        <input id="s18-name" name="name" type="text" class="form-control" value="<%= Html.escape(displayName) %>" maxlength="100" required placeholder="例: 山田 太郎" oninput="const h = document.getElementById('header-user-name'); if(h) h.textContent = this.value.trim();">
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINEの表示名が初期設定されています。自由に編集できます。</span>
       </div>
 
@@ -56,8 +67,8 @@
         <label for="s18-email" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           メールアドレス <span style="font-size:0.78rem; color:var(--text-sub);">(変更可能)</span>
         </label>
-        <input id="s18-email" name="email" type="email" class="form-control" value="<%= email %>" placeholder="example@domain.com">
-        <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINE認証で取得したメールアドレスが反映されています。</span>
+        <input id="s18-email" name="email" type="email" class="form-control" value="<%= Html.escape(email) %>" maxlength="254" placeholder="example@domain.com">
+        <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINE認証で取得できた場合に反映しています。未取得の場合は空欄です。</span>
       </div>
 
       <!-- 年齢 (任意・ラジオボタン) -->
@@ -71,8 +82,8 @@
             for (String opt : ageOptions) {
           %>
             <label style="display:flex; align-items:center; justify-content:center; gap:0.25rem; padding:0.45rem 0.15rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.8125rem; white-space:nowrap; text-align:center; box-sizing:border-box;">
-              <input type="radio" name="ageGroup" value="<%= opt %>" <%= "未設定".equals(opt) ? "checked" : "" %> style="cursor:pointer; margin:0; flex-shrink:0;">
-              <span><%= opt %></span>
+              <input type="radio" name="ageGroup" value="<%= Html.escape(opt) %>" <%= formValues.getOrDefault("ageGroup", "未設定").equals(opt) ? "checked" : "" %> style="cursor:pointer; margin:0; flex-shrink:0;">
+              <span><%= Html.escape(opt) %></span>
             </label>
           <% } %>
         </div>
@@ -89,8 +100,8 @@
             for (String opt : genderOptions) {
           %>
             <label style="display:inline-flex; align-items:center; gap:0.4rem; padding:0.45rem 0.85rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.875rem;">
-              <input type="radio" name="gender" value="<%= opt %>" <%= "回答しない".equals(opt) ? "checked" : "" %> style="cursor:pointer;">
-              <span><%= opt %></span>
+              <input type="radio" name="gender" value="<%= Html.escape(opt) %>" <%= formValues.getOrDefault("gender", "回答しない").equals(opt) ? "checked" : "" %> style="cursor:pointer;">
+              <span><%= Html.escape(opt) %></span>
             </label>
           <% } %>
         </div>
@@ -111,7 +122,7 @@
             };
             for (String opt : industryOptions) {
           %>
-            <option value="<%= opt %>"><%= opt %></option>
+            <option value="<%= Html.escape(opt) %>" <%= opt.equals(formValues.get("industry")) ? "selected" : "" %>><%= Html.escape(opt) %></option>
           <% } %>
         </select>
       </div>
@@ -138,11 +149,11 @@
           <label for="s18-living-address" style="font-size:0.8rem; font-weight:700; color:var(--text-sub); display:block; margin-bottom:0.25rem;">
             選択中の居住地住所:
           </label>
-          <input id="s18-living-address" name="livingAddress" type="text" class="form-control" value="栃木県宇都宮市本町1-1" required placeholder="地図をクリックすると自動で住所が設定されます">
-          <input id="s18-living-lat" name="livingLat" type="hidden" value="36.5610">
-          <input id="s18-living-lng" name="livingLng" type="hidden" value="139.8830">
+          <input id="s18-living-address" name="livingAddress" type="text" class="form-control" value="<%= Html.escape(formValues.get("livingAddress")) %>" required placeholder="地図をクリックすると自動で住所が設定されます">
+          <input id="s18-living-lat" name="livingLat" type="hidden" value="<%= Html.escape(formValues.get("livingLat")) %>">
+          <input id="s18-living-lng" name="livingLng" type="hidden" value="<%= Html.escape(formValues.get("livingLng")) %>">
           <div id="s18-map-status" style="font-size:0.75rem; color:var(--primary-700); margin-top:0.35rem; font-weight:600;">
-            ✓ 選択中: (36.5610, 139.8830)
+            ※地図をクリックして居住地を選択してください
           </div>
         </div>
       </div>
@@ -182,9 +193,9 @@
             <label for="s18-work-address" style="font-size:0.8rem; font-weight:700; color:var(--text-sub); display:block; margin-bottom:0.25rem;">
               選択中の職場・学校住所:
             </label>
-            <input id="s18-work-address" name="workAddress" type="text" class="form-control" value="" placeholder="地図をクリックすると自動で住所が設定されます">
-            <input id="s18-work-lat" name="workLat" type="hidden" value="36.5590">
-            <input id="s18-work-lng" name="workLng" type="hidden" value="139.8980">
+            <input id="s18-work-address" name="workAddress" type="text" class="form-control" value="<%= Html.escape(formValues.get("workAddress")) %>" placeholder="地図をクリックすると自動で住所が設定されます">
+            <input id="s18-work-lat" name="workLat" type="hidden" value="<%= Html.escape(formValues.get("workLat")) %>">
+            <input id="s18-work-lng" name="workLng" type="hidden" value="<%= Html.escape(formValues.get("workLng")) %>">
             <div id="s18-work-map-status" style="font-size:0.75rem; color:var(--primary-700); margin-top:0.35rem; font-weight:600;">
               ※地図をクリックしてピンを配置してください
             </div>
@@ -194,7 +205,7 @@
 
       <!-- 新着店舗・新着クーポン情報のメール受信設定 -->
       <label style="display:flex; align-items:center; gap:0.65rem; cursor:pointer; font-size:0.875rem; color:var(--text-main); font-weight:600; line-height:1.45; margin-top:1.5rem; padding:0.75rem 1rem; background:var(--bg-subtle); border-radius:var(--radius-md); border:1px solid var(--border-color); box-sizing:border-box; min-height:48px;">
-        <input type="checkbox" id="s18-email-notify" name="emailNotify" checked style="cursor:pointer; width:18px; height:18px; margin:0; flex-shrink:0;">
+        <input type="checkbox" id="s18-email-notify" name="emailNotify" <%= !formSubmitted || formValues.containsKey("emailNotify") ? "checked" : "" %> style="cursor:pointer; width:18px; height:18px; margin:0; flex-shrink:0;">
         <span>新着店舗や新着クーポン情報をメールで受け取る</span>
       </label>
 
@@ -213,334 +224,173 @@
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNWrNbVnBfZsjuTJ3sHCKDemfkxNsIv7w&libraries=marker"></script>
 
 <script>
-  // 居住地と職場・学校は別々の地図とピンで管理し、フォームの座標欄と同期する。
-  let s18LivingMap = null;
-  let s18LivingMarker = null;
-  let s18WorkMap = null;
-  let s18WorkMarker = null;
+  // 初期中心は宇都宮にするが、利用者が選ぶまでは住所・座標・ピンを登録しない。
+  const s18Locations = {
+    living: { map: null, marker: null, revision: 0, mapId: 's18-map-picker', statusId: 's18-map-status' },
+    work: { map: null, marker: null, revision: 0, mapId: 's18-work-map-picker', statusId: 's18-work-map-status' }
+  };
+  const s18MapCenter = { lat: 36.5610, lng: 139.8830 };
 
-  // 送信前にニックネームと居住地の入力を確認し、不足していれば該当欄へ戻す。
+  function readResidentCoords(kind) {
+    const latValue = document.getElementById('s18-' + kind + '-lat').value.trim();
+    const lngValue = document.getElementById('s18-' + kind + '-lng').value.trim();
+    if (!latValue || !lngValue) return null;
+    const lat = Number(latValue);
+    const lng = Number(lngValue);
+    return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+  }
+
   function validateResidentForm() {
     const nameInput = document.getElementById('s18-name');
     const addrInput = document.getElementById('s18-living-address');
-    if (!nameInput || !nameInput.value.trim()) {
+    if (!nameInput.value.trim()) {
       alert('ニックネームを入力してください');
-      if (nameInput) nameInput.focus();
+      nameInput.focus();
       return false;
     }
-    if (!addrInput || !addrInput.value.trim()) {
-      alert('居住地を地図上でクリックして指定してください（必須）');
-      if (addrInput) addrInput.focus();
+    if (!addrInput.value.trim() || !readResidentCoords('living')) {
+      alert('居住地を地図上で選択してください（必須）');
+      addrInput.focus();
       return false;
     }
+    const workInput = document.getElementById('s18-work-address');
+    if (workInput.value.trim() && !readResidentCoords('work')) {
+      alert('職場・学校を登録する場合は、地図上で住所を選択してください');
+      toggleWorkMap(true);
+      workInput.focus();
+      return false;
+    }
+    // 任意の職場・学校が空欄なら、以前の座標も送らない。
+    if (!workInput.value.trim()) clearResidentCoords('work');
     return true;
   }
 
-  // 緯度・経度から住所名を非同期で取得し、取得できない場合は既定の地域名を返す。
-  function reverseGeocodeWithGoogle(lat, lng, callback) {
-    if (typeof google !== 'undefined' && google.maps && google.maps.Geocoder) {
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-        if (status === 'OK' && results && results[0]) {
-          let resolved = results[0].formatted_address || '栃木県宇都宮市';
-          // 日本表記の整形
-          resolved = resolved.replace(/^日本、/, '');
-          callback(resolved);
-        } else {
-          callback('栃木県宇都宮市');
-        }
-      });
+  function updateResidentStatus(kind, text) {
+    document.getElementById(s18Locations[kind].statusId).textContent = text;
+  }
+
+  // 住所の手修正後に、修正前の座標が保存されることを防ぐ。
+  function clearResidentCoords(kind) {
+    const location = s18Locations[kind];
+    location.revision++;
+    document.getElementById('s18-' + kind + '-lat').value = '';
+    document.getElementById('s18-' + kind + '-lng').value = '';
+    if (location.marker) location.marker.setMap(null);
+    updateResidentStatus(kind, '※地図上で住所を選択してください');
+  }
+
+  function showResidentMarker(kind, point) {
+    const location = s18Locations[kind];
+    if (!location.map) return;
+    if (!location.marker) {
+      location.marker = new google.maps.Marker({ map: location.map, position: point, draggable: true });
+      location.marker.addListener('dragend', (event) => selectResidentLocation(kind, {
+        lat: event.latLng.lat(), lng: event.latLng.lng()
+      }));
     } else {
-      callback('栃木県宇都宮市');
+      location.marker.setMap(location.map);
+      location.marker.setPosition(point);
     }
   }
 
-  // 居住地の現在値を地図へ反映し、地図クリックとピン移動のイベントを登録する。
-  function initLivingMapPicker() {
-    const container = document.getElementById('s18-map-picker');
-    if (!container) return;
-
-    const latInput = document.getElementById('s18-living-lat');
-    const lngInput = document.getElementById('s18-living-lng');
-    const addrInput = document.getElementById('s18-living-address');
-    const statusEl = document.getElementById('s18-map-status');
-
-    let currentLat = latInput ? parseFloat(latInput.value) : 36.5610;
-    let currentLng = lngInput ? parseFloat(lngInput.value) : 139.8830;
-    if (isNaN(currentLat) || isNaN(currentLng)) {
-      currentLat = 36.5610;
-      currentLng = 139.8830;
-    }
-
-    // 居住地の選択結果を送信用座標・住所欄・選択状況の表示へ反映する。
-    function onLocationSelected(lat, lng) {
-      if (latInput) latInput.value = lat;
-      if (lngInput) lngInput.value = lng;
-      if (statusEl) {
-        statusEl.textContent = '✓ 選択中: (' + lat.toFixed(4) + ', ' + lng.toFixed(4) + ')';
-      }
-      reverseGeocodeWithGoogle(lat, lng, (resolved) => {
-        if (addrInput) {
-          addrInput.value = resolved;
-          addrInput.classList.add('is-flash-updated');
-          setTimeout(() => addrInput.classList.remove('is-flash-updated'), 1000);
-        }
-        if (statusEl) {
-          statusEl.textContent = '✓ 選択中: (' + lat.toFixed(4) + ', ' + lng.toFixed(4) + ')';
-        }
-      });
-    }
-
-    if (typeof google !== 'undefined' && google.maps && google.maps.Map) {
-      const initialPos = { lat: currentLat, lng: currentLng };
-      s18LivingMap = new google.maps.Map(container, {
-        center: initialPos,
-        zoom: 14,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        zoomControl: false,
-        gestureHandling: 'greedy',
-        scrollwheel: true
-      });
-
-      s18LivingMarker = new google.maps.Marker({
-        position: initialPos,
-        map: s18LivingMap,
-        draggable: true,
-        title: "居住地ピン"
-      });
-
-      google.maps.event.addListener(s18LivingMap, 'click', (e) => {
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
-        s18LivingMarker.setPosition(e.latLng);
-        onLocationSelected(lat, lng);
-      });
-
-      google.maps.event.addListener(s18LivingMarker, 'dragend', (e) => {
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
-        onLocationSelected(lat, lng);
-      });
-    }
-  }
-
-  // 端末の現在地を取得し、利用できない場合は既定の宇都宮の地点を設定する。
-  function handleLivingCurrentLocation() {
-    if (typeof navigator !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLivingCoords(pos.coords.latitude, pos.coords.longitude);
-        },
-        () => {
-          setLivingCoords(36.5590, 139.8980, '栃木県宇都宮市駅前通り3丁目');
-          alert('位置情報取得不可のため、宇都宮駅前を設定しました');
-        },
-        { timeout: 7000 }
-      );
-    } else {
-      setLivingCoords(36.5610, 139.8830, '栃木県宇都宮市本町1-1');
-    }
-  }
-
-  // 居住地の座標・ピン・表示を一緒に更新し、住所の指定がなければ住所名を調べる。
-  function setLivingCoords(lat, lng, manualAddr = null) {
-    const latInput = document.getElementById('s18-living-lat');
-    const lngInput = document.getElementById('s18-living-lng');
-    const addrInput = document.getElementById('s18-living-address');
-    const statusEl = document.getElementById('s18-map-status');
-
-    if (latInput) latInput.value = lat;
-    if (lngInput) lngInput.value = lng;
-
-    if (s18LivingMap && typeof google !== 'undefined' && google.maps) {
-      const newPos = new google.maps.LatLng(lat, lng);
-      s18LivingMap.panTo(newPos);
-      if (s18LivingMarker) s18LivingMarker.setPosition(newPos);
-    }
-
-    if (manualAddr && addrInput) {
-      addrInput.value = manualAddr;
-      if (statusEl) statusEl.textContent = '✓ 選択中: (' + Number(lat).toFixed(4) + ', ' + Number(lng).toFixed(4) + ')';
+  function selectResidentLocation(kind, point) {
+    const location = s18Locations[kind];
+    const revision = ++location.revision;
+    const addressInput = document.getElementById('s18-' + kind + '-address');
+    document.getElementById('s18-' + kind + '-lat').value = point.lat;
+    document.getElementById('s18-' + kind + '-lng').value = point.lng;
+    addressInput.value = '';
+    showResidentMarker(kind, point);
+    if (location.map) location.map.panTo(point);
+    updateResidentStatus(kind, '選択した位置の住所を確認しています…');
+    if (typeof google === 'undefined' || !google.maps || !google.maps.Geocoder) {
+      updateResidentStatus(kind, '住所を取得できませんでした。地図の読み込み後に選び直してください');
       return;
     }
-
-    if (statusEl) statusEl.textContent = '✓ 選択中: (' + Number(lat).toFixed(4) + ', ' + Number(lng).toFixed(4) + ')';
-    reverseGeocodeWithGoogle(lat, lng, (resolved) => {
-      if (addrInput) addrInput.value = resolved;
-      if (statusEl) statusEl.textContent = '✓ 選択中: (' + Number(lat).toFixed(4) + ', ' + Number(lng).toFixed(4) + ')';
+    new google.maps.Geocoder().geocode({ location: point }, (results, status) => {
+      // 地図選択後に入力を修正した場合、古い住所検索結果で上書きしない。
+      if (revision !== location.revision) return;
+      if (status === 'OK' && results && results[0] && results[0].formatted_address) {
+        addressInput.value = results[0].formatted_address.replace(/^日本、/, '');
+        updateResidentStatus(kind, '✓ 選択中: (' + point.lat.toFixed(4) + ', ' + point.lng.toFixed(4) + ')');
+      } else {
+        updateResidentStatus(kind, '住所を取得できませんでした。地図上で選び直してください');
+      }
     });
   }
 
-  // 任意項目の職場・学校の地図を開閉し、表示後の地図サイズと選択位置を調整する。
+  function initResidentMap(kind) {
+    const location = s18Locations[kind];
+    if (location.map || typeof google === 'undefined' || !google.maps || !google.maps.Map) return;
+    const point = readResidentCoords(kind);
+    location.map = new google.maps.Map(document.getElementById(location.mapId), {
+      center: point || s18MapCenter, zoom: 14, mapTypeControl: false, streetViewControl: false,
+      fullscreenControl: false, zoomControl: false, gestureHandling: 'greedy', scrollwheel: true
+    });
+    location.map.addListener('click', (event) => selectResidentLocation(kind, {
+      lat: event.latLng.lat(), lng: event.latLng.lng()
+    }));
+    // エラー再表示時のみ、送信済みの位置と住所を変更せず復元する。
+    if (point) {
+      showResidentMarker(kind, point);
+      updateResidentStatus(kind, '✓ 選択中: (' + point.lat.toFixed(4) + ', ' + point.lng.toFixed(4) + ')');
+    }
+  }
+
+  function requestResidentLocation(kind) {
+    if (!navigator.geolocation) {
+      alert('現在地を取得できません。地図上で住所を選択してください');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition((position) => {
+      selectResidentLocation(kind, { lat: position.coords.latitude, lng: position.coords.longitude });
+    }, () => {
+      // 取得失敗時に宇都宮駅などの仮の地点を登録しない。
+      alert('現在地を取得できませんでした。地図上で住所を選択してください');
+    }, { timeout: 7000 });
+  }
+
+  function handleLivingCurrentLocation() { requestResidentLocation('living'); }
+  function handleWorkCurrentLocation() { requestResidentLocation('work'); }
+
   function toggleWorkMap(forceOpen) {
-    const triggerCard = document.getElementById('s18-work-trigger-card');
     const area = document.getElementById('s18-work-map-area');
-    if (!area) return;
-
-    const isHidden = (area.style.display === 'none' || area.style.display === '');
-    const shouldOpen = (forceOpen !== undefined) ? !!forceOpen : isHidden;
-
+    const trigger = document.getElementById('s18-work-trigger-card');
+    const shouldOpen = forceOpen === undefined ? area.style.display === 'none' : !!forceOpen;
+    area.style.display = shouldOpen ? 'block' : 'none';
+    trigger.style.display = shouldOpen ? 'none' : 'flex';
     if (shouldOpen) {
-      if (triggerCard) triggerCard.style.display = 'none';
-      area.style.display = 'block';
-      initWorkMapPicker();
-      if (s18WorkMap && typeof google !== 'undefined' && google.maps && google.maps.event) {
-        setTimeout(() => {
-          google.maps.event.trigger(s18WorkMap, 'resize');
-          const latInput = document.getElementById('s18-work-lat');
-          const lngInput = document.getElementById('s18-work-lng');
-          const lat = latInput ? parseFloat(latInput.value) : 36.5590;
-          const lng = lngInput ? parseFloat(lngInput.value) : 139.8980;
-          s18WorkMap.setCenter({ lat: isNaN(lat) ? 36.5590 : lat, lng: isNaN(lng) ? 139.8980 : lng });
-        }, 100);
+      initResidentMap('work');
+      const map = s18Locations.work.map;
+      if (map) {
+        google.maps.event.trigger(map, 'resize');
+        map.setCenter(readResidentCoords('work') || s18MapCenter);
       }
     } else {
-      area.style.display = 'none';
-      if (triggerCard) {
-        triggerCard.style.display = 'flex';
-        const workAddrInput = document.getElementById('s18-work-address');
-        const triggerLabel = document.getElementById('s18-work-trigger-label');
-        const triggerIcon = document.getElementById('s18-work-trigger-icon');
-        const val = workAddrInput ? workAddrInput.value.trim() : '';
-        if (triggerLabel) {
-          triggerLabel.textContent = val ? '職場・学校: ' + val : '職場や学校を登録する';
-        }
-        if (triggerIcon) {
-          triggerIcon.textContent = val ? '変更' : '＋';
-        }
-      }
+      const address = document.getElementById('s18-work-address').value.trim();
+      document.getElementById('s18-work-trigger-label').textContent = address ? '職場・学校: ' + address : '職場や学校を登録する';
+      document.getElementById('s18-work-trigger-icon').textContent = address ? '変更' : '＋';
     }
   }
 
-  // 職場・学校の地図を初回に作成し、再表示時は既存の地図とピンを再利用する。
-  function initWorkMapPicker() {
-    const container = document.getElementById('s18-work-map-picker');
-    if (!container) return;
-
-    const latInput = document.getElementById('s18-work-lat');
-    const lngInput = document.getElementById('s18-work-lng');
-    const addrInput = document.getElementById('s18-work-address');
-    const statusEl = document.getElementById('s18-work-map-status');
-
-    let currentLat = latInput ? parseFloat(latInput.value) : 36.5590;
-    let currentLng = lngInput ? parseFloat(lngInput.value) : 139.8980;
-    if (isNaN(currentLat) || isNaN(currentLng)) {
-      currentLat = 36.5590;
-      currentLng = 139.8980;
-    }
-
-    // 職場・学校の選択結果を送信用座標と住所欄へ反映する。
-    function onWorkLocationSelected(lat, lng) {
-      if (latInput) latInput.value = lat;
-      if (lngInput) lngInput.value = lng;
-      if (statusEl) {
-        statusEl.textContent = '✓ 選択中: (' + lat.toFixed(4) + ', ' + lng.toFixed(4) + ')';
-      }
-      reverseGeocodeWithGoogle(lat, lng, (resolved) => {
-        if (addrInput) {
-          addrInput.value = resolved;
-          addrInput.classList.add('is-flash-updated');
-          setTimeout(() => addrInput.classList.remove('is-flash-updated'), 1000);
-        }
-        if (statusEl) {
-          statusEl.textContent = '✓ 選択中: (' + lat.toFixed(4) + ', ' + lng.toFixed(4) + ')';
-        }
-      });
-    }
-
-    if (typeof google !== 'undefined' && google.maps && google.maps.Map) {
-      const initialPos = { lat: currentLat, lng: currentLng };
-      if (s18WorkMap && s18WorkMarker) {
-        google.maps.event.trigger(s18WorkMap, 'resize');
-        s18WorkMap.setCenter(initialPos);
-        s18WorkMarker.setPosition(initialPos);
-        return;
-      }
-      s18WorkMap = new google.maps.Map(container, {
-        center: initialPos,
-        zoom: 14,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        zoomControl: false,
-        gestureHandling: 'greedy',
-        scrollwheel: true
-      });
-
-      s18WorkMarker = new google.maps.Marker({
-        position: initialPos,
-        map: s18WorkMap,
-        draggable: true,
-        title: "職場・学校ピン"
-      });
-
-      google.maps.event.addListener(s18WorkMap, 'click', (e) => {
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
-        s18WorkMarker.setPosition(e.latLng);
-        onWorkLocationSelected(lat, lng);
-      });
-
-      google.maps.event.addListener(s18WorkMarker, 'dragend', (e) => {
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
-        onWorkLocationSelected(lat, lng);
-      });
-    }
-  }
-
-  // 端末の現在地を職場・学校の候補へ設定し、取得失敗時は既定地点を利用する。
-  function handleWorkCurrentLocation() {
-    if (typeof navigator !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setWorkCoords(pos.coords.latitude, pos.coords.longitude);
-        },
-        () => {
-          setWorkCoords(36.5590, 139.8980, '栃木県宇都宮市駅前通り3丁目');
-          alert('位置情報取得不可のため、宇都宮駅前を設定しました');
-        },
-        { timeout: 7000 }
-      );
-    } else {
-      setWorkCoords(36.5590, 139.8980, '栃木県宇都宮市駅前通り3丁目');
-    }
-  }
-
-  // 職場・学校の座標入力・地図・住所表示を同じ位置へ揃える。
-  function setWorkCoords(lat, lng, manualAddr = null) {
-    const latInput = document.getElementById('s18-work-lat');
-    const lngInput = document.getElementById('s18-work-lng');
-    const addrInput = document.getElementById('s18-work-address');
-    const statusEl = document.getElementById('s18-work-map-status');
-
-    if (latInput) latInput.value = lat;
-    if (lngInput) lngInput.value = lng;
-
-    if (s18WorkMap && typeof google !== 'undefined' && google.maps) {
-      const newPos = new google.maps.LatLng(lat, lng);
-      s18WorkMap.panTo(newPos);
-      if (s18WorkMarker) s18WorkMarker.setPosition(newPos);
-    }
-
-    if (manualAddr && addrInput) {
-      addrInput.value = manualAddr;
-      if (statusEl) statusEl.textContent = '✓ 選択中: (' + Number(lat).toFixed(4) + ', ' + Number(lng).toFixed(4) + ')';
-      return;
-    }
-
-    if (statusEl) statusEl.textContent = '✓ 選択中: (' + Number(lat).toFixed(4) + ', ' + Number(lng).toFixed(4) + ')';
-    reverseGeocodeWithGoogle(lat, lng, (resolved) => {
-      if (addrInput) addrInput.value = resolved;
-      if (statusEl) statusEl.textContent = '✓ 選択中: (' + Number(lat).toFixed(4) + ', ' + Number(lng).toFixed(4) + ')';
+  document.addEventListener('DOMContentLoaded', () => {
+    ['living', 'work'].forEach((kind) => {
+      document.getElementById('s18-' + kind + '-address').addEventListener('input', () => clearResidentCoords(kind));
     });
-  }
-
-  // フォームのDOMが揃ってから居住地マップの初期化を開始する。
-  document.addEventListener('DOMContentLoaded', function() {
-    initLivingMapPicker();
+    const workAddress = document.getElementById('s18-work-address').value.trim();
+    if (workAddress) toggleWorkMap(true);
+    function mountMaps() {
+      initResidentMap('living');
+      if (document.getElementById('s18-work-map-area').style.display !== 'none') initResidentMap('work');
+    }
+    mountMaps();
+    if (!s18Locations.living.map) {
+      let retries = 0;
+      const timer = setInterval(() => {
+        mountMaps();
+        if (s18Locations.living.map || ++retries > 60) clearInterval(timer);
+      }, 100);
+    }
   });
 </script>
 

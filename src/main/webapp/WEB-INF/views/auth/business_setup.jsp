@@ -1,10 +1,23 @@
-<%-- 事業主の初期設定画面。Actionが用意したLINE表示名と任意のメールアドレスを初期表示する。 --%>
+<%-- 事業主の初期設定画面。初回はLINEのメールだけを反映し、名称や代表者名は本人に入力してもらう。 --%>
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="java.util.Map,java.util.Set,java.util.List,jp.machiriku.bean.RegistrationChoice,jp.machiriku.tool.Html" %>
 <%
-  String displayName = (String) request.getAttribute("displayName");
-  if (displayName == null) displayName = "佐藤 健一";
+  // 入力エラー時はテキスト・選択ID・地図の点列をそのまま再表示する。
+  Map<String, String> formValues = request.getAttribute("formValues") instanceof Map
+      ? (Map<String, String>) request.getAttribute("formValues") : java.util.Collections.emptyMap();
+  String displayName = formValues.getOrDefault("representativeName", "");
   String email = (String) request.getAttribute("email");
   if (email == null) email = "";
+  email = formValues.getOrDefault("email", email);
+  Set<String> selectedIndustries = request.getAttribute("selectedIndustries") instanceof Set
+      ? (Set<String>) request.getAttribute("selectedIndustries") : java.util.Collections.emptySet();
+  Set<String> selectedQualifications = request.getAttribute("selectedQualifications") instanceof Set
+      ? (Set<String>) request.getAttribute("selectedQualifications") : java.util.Collections.emptySet();
+  List<RegistrationChoice> industryChoices = request.getAttribute("industryChoices") instanceof List
+      ? (List<RegistrationChoice>) request.getAttribute("industryChoices") : java.util.Collections.emptyList();
+  List<RegistrationChoice> qualificationChoices = request.getAttribute("qualificationChoices") instanceof List
+      ? (List<RegistrationChoice>) request.getAttribute("qualificationChoices") : java.util.Collections.emptyList();
+  boolean formSubmitted = "POST".equals(request.getMethod());
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="出店事業主 初期設定 | マチリク" />
@@ -23,6 +36,9 @@
   </div>
 
   <div class="form-stepper-box" style="max-width: 680px; margin:0 auto; background:var(--bg-card); padding:2rem; border-radius:var(--radius-lg); border:1px solid var(--border-color); box-shadow:var(--shadow-sm);">
+    <% if (request.getAttribute("errorMessage") != null) { %>
+      <div role="alert" style="background:#fee2e2; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-md); margin-bottom:1rem;"><%= Html.escape(request.getAttribute("errorMessage")) %></div>
+    <% } %>
     
     <!-- LINEログイン完了カード -->
     <div class="onboarding-welcome-card" style="background: var(--bg-subtle); border: 1.5px solid var(--border-color); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4);">
@@ -42,12 +58,13 @@
 
     <%-- 事業者情報と希望条件を送信する。なぞった座標はpreferredAreaPointsのJSON文字列にまとめる。 --%>
     <form id="business-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/BusinessSetup.action" method="POST" onsubmit="return validateBusinessForm();">
+      <input type="hidden" name="csrfToken" value="<%= Html.escape(request.getAttribute("csrfToken")) %>">
       <!-- 事業者名 / 屋号 -->
       <div class="form-group" style="margin-bottom:1.25rem;">
         <label for="s18-biz-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           事業者名 / 屋号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-        <input id="s18-biz-name" name="businessName" type="text" class="form-control" value="" required placeholder="例: 宇都宮カフェ Lab">
+        <input id="s18-biz-name" name="businessName" type="text" class="form-control" value="<%= Html.escape(formValues.get("businessName")) %>" maxlength="150" required placeholder="例: 宇都宮カフェ Lab">
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※店舗名、屋号、法人名などをご入力ください。</span>
       </div>
 
@@ -56,8 +73,8 @@
         <label for="s18-rep-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           代表者名 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-        <input id="s18-rep-name" name="representativeName" type="text" class="form-control" value="<%= displayName %>" required placeholder="例: 佐藤 健一" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) h.textContent = this.value.trim();">
-        <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINEの表示名が初期設定されています。自由に編集できます。</span>
+        <input id="s18-rep-name" name="representativeName" type="text" class="form-control" value="<%= Html.escape(displayName) %>" maxlength="100" required placeholder="例: 佐藤 健一" oninput="const h = document.getElementById('header-user-name'); if(h) h.textContent = this.value.trim();">
+        <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※事業を代表する方のお名前をご入力ください。</span>
       </div>
 
       <!-- メールアドレス -->
@@ -65,8 +82,8 @@
         <label for="s18-biz-email" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           メールアドレス <span style="font-size:0.78rem; color:var(--text-sub);">(変更可能)</span>
         </label>
-        <input id="s18-biz-email" name="email" type="email" class="form-control" value="<%= email %>" placeholder="example@domain.com">
-        <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINE認証で取得したメールアドレスが反映されています。</span>
+        <input id="s18-biz-email" name="email" type="email" class="form-control" value="<%= Html.escape(email) %>" maxlength="254" placeholder="example@domain.com">
+        <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINE認証で取得できた場合に反映しています。未取得の場合は空欄です。</span>
       </div>
 
       <!-- 連絡先電話番号 -->
@@ -74,7 +91,7 @@
         <label for="s18-biz-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-        <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="" required placeholder="例: 090-1234-5678">
+        <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.get("phone")) %>" required placeholder="例: 090-1234-5678">
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店応募や物件オーナーとの連絡・確認用に使用されます。</span>
       </div>
 
@@ -84,18 +101,11 @@
           出店希望業種・ジャンル <span style="color:var(--danger-text); font-size:0.8rem;">*必須 (複数選択可)</span>
         </label>
         <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:0.4rem;">
-          <%
-            String[] bizCats = {
-              "カフェ・喫茶", "居酒屋・バー", "ラーメン・麺類", "レストラン・軽食",
-              "テイクアウト・総菜", "小売・物販", "雑貨・書店", "美容室・理容",
-              "ネイル・サロン", "フィットネス", "コワーキング", "その他"
-            };
-            for (int i = 0; i < bizCats.length; i++) {
-              String cat = bizCats[i];
-          %>
+          <%-- DBのマスターに存在するIDを送信し、初回は業種を自動選択しない。 --%>
+          <% for (RegistrationChoice choice : industryChoices) { %>
             <label style="display:flex; align-items:center; gap:0.4rem; padding:0.5rem 0.65rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.84rem;">
-              <input type="checkbox" name="preferredIndustry" value="<%= cat %>" <%= i == 0 ? "checked" : "" %> style="cursor:pointer; margin:0;">
-              <span><%= cat %></span>
+              <input type="checkbox" name="preferredIndustry" value="<%= Html.escape(choice.id()) %>" <%= selectedIndustries.contains(String.valueOf(choice.id())) ? "checked" : "" %> style="cursor:pointer; margin:0;">
+              <span><%= Html.escape(choice.label()) %></span>
             </label>
           <% } %>
         </div>
@@ -105,7 +115,7 @@
       <div class="form-group" style="margin-bottom:1.5rem; background:var(--bg-subtle); padding:var(--space-4); border-radius:var(--radius-lg); border:1px solid var(--border-color);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.65rem; flex-wrap:wrap; gap:0.5rem;">
           <label for="s18-biz-area" style="font-weight:800; font-size:0.95rem; color:var(--text-main);">
-            出店希望エリア <span style="color:var(--danger-text); font-size:0.8rem;">*必須 (マップ上でなぞって指定可)</span>
+            出店希望エリア <span style="color:var(--danger-text); font-size:0.8rem;">*必須 (マップ上で囲んで指定)</span>
           </label>
           <div style="display:flex; align-items:center; gap:0.35rem;">
             <button type="button" id="s18-draw-btn-draw" class="btn-outline btn-sm is-active" onclick="setBizMapMode('draw')" style="font-size:0.8rem; padding:0.3rem 0.65rem; border-radius:var(--radius-full); display:inline-flex; align-items:center; gap:0.3rem; background:var(--primary-700); color:var(--bg-card); font-weight:700; cursor:pointer;">
@@ -136,11 +146,11 @@
           <label for="s18-biz-area" style="font-size:0.8rem; font-weight:700; color:var(--text-sub); display:block; margin-bottom:0.25rem;">
             出店希望エリア名 (地図をなぞると自動入力・手動修正可):
           </label>
-          <input id="s18-biz-area" name="preferredArea" type="text" class="form-control" value="" required placeholder="地図上を指やマウスで囲むと自動入力されます（手入力も可能）" style="width:100%;">
-          <%-- 地図をなぞった場合は座標JSONを送る。エリア名の手入力だけなら、この項目は空のままでも送信できる。 --%>
-          <input id="s18-biz-area-points" name="preferredAreaPoints" type="hidden" value="">
+           <input id="s18-biz-area" name="preferredArea" type="text" class="form-control" value="<%= Html.escape(formValues.get("preferredArea")) %>" maxlength="150" required placeholder="地図上を囲んで指定してください。エリア名は後から修正できます" style="width:100%;">
+           <%-- JSONはHTML属性としてエスケープし、JavaScriptではDOMのvalueから読み取る。 --%>
+           <input id="s18-biz-area-points" name="preferredAreaPoints" type="hidden" value="<%= Html.escape(formValues.get("preferredAreaPoints")) %>">
           <div id="s18-biz-map-status" style="font-size:0.75rem; color:var(--primary-700); margin-top:0.35rem; font-weight:600;">
-            ※地図上をなぞるか、直接エリア名を入力してください
+            ※地図上をなぞって範囲を指定してください。エリア名だけでは登録できません。
           </div>
         </div>
       </div>
@@ -150,7 +160,7 @@
         <label for="s18-biz-employees" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           従業員数 (予定含む) <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-        <input id="s18-biz-employees" name="employeeCount" type="number" min="0" class="form-control" value="1" required placeholder="例: 1">
+        <input id="s18-biz-employees" name="employeeCount" type="number" min="0" class="form-control" value="<%= Html.escape(formValues.get("employeeCount")) %>" required placeholder="例: 1">
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※ご自身のみ・初出店の場合は「1」または「0」と入力してください。</span>
       </div>
 
@@ -161,11 +171,11 @@
         </label>
         <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
           <label style="display:inline-flex; align-items:center; gap:0.4rem; padding:0.45rem 0.85rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.875rem;">
-            <input type="radio" name="mgmtExperience" value="あり" style="cursor:pointer;">
+            <input type="radio" name="mgmtExperience" value="あり" <%= "あり".equals(formValues.get("mgmtExperience")) ? "checked" : "" %> style="cursor:pointer;">
             <span>あり (現在経営中 / 過去に経営経験あり)</span>
           </label>
           <label style="display:inline-flex; align-items:center; gap:0.4rem; padding:0.45rem 0.85rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.875rem;">
-            <input type="radio" name="mgmtExperience" value="なし" checked style="cursor:pointer;">
+            <input type="radio" name="mgmtExperience" value="なし" <%= "なし".equals(formValues.get("mgmtExperience")) ? "checked" : "" %> style="cursor:pointer;">
             <span>なし (新規開業・初出店)</span>
           </label>
         </div>
@@ -182,8 +192,8 @@
             for (int i = 0; i < exps.length; i++) {
           %>
             <label style="display:inline-flex; align-items:center; gap:0.4rem; padding:0.45rem 0.85rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.875rem;">
-              <input type="radio" name="industryExperience" value="<%= exps[i] %>" <%= i == 1 ? "checked" : "" %> style="cursor:pointer;">
-              <span><%= exps[i] %></span>
+              <input type="radio" name="industryExperience" value="<%= Html.escape(exps[i]) %>" <%= exps[i].equals(formValues.get("industryExperience")) ? "checked" : "" %> style="cursor:pointer;">
+              <span><%= Html.escape(exps[i]) %></span>
             </label>
           <% } %>
         </div>
@@ -195,13 +205,11 @@
           保有資格・許認可 <span style="color:var(--text-muted); font-size:0.8rem;">(任意・複数選択可)</span>
         </label>
         <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
-          <%
-            String[] qList = {"食品衛生責任者", "防火管理者", "調理師免許", "美容師・理容師免許", "宅地建物取引士", "その他資格・許認可"};
-            for (String q : qList) {
-          %>
+          <%--String[] qList = {"食品衛生責任者", "防火管理者", "調理師免許", "美容師・理容師免許", "宅地建物取引士", "その他資格・許認可"};--%>
+          <% for (RegistrationChoice choice : qualificationChoices) { %>
             <label style="display:inline-flex; align-items:center; gap:0.4rem; padding:0.45rem 0.75rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.84rem;">
-              <input type="checkbox" name="qualification" value="<%= q %>" style="cursor:pointer; margin:0;">
-              <span><%= q %></span>
+              <input type="checkbox" name="qualification" value="<%= Html.escape(choice.id()) %>" <%= selectedQualifications.contains(String.valueOf(choice.id())) ? "checked" : "" %> style="cursor:pointer; margin:0;">
+              <span><%= Html.escape(choice.label()) %></span>
             </label>
           <% } %>
         </div>
@@ -210,7 +218,7 @@
 
       <!-- 新着店舗・オファー情報のメール受信設定 -->
       <label style="display:flex; align-items:center; gap:0.65rem; cursor:pointer; font-size:0.875rem; color:var(--text-main); font-weight:600; line-height:1.45; margin-top:1.5rem; padding:0.75rem 1rem; background:var(--bg-subtle); border-radius:var(--radius-md); border:1px solid var(--border-color); box-sizing:border-box; min-height:48px;">
-        <input type="checkbox" id="s18-biz-email-notify" name="emailNotify" checked style="cursor:pointer; width:18px; height:18px; margin:0; flex-shrink:0;">
+        <input type="checkbox" id="s18-biz-email-notify" name="emailNotify" <%= !formSubmitted || formValues.containsKey("emailNotify") ? "checked" : "" %> style="cursor:pointer; width:18px; height:18px; margin:0; flex-shrink:0;">
         <span>希望条件に合う新着空き店舗や物件オーナーからのオファー通知をメールで受け取る</span>
       </label>
 
@@ -236,6 +244,37 @@
   let s18BizPoints = [];
   let s18BizMode = 'draw';
   let s18BizIsDrawing = false;
+  let s18BizSelectionRevision = 0;
+
+  // 点列はHTML属性から読み取り、JSONをスクリプトへ直接埋め込まない。
+  function readBizAreaPoints() {
+    const input = document.getElementById('s18-biz-area-points');
+    try {
+      const points = JSON.parse(input.value);
+      if (!Array.isArray(points) || points.length < 3 || points.some(point => !point
+          || typeof point.lat !== 'number' || typeof point.lng !== 'number'
+          || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)
+          || Math.abs(point.lat) > 90 || Math.abs(point.lng) > 180)) return null;
+      return new Set(points.map(point => point.lat + ',' + point.lng)).size >= 3 ? points : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // エラー再表示では、送信された範囲と入力中のエリア名を変更せずに復元する。
+  function restoreBizArea() {
+    const points = readBizAreaPoints();
+    if (!points || !s18BizMap) return;
+    s18BizPoints = points;
+    s18BizPolygon = new google.maps.Polygon({
+      paths: points, strokeColor: 'rgb(45, 106, 79)', strokeOpacity: 0.9, strokeWeight: 3,
+      fillColor: 'rgb(216, 243, 220)', fillOpacity: 0.35, map: s18BizMap
+    });
+    const bounds = new google.maps.LatLngBounds();
+    points.forEach(point => bounds.extend(point));
+    s18BizMap.fitBounds(bounds);
+    document.getElementById('s18-biz-map-status').textContent = '✓ 選択済みの範囲を復元しました (' + points.length + '点)';
+  }
 
   // 送信前に事業者名・代表者名・電話番号・希望エリア・業種の必須入力を確認する。
   function validateBusinessForm() {
@@ -259,10 +298,16 @@
       if (phone) phone.focus();
       return false;
     }
-    // エリア名だけの手入力も許可しているため、ここでは座標JSONの有無を必須条件にしない。
+    // DBで必須となる実際の範囲を確認し、エリア名だけでの登録を防ぐ。
     if (!areaInput || !areaInput.value.trim()) {
-      alert('出店希望エリアをマップ上でなぞって指定するか、エリア名を入力してください');
+      alert('出店希望エリアを地図上で囲んで指定し、エリア名を入力してください');
       if (areaInput) areaInput.focus();
+      return false;
+    }
+    if (!readBizAreaPoints()) {
+      alert('出店希望エリアを地図上で囲んで指定してください（3点以上の範囲が必要です）');
+      setBizMapMode('draw');
+      document.getElementById('s18-biz-map-wrap').scrollIntoView({ block: 'center' });
       return false;
     }
 
@@ -325,6 +370,7 @@
       s18BizOverlay.setMap(s18BizMap);
 
       setupBizDrawingListeners(wrap);
+      restoreBizArea();
 
       setTimeout(() => {
         if (s18BizMap && typeof google !== 'undefined' && google.maps && google.maps.event) {
@@ -469,12 +515,15 @@
       const pointsInput = document.getElementById('s18-biz-area-points');
       // 座標配列をJSON文字列にしてhidden項目へ入れ、フォームPOSTでサーバーへ渡す。
       if (pointsInput) pointsInput.value = JSON.stringify(rawPoints);
+      s18BizPoints = rawPoints;
+      const revision = ++s18BizSelectionRevision;
 
       const areaInput = document.getElementById('s18-biz-area');
       const statusEl = document.getElementById('s18-biz-map-status');
 
       // 代表点の住所から希望エリア名を補い、指定した点数とともに選択状況を表示する。
       reverseGeocodeWithGoogle(centerLat, centerLng, (res) => {
+        if (revision !== s18BizSelectionRevision) return;
         const cleanName = res + ' 周辺 (なぞり範囲指定)';
         if (areaInput) {
           areaInput.value = cleanName;
@@ -556,6 +605,7 @@
 
   // 表示中の範囲と送信用座標をリセットする。エリア名の入力値は現行仕様どおり残す。
   function clearBizDraw() {
+    s18BizSelectionRevision++;
     if (s18BizPolygon) {
       s18BizPolygon.setMap(null);
       s18BizPolygon = null;
@@ -564,7 +614,7 @@
     const pointsInput = document.getElementById('s18-biz-area-points');
     if (pointsInput) pointsInput.value = '';
     const statusEl = document.getElementById('s18-biz-map-status');
-    if (statusEl) statusEl.textContent = '※範囲指定がリセットされました。地図上をなぞるか、希望エリアを入力してください。';
+    if (statusEl) statusEl.textContent = '※範囲指定がリセットされました。地図上を囲んで指定してください。';
     const canvas = document.getElementById('s18-biz-draw-canvas');
     if (canvas && canvas.getContext) {
       const ctx = canvas.getContext('2d');
@@ -572,60 +622,10 @@
     }
   }
 
-  // 用意済みのエリア名を選んだ場合に、代表地点の周囲へ簡易的な範囲を作るための処理。
-  function setBizAreaFromSelect(areaName) {
-    if (!areaName) return;
-    const areaInput = document.getElementById('s18-biz-area');
-    if (areaInput) areaInput.value = areaName;
-    const statusEl = document.getElementById('s18-biz-map-status');
-    if (statusEl) statusEl.textContent = '✓ 選択中: ' + areaName;
-
-    const areaCoords = {
-      '東武宇都宮駅・オリオン通り周辺': { lat: 36.5590, lng: 139.8820, delta: 0.0035 },
-      'JR宇都宮駅西口・大通り周辺': { lat: 36.5600, lng: 139.8930, delta: 0.0035 },
-      '宇都宮駅東口・LRT沿線エリア': { lat: 36.5580, lng: 139.9040, delta: 0.0040 },
-      '競輪場通り・八幡台周辺': { lat: 36.5750, lng: 139.8880, delta: 0.0040 },
-      '鶴田・西川田エリア': { lat: 36.5450, lng: 139.8550, delta: 0.0050 },
-      '雀宮・インターパーク周辺': { lat: 36.5050, lng: 139.9100, delta: 0.0060 }
-    };
-
-    const target = areaCoords[areaName] || { lat: 36.5610, lng: 139.8830, delta: 0.0035 };
-
-    if (s18BizMap && typeof google !== 'undefined' && google.maps) {
-      s18BizMap.panTo({ lat: target.lat, lng: target.lng });
-      s18BizMap.setZoom(15);
-
-      if (s18BizPolygon) {
-        s18BizPolygon.setMap(null);
-      }
-      // 代表地点の周りに8個の点を並べ、自由描画と同じJSON形式へ変換できるようにする。
-      const polyPts = [];
-      const numPts = 8;
-      const d = target.delta;
-      for (let i = 0; i < numPts; i++) {
-        const angle = (i * 2 * Math.PI) / numPts;
-        const pLat = target.lat + Math.sin(angle) * d * 0.7;
-        const pLng = target.lng + Math.cos(angle) * d;
-        polyPts.push(new google.maps.LatLng(pLat, pLng));
-      }
-      s18BizPolygon = new google.maps.Polygon({
-        paths: polyPts,
-        strokeColor: 'rgb(45, 106, 79)',
-        strokeOpacity: 0.9,
-        strokeWeight: 3,
-        fillColor: 'rgb(216, 243, 220)',
-        fillOpacity: 0.35,
-        map: s18BizMap
-      });
-      const pointsInput = document.getElementById('s18-biz-area-points');
-      if (pointsInput) {
-        pointsInput.value = JSON.stringify(polyPts.map(p => ({ lat: Number(p.lat().toFixed(6)), lng: Number(p.lng().toFixed(6)) })));
-      }
-    }
-  }
-
   // 画面要素を取得できるようになってから、希望エリアマップの準備を始める。
   window.addEventListener('DOMContentLoaded', () => {
+    // 範囲選択後に手修正したエリア名を、遅れて返った住所検索結果で上書きしない。
+    document.getElementById('s18-biz-area').addEventListener('input', () => s18BizSelectionRevision++);
     initS18BizAreaMap();
   });
 </script>
