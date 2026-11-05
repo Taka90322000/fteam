@@ -103,6 +103,10 @@ public class LineCallbackAction extends Action {
                 res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/BusinessSetup.action");
                 return;
             }
+            if (registration && "OWNER".equalsIgnoreCase(user.getUserRole())) {
+                res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/OwnerSetup.action");
+                return;
+            }
             res.sendRedirect(req.getContextPath() + "/index.jsp");
         } catch (InterruptedException e) {
             // 通信中断の状態を上位の処理にも伝えられるよう、割り込みフラグを戻す。
