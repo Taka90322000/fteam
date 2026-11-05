@@ -86,6 +86,10 @@ public class LineCallbackAction extends Action {
                 res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/ResidentSetup.action");
                 return;
             }
+            if (registration && "BUSINESS".equalsIgnoreCase(user.getUserRole())) {
+                res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/BusinessSetup.action");
+                return;
+            }
             res.sendRedirect(req.getContextPath() + "/index.jsp");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
