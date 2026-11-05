@@ -90,6 +90,10 @@ public class LineCallbackAction extends Action {
                 res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/BusinessSetup.action");
                 return;
             }
+            if (registration && "OWNER".equalsIgnoreCase(user.getUserRole())) {
+                res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/OwnerSetup.action");
+                return;
+            }
             res.sendRedirect(req.getContextPath() + "/index.jsp");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
