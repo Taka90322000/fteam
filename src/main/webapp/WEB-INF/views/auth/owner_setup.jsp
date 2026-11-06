@@ -1,9 +1,20 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="java.util.Map,java.util.Set,java.util.List,jp.machiriku.bean.RegistrationChoice,jp.machiriku.tool.Html" %>
+<%-- オーナー情報と誘致希望業種を送信する。初回はLINE取得値、エラー時は入力済みの値を表示する。 --%>
 <%
+  Map<String, String> formValues = request.getAttribute("formValues") instanceof Map
+      ? (Map<String, String>) request.getAttribute("formValues") : java.util.Collections.emptyMap();
   String displayName = (String) request.getAttribute("displayName");
-  if (displayName == null) displayName = "佐藤 武雄";
+  if (displayName == null) displayName = "";
+  displayName = formValues.getOrDefault("representativeName", displayName);
   String email = (String) request.getAttribute("email");
   if (email == null) email = "";
+  email = formValues.getOrDefault("email", email);
+  Set<String> selectedIndustries = request.getAttribute("selectedIndustries") instanceof Set
+      ? (Set<String>) request.getAttribute("selectedIndustries") : java.util.Collections.emptySet();
+  List<RegistrationChoice> industryChoices = request.getAttribute("industryChoices") instanceof List
+      ? (List<RegistrationChoice>) request.getAttribute("industryChoices") : java.util.Collections.emptyList();
+  boolean formSubmitted = "POST".equals(request.getMethod());
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="物件オーナー 初期設定 | マチリク" />
@@ -22,6 +33,9 @@
   </div>
 
   <div class="form-stepper-box" style="max-width: 680px; margin:0 auto; background:var(--bg-card); padding:2rem; border-radius:var(--radius-lg); border:1px solid var(--border-color); box-shadow:var(--shadow-sm);">
+    <% if (request.getAttribute("errorMessage") != null) { %>
+      <div role="alert" style="background:#fee2e2; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-md); margin-bottom:1rem;"><%= Html.escape(request.getAttribute("errorMessage")) %></div>
+    <% } %>
     
     <!-- LINEログイン完了カード -->
     <div class="onboarding-welcome-card" style="background: var(--bg-subtle); border: 1.5px solid var(--border-color); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4);">
@@ -40,12 +54,13 @@
     </div>
 
     <form id="owner-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/OwnerSetup.action" method="POST" onsubmit="return validateOwnerForm();">
+      <input type="hidden" name="csrfToken" value="<%= Html.escape(request.getAttribute("csrfToken")) %>">
       <!-- オーナー氏名 / 代表者名 -->
       <div class="form-group" style="margin-bottom:1.25rem;">
         <label for="s18-owner-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           オーナー氏名 / 代表者名 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-        <input id="s18-owner-name" name="representativeName" type="text" class="form-control" value="<%= displayName %>" required placeholder="例: 佐藤 武雄" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) h.textContent = this.value.trim();">
+        <input id="s18-owner-name" name="representativeName" type="text" class="form-control" value="<%= Html.escape(displayName) %>" maxlength="100" required placeholder="例: 佐藤 武雄" oninput="const h = document.getElementById('header-user-name'); if(h) h.textContent = this.value.trim();">
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINEの表示名が初期設定されています。本名や代表者名にご変更いただけます。</span>
       </div>
 
@@ -54,8 +69,16 @@
         <label for="s18-owner-company" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           屋号・法人名 / 管理名 <span style="font-size:0.78rem; color:var(--text-sub);">(任意)</span>
         </label>
-        <input id="s18-owner-company" name="company" type="text" class="form-control" value="" placeholder="例: 佐藤不動産管理、宇都宮商事(株) など">
+        <input id="s18-owner-company" name="company" type="text" class="form-control" value="<%= Html.escape(formValues.get("company")) %>" maxlength="150" placeholder="例: 佐藤不動産管理、宇都宮商事(株) など">
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※屋号や法人名、物件の管理名義などをお持ちの場合はご入力ください（空欄でも可）。</span>
+      </div>
+
+      <%-- 画像の参照先は任意入力とし、エラー時も入力値を保持する。 --%>
+      <div class="form-group" style="margin-bottom:1.25rem;">
+        <label for="s18-owner-icon" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
+          アイコン画像のURL・パス <span style="font-size:0.78rem; color:var(--text-sub);">(任意)</span>
+        </label>
+        <input id="s18-owner-icon" name="iconImageUrl" type="text" class="form-control" value="<%= Html.escape(formValues.get("iconImageUrl")) %>" maxlength="2048" placeholder="例: https://example.com/icon.png、/assets/icon.png">
       </div>
 
       <!-- 連絡先電話番号 -->
@@ -63,7 +86,7 @@
         <label for="s18-owner-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-        <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="" required placeholder="例: 028-633-9988">
+        <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.get("phone")) %>" required placeholder="例: 028-633-9988">
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店希望者との連絡、物件問い合わせや運営確認用に使用されます。</span>
       </div>
 
@@ -72,8 +95,8 @@
         <label for="s18-owner-email" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           メールアドレス <span style="font-size:0.78rem; color:var(--text-sub);">(変更可能)</span>
         </label>
-        <input id="s18-owner-email" name="email" type="email" class="form-control" value="<%= email %>" placeholder="example@domain.com">
-        <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINE認証で取得したメールアドレスが反映されています。</span>
+        <input id="s18-owner-email" name="email" type="email" class="form-control" value="<%= Html.escape(email) %>" maxlength="254" placeholder="example@domain.com">
+        <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINE認証で取得できた場合に反映しています。未取得の場合は空欄です。</span>
       </div>
 
       <!-- 貸したい業種・誘致希望ジャンル (複数選択可) -->
@@ -82,15 +105,11 @@
           貸したい業種・誘致希望ジャンル <span style="color:var(--danger-text); font-size:0.8rem;">*必須 (複数選択可)</span>
         </label>
         <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:0.4rem;">
-          <%
-            String[] ownerCats = {
-              "飲食", "小売", "美容・健康", "教育・仕事", "趣味・娯楽", "生活サービス", "医療・福祉"
-            };
-            for (String cat : ownerCats) {
-          %>
+          <%-- 表示名や配列位置ではなく、DBマスターのIDを保存用に送信する。 --%>
+          <% for (RegistrationChoice choice : industryChoices) { %>
             <label style="display:flex; align-items:center; gap:0.4rem; padding:0.5rem 0.65rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.84rem;">
-              <input type="checkbox" name="preferredIndustry" value="<%= cat %>" style="cursor:pointer; margin:0;">
-              <span><%= cat %></span>
+              <input type="checkbox" name="preferredIndustry" value="<%= Html.escape(choice.id()) %>" <%= selectedIndustries.contains(String.valueOf(choice.id())) ? "checked" : "" %> style="cursor:pointer; margin:0;">
+              <span><%= Html.escape(choice.label()) %></span>
             </label>
           <% } %>
         </div>
@@ -99,7 +118,7 @@
 
       <!-- 出店応募通知のメール受信設定 -->
       <label style="display:flex; align-items:center; gap:0.65rem; cursor:pointer; font-size:0.875rem; color:var(--text-main); font-weight:600; line-height:1.45; margin-top:1.5rem; padding:0.75rem 1rem; background:var(--bg-subtle); border-radius:var(--radius-md); border:1px solid var(--border-color); box-sizing:border-box; min-height:48px;">
-        <input type="checkbox" id="s18-owner-email-notify" name="emailNotify" checked style="cursor:pointer; width:18px; height:18px; margin:0; flex-shrink:0;">
+        <input type="checkbox" id="s18-owner-email-notify" name="emailNotify" <%= !formSubmitted || formValues.containsKey("emailNotify") ? "checked" : "" %> style="cursor:pointer; width:18px; height:18px; margin:0; flex-shrink:0;">
         <span>所有物件への出店応募や事業主からの問い合わせ通知をメールで受け取る</span>
       </label>
 

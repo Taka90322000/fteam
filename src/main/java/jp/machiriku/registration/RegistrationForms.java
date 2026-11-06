@@ -2,6 +2,8 @@ package jp.machiriku.registration;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -13,12 +15,14 @@ import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import jp.machiriku.bean.BusinessProfileInput;
 import jp.machiriku.bean.LocationInput;
+import jp.machiriku.bean.OwnerProfileInput;
 import jp.machiriku.bean.ResidentProfileInput;
 
 /** フォームの文字列を検証し、DBへ保存できるデータへ変換する。会員ID・利用区分は入力から受け取らない。 */
@@ -29,6 +33,7 @@ public final class RegistrationForms {
     private static final Set<String> EXPERIENCE = Set.of("未経験", "1〜3年未満", "3〜5年未満", "5年以上");
     private static final Pattern ADDRESS = Pattern.compile("^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)(.+)$");
     private static final Pattern MUNICIPALITY = Pattern.compile("^(.+?市(?:.+?区)?|.+?区|.+?[町村])(.+)?$");
+    private static final Pattern PARENT_PATH_SEGMENT = Pattern.compile("(^|/)\\.\\.(/|$)");
 
     private RegistrationForms() { }
 
@@ -45,7 +50,36 @@ public final class RegistrationForms {
         String occupation = null;
         LocationInput home = location("HOME", fields.get("livingAddress"), fields.get("livingLat"), fields.get("livingLng"), true);
         LocationInput work = location("WORK", fields.get("workAddress"), fields.get("workLat"), fields.get("workLng"), false);
-        return new ResidentProfileInput(name, email, age, gender, occupation, home, work, checked(fields.get("emailNotify")));
+        return new ResidentProfileInput(name, email, age, gender, occupation, home, work, checked(fields.get("emailNotify")),
+                industryCodes(fields.get("preferredIndustries")));
+    }
+
+    /** オーナーの氏名・連絡先・誘致希望業種を保存用に検証する。 */
+    public static OwnerProfileInput owner(Map<String, String> fields, List<String> industryIds) {
+        String name = required(fields.get("representativeName"), 100, "オーナー氏名・代表者名");
+        String company = optional(fields.get("company"), 150, "屋号・法人名");
+        String email = email(fields.get("email"));
+        String phone = normalizePhone(fields.get("phone"));
+        List<Integer> industries = ids(industryIds, "誘致希望業種");
+        if (industries.isEmpty()) { throw invalid("誘致希望業種を少なくとも1つ選択してください。"); }
+        return new OwnerProfileInput(name, company, email, phone, industries, checked(fields.get("emailNotify")),
+                iconImageUrl(fields.get("iconImageUrl")));
+    }
+
+    /** タブ選択画面のJSONを業種コードへ変換する。表示名の連結文字列は保存に使わない。 */
+    private static List<String> industryCodes(String json) {
+        if (json == null || json.isBlank()) { return List.of(); }
+        if (json.length() > 16000) { throw invalid("欲しい業種の選択数が多すぎます。"); }
+        JsonNode codes;
+        try { codes = JSON.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).readTree(json); }
+        catch (JsonProcessingException e) { throw invalid("欲しい業種を選び直してください。"); }
+        if (codes == null || !codes.isArray() || codes.size() > 200) { throw invalid("欲しい業種を選び直してください。"); }
+        Set<String> selected = new LinkedHashSet<>();
+        for (JsonNode code : codes) {
+            if (!code.isTextual() || !code.textValue().matches("I[0-9]{4}")) { throw invalid("欲しい業種を選び直してください。"); }
+            selected.add(code.textValue());
+        }
+        return List.copyOf(selected);
     }
 
     public static BusinessProfileInput business(Map<String, String> fields, List<String> industryIds, List<String> qualificationIds) {
@@ -69,10 +103,39 @@ public final class RegistrationForms {
         List<Integer> qualifications = ids(qualificationIds, "資格・許認可");
         String area = areaGeoJson(fields.get("preferredAreaPoints"));
         return new BusinessProfileInput(name, representative, email, phone, areaName, employeeCount,
-                management, experience, industries, qualifications, area, checked(fields.get("emailNotify")));
+                management, experience, industries, qualifications, area, checked(fields.get("emailNotify")),
+                iconImageUrl(fields.get("iconImageUrl")));
     }
 
-    /** 国内形式の電話番号を、users.phone_e164が使う国際形式へ統一する。 */
+    /** アイコンの参照先として、HTTP(S)のURLとWeb用の相対パスを受け付ける。 */
+    private static String iconImageUrl(String value) {
+        String image = optional(value, 2048, "アイコン画像のURL・パス");
+        if (image == null) { return null; }
+        try {
+            URI uri = new URI(image);
+            if (value.codePoints().anyMatch(Character::isISOControl) || image.indexOf('\\') >= 0) {
+                throw new URISyntaxException(image, "Invalid image reference");
+            }
+            if (uri.isAbsolute()) {
+                if ((!"https".equalsIgnoreCase(uri.getScheme()) && !"http".equalsIgnoreCase(uri.getScheme()))
+                        || uri.getHost() == null || uri.getUserInfo() != null) {
+                    throw new URISyntaxException(image, "Invalid image URL");
+                }
+            } else {
+                String path = uri.getPath();
+                if (uri.getRawAuthority() != null || path == null || path.isEmpty() || path.startsWith("//")
+                        || path.indexOf('\\') >= 0 || path.codePoints().anyMatch(Character::isISOControl)
+                        || PARENT_PATH_SEGMENT.matcher(path).find()) {
+                    throw new URISyntaxException(image, "Invalid image path");
+                }
+            }
+            return image;
+        } catch (URISyntaxException e) {
+            throw invalid("アイコン画像はhttp(s)のURLまたはWeb用の画像パスで指定してください。");
+        }
+    }
+
+    /** 国内形式の電話番号を、プロフィールのphone_e164が使う国際形式へ統一する。 */
     public static String normalizePhone(String value) {
         String phone = required(value, 50, "連絡先電話番号").replaceAll("[\\s()（）ー−‐-]", "");
         if (phone.startsWith("0")) { phone = "+81" + phone.substring(1); }

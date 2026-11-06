@@ -27,7 +27,7 @@ public class LineLoginAction extends Action {
         HttpSession session = req.getSession();
         session.removeAttribute(LineLoginSupport.ATTEMPT_KEY);
         String role = req.getParameter("regRole");
-        // 登録区分や電話番号をURLへ含めないよう、新規登録はPOSTだけで受け付ける。
+        // 登録開始はPOSTで受け付け、選択した利用区分をセッションへ保持する。
         if (role != null && !"POST".equals(req.getMethod())) {
             res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
             return;
@@ -37,22 +37,10 @@ public class LineLoginAction extends Action {
             LineLoginSupport.error(req, res, true, "利用区分を選び直してください。");
             return;
         }
-        // DB制約に合わせ、事業主・オーナーは国際形式の電話番号を必須とする。
-        String phone = null;
-        if (role != null) {
-            phone = req.getParameter("phoneE164");
-            phone = phone == null || phone.isBlank() ? null : phone.trim();
-            if ((phone != null && !phone.matches("\\+[1-9][0-9]{7,14}"))
-                    || (!"resident".equals(role) && phone == null)) {
-                LineLoginSupport.error(req, res, true,
-                        "事業主・オーナーは電話番号を国際形式で入力してください（例：+819012345678）。");
-                return;
-            }
-        }
         try {
             LineLoginClient client = createClient();
-            // 登録区分と電話番号はサーバー側に保持し、認証後のリクエスト値を信用しない。
-            var attempt = LineLoginSupport.begin(role, phone);
+            // 電話番号はLINE認証後の各プロフィール画面で入力し、ここでは利用区分を保持する。
+            var attempt = LineLoginSupport.begin(role);
             String url = client.authorizationUrl(attempt.state(), attempt.nonce(), attempt.codeVerifier());
             session.setAttribute(LineLoginSupport.ATTEMPT_KEY, attempt);
             res.sendRedirect(url);

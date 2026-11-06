@@ -321,6 +321,27 @@
   let residentActiveCatId = 'C01';
   let residentSelectedIndustries = new Set();
 
+  // hidden項目は利用者が変更できるため、再表示時は画面にある業種だけを復元する。
+  // 以前の名称形式も既知の項目に限ってコードへ直し、名称をHTMLへ直接差し込まない。
+  function restoreResidentIndustrySelection(rawValue) {
+    const knownIndustries = new Map();
+    RESIDENT_TAXONOMY.forEach(category => category.subcategories.forEach(subcategory => {
+      knownIndustries.set(subcategory.id, subcategory.id);
+      knownIndustries.set(subcategory.name, subcategory.id);
+    }));
+    const restored = new Set();
+    try {
+      const saved = JSON.parse(rawValue || '[]');
+      if (!Array.isArray(saved) || saved.length > 200) return restored;
+      saved.forEach(value => {
+        if (typeof value === 'string' && knownIndustries.has(value)) restored.add(knownIndustries.get(value));
+      });
+    } catch (_) {
+      // 壊れたJSONを実行・描画せず、利用者が画面上で選び直せる状態にする。
+    }
+    return restored;
+  }
+
   function renderResidentCatTabsHtml() {
     return RESIDENT_TAXONOMY.map(function(cat) {
       var isActive = (cat.id === residentActiveCatId);
@@ -453,6 +474,7 @@
   }
 
   function toggleResidentIndustry(subId) {
+    if (!RESIDENT_TAXONOMY.some(category => category.subcategories.some(subcategory => subcategory.id === subId))) return;
     if (residentSelectedIndustries.has(subId)) {
       residentSelectedIndustries.delete(subId);
     } else {
@@ -614,12 +636,7 @@
     ['living', 'work'].forEach((kind) => {
       document.getElementById('s18-' + kind + '-address').addEventListener('input', () => clearResidentCoords(kind));
     });
-    try {
-      var savedPref = JSON.parse(document.getElementById('s18-preferred-industries').value || '[]');
-      if (Array.isArray(savedPref)) {
-        residentSelectedIndustries = new Set(savedPref);
-      }
-    } catch (_) {}
+    residentSelectedIndustries = restoreResidentIndustrySelection(document.getElementById('s18-preferred-industries').value);
     syncResidentIndustryUI();
 
     const workAddress = document.getElementById('s18-work-address').value.trim();

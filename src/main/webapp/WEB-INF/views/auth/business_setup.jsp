@@ -77,6 +77,14 @@
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※事業を代表する方のお名前をご入力ください。</span>
       </div>
 
+      <%-- 画像の参照先は任意入力とし、エラー時も入力値を保持する。 --%>
+      <div class="form-group" style="margin-bottom:1.25rem;">
+        <label for="s18-biz-icon" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
+          アイコン画像のURL・パス <span style="font-size:0.78rem; color:var(--text-sub);">(任意)</span>
+        </label>
+        <input id="s18-biz-icon" name="iconImageUrl" type="text" class="form-control" value="<%= Html.escape(formValues.get("iconImageUrl")) %>" maxlength="2048" placeholder="例: https://example.com/icon.png、/assets/icon.png">
+      </div>
+
       <!-- メールアドレス -->
       <div class="form-group" style="margin-bottom:1.25rem;">
         <label for="s18-biz-email" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">

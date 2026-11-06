@@ -13,7 +13,6 @@ public class User implements Serializable {
     private String email;
     // DBではRESIDENT・BUSINESS・OWNERの大文字で保持する。
     private String userRole;
-    private String phoneE164;
     // 検証済みIDトークンのsub。メールアドレスではなく、この値で会員を照合する。
     private String lineSubject;
     // 会員の利用状態と日時。認証時の利用可否判定にも使う。
@@ -53,14 +52,6 @@ public class User implements Serializable {
 
     public void setUserRole(String userRole) {
         this.userRole = userRole;
-    }
-
-    public String getPhoneE164() {
-        return phoneE164;
-    }
-
-    public void setPhoneE164(String phoneE164) {
-        this.phoneE164 = phoneE164;
     }
 
     public String getLineSubject() {

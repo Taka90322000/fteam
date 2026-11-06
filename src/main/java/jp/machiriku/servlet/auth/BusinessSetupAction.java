@@ -32,7 +32,7 @@ public class BusinessSetupAction extends Action {
             req.setCharacterEncoding("UTF-8");
             if (!OnboardingSupport.validCsrf(req)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
             fields = OnboardingSupport.fields(req, "businessName", "representativeName", "email", "phone", "preferredArea", "preferredAreaPoints",
-                    "employeeCount", "mgmtExperience", "industryExperience", "emailNotify");
+                    "employeeCount", "mgmtExperience", "industryExperience", "iconImageUrl", "emailNotify");
             industries = OnboardingSupport.selection(req, "preferredIndustry");
             qualifications = OnboardingSupport.selection(req, "qualification");
             try {
@@ -41,6 +41,8 @@ public class BusinessSetupAction extends Action {
                 User saved = createProfileDao().saveBusiness(user.getUserId(), input);
                 OnboardingSupport.completed(req, saved, input.representativeName());
                 req.getSession().setAttribute("businessName", input.businessName());
+                req.getSession().setAttribute("phone", input.phoneE164());
+                req.getSession().setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
                 req.getSession().setAttribute("preferredArea", input.preferredArea());
                 req.getSession().setAttribute("preferredAreaPoints", fields.get("preferredAreaPoints"));
                 res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
@@ -59,11 +61,19 @@ public class BusinessSetupAction extends Action {
             fields.put("email", OnboardingSupport.lineValue(req.getSession(), "lineEmail", user.getEmail()));
             fields.put("businessName", "");
             fields.put("representativeName", "");
-            fields.put("phone", user.getPhoneE164() == null ? "" : user.getPhoneE164());
+            fields.put("phone", "");
+            fields.put("iconImageUrl", "");
             fields.put("employeeCount", "1");
             fields.put("mgmtExperience", "");
             fields.put("industryExperience", "");
             fields.put("emailNotify", "on");
+            // 再表示する連絡先と画像の参照先は、事業主のプロフィールから取得する。
+            try {
+                fields.putAll(createProfileDao().findProfileContact(user.getUserId(), "BUSINESS"));
+            } catch (SQLException e) {
+                OnboardingSupport.logDatabaseError(req, e);
+                req.setAttribute("errorMessage", "登録済みの電話番号・アイコン画像を取得できませんでした。時間をおいて画面を開き直してください。");
+            }
         }
         req.setAttribute("formValues", fields);
         req.setAttribute("displayName", fields.get("representativeName"));

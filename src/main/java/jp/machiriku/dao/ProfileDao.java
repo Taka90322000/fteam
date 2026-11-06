@@ -7,19 +7,40 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 import jp.machiriku.bean.BusinessProfileInput;
 import jp.machiriku.bean.LocationInput;
+import jp.machiriku.bean.OwnerProfileInput;
 import jp.machiriku.bean.RegistrationChoice;
 import jp.machiriku.bean.ResidentProfileInput;
 import jp.machiriku.bean.User;
 
 /** 初期設定の関連テーブルを1トランザクションで保存する。途中失敗時に一部だけ登録されることを防ぐ。 */
 public class ProfileDao extends Dao {
-    private static final String USER_COLUMNS = "user_id, display_name, email, user_role, phone_e164, "
+    private static final String USER_COLUMNS = "user_id, display_name, email, user_role, "
             + "line_subject, account_status, created_at, updated_at, withdrawn_at";
 
     protected Connection openConnection() throws SQLException { return getConnection(); }
+
+    /** プロフィールに移した電話番号とアイコンの保存先を、再表示用に取得する。 */
+    public Map<String, String> findProfileContact(int userId, String role) throws SQLException {
+        String table = switch (role) {
+            case "OWNER" -> "owner_profiles";
+            case "BUSINESS" -> "business_profiles";
+            default -> throw new IllegalArgumentException("プロフィールの利用区分が正しくありません。");
+        };
+        try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(
+                "SELECT phone_e164,icon_image_url FROM " + table + " WHERE user_id=?")) {
+            statement.setInt(1, userId);
+            try (ResultSet rows = statement.executeQuery()) {
+                if (!rows.next()) { return Map.of(); }
+                String phone = rows.getString("phone_e164");
+                String icon = rows.getString("icon_image_url");
+                return Map.of("phone", phone == null ? "" : phone, "iconImageUrl", icon == null ? "" : icon);
+            }
+        }
+    }
 
     /** 有効な業種だけを、DBのマスターID付きで画面へ渡す。 */
     public List<RegistrationChoice> listIndustries() throws SQLException {
@@ -76,6 +97,40 @@ public class ProfileDao extends Dao {
                     statement.executeUpdate();
                 }
             }
+            // 住民が欲しい業種も、業種コードをDBの有効なIDへ変換して同じトランザクションで保存する。
+            saveIndustryPreferences(connection, userId, resolveIndustryCodes(connection, input.preferredIndustryCodes()));
+            saveNotifications(connection, userId, input.emailNotify() && nullable(input.email()) != null);
+        });
+    }
+
+    /** オーナーの連絡先・プロフィール・誘致希望業種・通知設定をまとめて登録する。 */
+    public User saveOwner(int userId, OwnerProfileInput input) throws SQLException {
+        if (input == null || input.industryTypeIds() == null || input.industryTypeIds().isEmpty()) {
+            throw new IllegalArgumentException("誘致希望業種を少なくとも1つ選択してください。");
+        }
+        return save(userId, "OWNER", (connection, user) -> {
+            List<Integer> industries = uniqueIds(input.industryTypeIds());
+            validateMasterIds(connection, industries, true);
+            // LINE表示名は保持し、編集したオーナー氏名は専用プロフィールへ保存する。
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE users SET email=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
+                statement.setString(1, nullable(input.email()));
+                statement.setInt(2, userId);
+                statement.executeUpdate();
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO owner_profiles (user_id,representative_name,company_name,phone_e164,icon_image_url) VALUES (?,?,?,?,?) "
+                    + "ON CONFLICT (user_id) DO UPDATE SET representative_name=EXCLUDED.representative_name,"
+                    + "company_name=EXCLUDED.company_name,phone_e164=EXCLUDED.phone_e164,"
+                    + "icon_image_url=EXCLUDED.icon_image_url,updated_at=CURRENT_TIMESTAMP")) {
+                statement.setInt(1, userId);
+                statement.setString(2, input.representativeName());
+                statement.setString(3, nullable(input.company()));
+                statement.setString(4, input.phoneE164());
+                statement.setString(5, nullable(input.iconImageUrl()));
+                statement.executeUpdate();
+            }
+            saveIndustryPreferences(connection, userId, industries);
             saveNotifications(connection, userId, input.emailNotify() && nullable(input.email()) != null);
         });
     }
@@ -93,19 +148,19 @@ public class ProfileDao extends Dao {
             // 自己交差など、数値の範囲だけでは検出できない不正なポリゴンもPostGISで確認する。
             validatePolygon(connection, input.areaGeoJson());
             try (PreparedStatement statement = connection.prepareStatement(
-                    "UPDATE users SET email=?,phone_e164=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
+                    "UPDATE users SET email=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
                 statement.setString(1, nullable(input.email()));
-                statement.setString(2, input.phoneE164());
-                statement.setInt(3, userId);
+                statement.setInt(2, userId);
                 statement.executeUpdate();
             }
             // LINEの表示名は保持し、本人が入力した代表者名は事業主プロフィールへ保存する。
             try (PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,area) "
-                    + "VALUES (?,?,?,?,?,?,?,ST_SetSRID(ST_GeomFromGeoJSON(?),4326)) "
+                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,area,phone_e164,icon_image_url) "
+                    + "VALUES (?,?,?,?,?,?,?,ST_SetSRID(ST_GeomFromGeoJSON(?),4326),?,?) "
                     + "ON CONFLICT (user_id) DO UPDATE SET business_name=EXCLUDED.business_name,representative_name=EXCLUDED.representative_name,"
                     + "employee_count=EXCLUDED.employee_count,preferred_area=EXCLUDED.preferred_area,industry_experience=EXCLUDED.industry_experience,"
-                    + "management_experience=EXCLUDED.management_experience,area=EXCLUDED.area,updated_at=CURRENT_TIMESTAMP")) {
+                    + "management_experience=EXCLUDED.management_experience,area=EXCLUDED.area,phone_e164=EXCLUDED.phone_e164,"
+                    + "icon_image_url=EXCLUDED.icon_image_url,updated_at=CURRENT_TIMESTAMP")) {
                 statement.setInt(1, userId);
                 statement.setString(2, input.businessName());
                 statement.setString(3, input.representativeName());
@@ -114,6 +169,8 @@ public class ProfileDao extends Dao {
                 statement.setString(6, input.industryExperience());
                 statement.setString(7, input.managementExperience());
                 statement.setString(8, input.areaGeoJson());
+                statement.setString(9, input.phoneE164());
+                statement.setString(10, nullable(input.iconImageUrl()));
                 statement.executeUpdate();
             }
             try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_industry_preferences WHERE user_id=?")) {
@@ -213,6 +270,43 @@ public class ProfileDao extends Dao {
             statement.setInt(1, userId);
             statement.setBoolean(2, emailEnabled);
             statement.executeUpdate();
+        }
+    }
+
+    /** I0101などの画面用コードを、DBで使う主キーへ対応付ける。未登録・無効なコードは保存しない。 */
+    private List<Integer> resolveIndustryCodes(Connection connection, List<String> codes) throws SQLException {
+        if (codes == null || codes.isEmpty()) { return List.of(); }
+        if (codes.size() > 200) { throw new IllegalArgumentException("欲しい業種の選択数が多すぎます。"); }
+        LinkedHashSet<Integer> ids = new LinkedHashSet<>();
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT i.industry_type_id FROM industry_types i JOIN industry_categories c ON c.category_id=i.category_id "
+                + "WHERE i.industry_code=? AND i.is_active AND c.is_active")) {
+            for (String code : codes) {
+                if (code == null || !code.matches("I[0-9]{4}")) { throw new IllegalArgumentException("欲しい業種を選び直してください。"); }
+                statement.setString(1, code);
+                try (ResultSet rows = statement.executeQuery()) {
+                    if (!rows.next()) { throw new IllegalArgumentException("選択した業種が変更されました。欲しい業種を選び直してください。"); }
+                    ids.add(rows.getInt(1));
+                }
+            }
+        }
+        return List.copyOf(ids);
+    }
+
+    private void saveIndustryPreferences(Connection connection, int userId, List<Integer> ids) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_industry_preferences WHERE user_id=?")) {
+            statement.setInt(1, userId);
+            statement.executeUpdate();
+        }
+        if (ids.isEmpty()) { return; }
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO user_industry_preferences (user_id,industry_type_id) VALUES (?,?)")) {
+            for (int id : ids) {
+                statement.setInt(1, userId);
+                statement.setInt(2, id);
+                statement.addBatch();
+            }
+            statement.executeBatch();
         }
     }
 

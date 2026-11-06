@@ -11,7 +11,7 @@ import jp.machiriku.bean.User;
 
 /** 会員情報の保存・取得を行う。ログインの識別にはメールではなくLINEのsubjectを使う。 */
 public class UserDao extends Dao {
-    private static final String COLUMNS = "user_id, display_name, email, user_role, phone_e164, "
+    private static final String COLUMNS = "user_id, display_name, email, user_role, "
             + "line_subject, account_status, created_at, updated_at, withdrawn_at";
     private static final Set<String> ROLES = Set.of("RESIDENT", "BUSINESS", "OWNER");
 
@@ -39,15 +39,14 @@ public class UserDao extends Dao {
         // 会員ID、PENDING状態、作成・更新日時は既存DBの自動採番・デフォルト値に任せる。
         try (Connection connection = openConnection();
                 PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO users (display_name, email, user_role, line_subject, phone_e164) "
-                        + "VALUES (?, ?, ?, ?, ?) RETURNING " + COLUMNS)) {
+                        "INSERT INTO users (display_name, email, user_role, line_subject) "
+                        + "VALUES (?, ?, ?, ?) RETURNING " + COLUMNS)) {
             statement.setString(1, user.getDisplayName());
             // メールは任意。未取得や空白の場合は空文字でなくSQLのNULLとして保存する。
             String email = user.getEmail();
             statement.setString(2, email == null || email.isBlank() ? null : email);
             statement.setString(3, user.getUserRole());
             statement.setString(4, user.getLineSubject());
-            statement.setString(5, user.getPhoneE164());
             try (ResultSet rows = statement.executeQuery()) {
                 if (!rows.next()) { throw new SQLException("User insertion returned no record."); }
                 return readUser(rows);
@@ -63,12 +62,6 @@ public class UserDao extends Dao {
                 || user.getUserRole() == null || !ROLES.contains(user.getUserRole())) {
             throw new IllegalArgumentException("User registration fields are invalid.");
         }
-        // 事業主とオーナーは電話番号が必須。入力がある場合は住民も含めてE.164形式を確認する。
-        String phone = user.getPhoneE164();
-        if ((phone != null && !phone.matches("\\+[1-9][0-9]{7,14}"))
-                || (!"RESIDENT".equals(user.getUserRole()) && phone == null)) {
-            throw new IllegalArgumentException("A phone number in E.164 format is required for this role.");
-        }
     }
 
     // サロゲートペアを2文字と数えず、DBの文字数制限に合わせてコードポイント単位で確認する。
@@ -83,7 +76,6 @@ public class UserDao extends Dao {
         user.setDisplayName(row.getString("display_name"));
         user.setEmail(row.getString("email"));
         user.setUserRole(row.getString("user_role"));
-        user.setPhoneE164(row.getString("phone_e164"));
         user.setLineSubject(row.getString("line_subject"));
         user.setAccountStatus(row.getString("account_status"));
         user.setCreatedAt(row.getObject("created_at", OffsetDateTime.class));

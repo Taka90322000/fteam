@@ -1,5 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%-- 会員登録の入口画面。利用区分と連絡先を受け取り、LINE認証へ進む。 --%>
+<%-- 会員登録の入口画面。利用区分を受け取り、LINE認証へ進む。 --%>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="新規会員登録 | マチリク" />
   <jsp:param name="activeNav" value="register" />
@@ -23,7 +23,7 @@
       </div>
     <% } %>
 
-    <%-- 電話番号などがURLのクエリへ残らないよう、登録開始情報をPOSTで送信する。 --%>
+    <%-- 登録開始情報はPOSTで送信する。電話番号は認証後のプロフィール画面で受け付ける。 --%>
     <form id="registerForm" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/LineLogin.action" method="POST">
       <div class="form-group" style="margin-bottom:1.5rem;">
         <label style="font-size:0.9rem; font-weight:800; display:block; margin-bottom:0.5rem; color:var(--text-main);">
@@ -43,15 +43,6 @@
             <div style="font-weight:700; margin-top:0.35rem; font-size:0.875rem;">物件オーナー</div>
           </label>
         </div>
-      </div>
-
-      <div class="form-group" style="margin-bottom:1.5rem;">
-        <label for="phoneE164" style="font-weight:700; display:block; margin-bottom:0.5rem;">電話番号（事業主・オーナーは必須）</label>
-        <%-- 国番号から始まる電話番号を受け付ける。利用区分ごとの必須判定はサーバー側でも行う。 --%>
-        <input id="phoneE164" name="phoneE164" type="tel" autocomplete="tel" maxlength="16"
-               pattern="\+[1-9][0-9]{7,14}" placeholder="+819012345678" aria-describedby="phoneHelp"
-               style="width:100%; box-sizing:border-box; padding:0.75rem; border:1px solid var(--border-color); border-radius:var(--radius-md);">
-        <!-- <p id="phoneHelp" style="font-size:0.8125rem; color:var(--text-sub);">国番号を含む形式で入力してください。日本の090-1234-5678の場合は +819012345678 です。地域住民は任意です。</p> -->
       </div>
 
       <div style="margin-top:1.5rem;">

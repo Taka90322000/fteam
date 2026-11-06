@@ -4,6 +4,7 @@ LINE認証が成功すると、今回取得した表示名とメールを認証�
 
 - 住民画面：LINEの表示名をニックネームへ、LINEのメールをメール欄へ初期表示します。
 - 事業主画面：LINEのメールだけを初期表示し、屋号と代表者名は本人が入力します。
+- オーナー画面：LINEの表示名・任意のメールを初期表示し、氏名・法人名・電話番号・誘致希望業種を登録します。
 - エラーで再表示するときは、LINE取得値ではなく直前の入力値を表示します。
 
 ## 保存先
@@ -13,14 +14,34 @@ LINE認証が成功すると、今回取得した表示名とメールを認証�
 | 住民のニックネーム・任意メール | `users.display_name`・`users.email` |
 | 住民の年齢区分・性別 | `resident_profiles` |
 | 住民の居住地、任意の職場・学校の住所と座標 | `user_locations` の `HOME`・`WORK` |
-| 事業主の任意メール・電話番号 | `users.email`・`users.phone_e164` |
+| 住民の近くに欲しい店舗・施設ジャンル | `user_industry_preferences`（画面の業種コードをマスターIDへ変換） |
+| 事業主の任意メール | `users.email` |
+| 事業主の必須電話番号・任意のアイコン画像URL／パス | `business_profiles.phone_e164`・`business_profiles.icon_image_url` |
 | 事業者名・代表者名・従業員数・経験・希望エリア名 | `business_profiles` |
 | 地図上で囲んだ出店希望範囲 | `business_profiles.area`（PostGISのPolygon、SRID 4326） |
 | 事業主の希望業種 | `user_industry_preferences` |
 | 事業主の保有資格・許認可 | `business_qualifications` |
 | メール通知の希望 | `notification_settings.email_enabled` |
+| オーナーの氏名・法人名 | `owner_profiles` |
+| オーナーの任意メール | `users.email` |
+| オーナーの必須電話番号・任意のアイコン画像URL／パス | `owner_profiles.phone_e164`・`owner_profiles.icon_image_url` |
+| オーナーの誘致希望業種 | `user_industry_preferences` |
 
 住民の「業種・ご職業」は、今回の指定により保存対象外です。資格や業種はDBの有効なマスターから表示し、画面の表示順ではなくマスターのIDを保存します。
+
+住民の「欲しい業種」は職業とは別の希望条件として保存します。任意の複数選択に対応し、選択をすべて外して再登録した場合は既存の希望業種を解除します。無効・未登録のコードは保存せず、プロフィールや住所の変更もまとめて取り消します。
+
+## オーナー・事業主プロフィールの準備
+
+既存DBを更新する場合は、DB管理者として `machiriku` に接続し、`database/migrate-profile-contacts.sql` を実行します。オーナー用テーブルの作成、両プロフィールへのアイコン参照先・電話番号の追加、既存電話番号の移行、`users.phone_e164` の削除を1つのトランザクションで処理します。電話番号は両プロフィールで `NOT NULL`、E.164形式、テーブル内で一意とします。
+
+`database/create-owner-profiles.sql` は、移行済みのDBへオーナー用テーブルだけを新規作成するときの定義です。
+
+LINE認証では表示名・任意メール・利用区分・LINEの識別子を会員に保存します。事業主とオーナーの電話番号は、認証後の初期設定で必須入力します。保存済みの電話番号とアイコン参照先は、各プロフィールから再表示します。
+
+アイコン画像の参照先は任意です。HTTP(S)のURLまたはWeb用パスを2048文字まで入力でき、空欄はSQLの `NULL` として保存します。例として `https://example.com/icon.png`、`/assets/icons/owner.png` を利用できます。
+
+住民画面の `?preview=1` はGETの表示確認専用です。POSTではプレビュー用IDを利用せず、必ずログイン中の住民のIDで保存します。
 
 ## 保存時の扱い
 

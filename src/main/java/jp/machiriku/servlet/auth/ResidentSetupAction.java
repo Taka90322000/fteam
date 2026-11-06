@@ -17,13 +17,15 @@ public class ResidentSetupAction extends Action {
 
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        User user = null;
-        String preview = req.getParameter("preview");
-        if ("1".equals(preview) || "true".equalsIgnoreCase(preview)) {
+        User user;
+        // プレビューはGET表示だけに限定する。POSTはクエリに関係なく本物のログイン会員で処理する。
+        boolean preview = "GET".equalsIgnoreCase(req.getMethod())
+                && ("1".equals(req.getParameter("preview")) || "true".equalsIgnoreCase(req.getParameter("preview")));
+        if (preview) {
             user = new User();
-            user.setUserId(1);
+            user.setUserId(0);
             user.setDisplayName("LINEユーザー");
-            user.setEmail("tanaka.line@example.com");
+            user.setEmail(null);
             user.setUserRole("RESIDENT");
             user.setAccountStatus("PENDING");
         } else {
@@ -46,7 +48,7 @@ public class ResidentSetupAction extends Action {
                 User saved = createProfileDao().saveResident(user.getUserId(), input);
                 // 選択した欲しい業種・施設ジャンルをセッションにも保存
                 req.getSession().setAttribute("userIndustry", fields.get("industry"));
-                req.getSession().setAttribute("userPreferredIndustries", fields.get("preferredIndustries"));
+                req.getSession().setAttribute("userPreferredIndustries", input.preferredIndustryCodes());
                 // DBのcommitが成功してから、画面用の会員情報と初期設定完了状態を更新する。
                 OnboardingSupport.completed(req, saved, saved.getDisplayName());
                 res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");

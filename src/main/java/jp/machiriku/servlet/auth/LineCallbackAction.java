@@ -57,14 +57,13 @@ public class LineCallbackAction extends Action {
                     LineLoginSupport.error(req, res, true, "このLINEアカウントは未登録です。利用区分を選んで新規会員登録してください。");
                     return;
                 }
-                // 本人情報はLINEの検証結果、登録区分と電話番号は認証開始時のセッションから保存する。
+                // 本人情報はLINEの検証結果、登録区分は認証開始時のセッションから保存する。
                 // メール未取得時のnullもそのまま渡し、DB用の役割は大文字に統一する。
                 User newUser = new User();
                 newUser.setDisplayName(profile.displayName());
                 newUser.setEmail(profile.email());
                 newUser.setUserRole(attempt.registrationRole().toUpperCase(Locale.ROOT));
                 newUser.setLineSubject(profile.lineSubject());
-                newUser.setPhoneE164(attempt.phoneE164());
                 try {
                     user = dao.insert(newUser);
                 } catch (SQLException e) {
@@ -74,7 +73,7 @@ public class LineCallbackAction extends Action {
                     user = dao.findByLineSubject(profile.lineSubject());
                     if (user == null) {
                         LineLoginSupport.error(req, res, true,
-                                "このメールアドレスまたは電話番号は既に登録されています。既存の登録情報をご確認ください。");
+                                "このメールアドレスは既に登録されています。既存の登録情報をご確認ください。");
                         return;
                     }
                 }

@@ -22,11 +22,11 @@ final class LineLoginSupport {
     private LineLoginSupport() { }
 
     /** 認証ごとに推測困難なstate・nonce・PKCE検証値を作り、登録時の入力と一緒に保持する。 */
-    static Attempt begin(String role, String phone) {
+    static Attempt begin(String role) {
         byte[] verifier = new byte[32];
         RANDOM.nextBytes(verifier);
         return new Attempt(randomHex(), randomHex(), Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(verifier), role, phone, Instant.now().getEpochSecond());
+                .encodeToString(verifier), role, Instant.now().getEpochSecond());
     }
 
     /** セッションに対応するstateと10分の有効期限を確認し、成功した認証情報を一度だけ取り出す。 */
@@ -66,5 +66,5 @@ final class LineLoginSupport {
 
     /** 認証開始からコールバックまで、サーバーセッション内だけで保持する一時情報。 */
     record Attempt(String state, String nonce, String codeVerifier, String registrationRole,
-            String phoneE164, long createdAt) implements Serializable { }
+            long createdAt) implements Serializable { }
 }
