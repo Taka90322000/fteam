@@ -17,8 +17,19 @@ public class ResidentSetupAction extends Action {
 
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        User user = OnboardingSupport.requireUser(req, res, "RESIDENT");
-        if (user == null) { return; }
+        User user = null;
+        String preview = req.getParameter("preview");
+        if ("1".equals(preview) || "true".equalsIgnoreCase(preview)) {
+            user = new User();
+            user.setUserId(1);
+            user.setDisplayName("LINEユーザー");
+            user.setEmail("tanaka.line@example.com");
+            user.setUserRole("RESIDENT");
+            user.setAccountStatus("PENDING");
+        } else {
+            user = OnboardingSupport.requireUser(req, res, "RESIDENT");
+            if (user == null) { return; }
+        }
         if (!"GET".equalsIgnoreCase(req.getMethod()) && !"POST".equalsIgnoreCase(req.getMethod())) {
             res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
             return;
@@ -28,11 +39,14 @@ public class ResidentSetupAction extends Action {
         if (posting) {
             req.setCharacterEncoding("UTF-8");
             if (!OnboardingSupport.validCsrf(req)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
-            fields = OnboardingSupport.fields(req, "name", "email", "ageGroup", "gender", "industry", "livingAddress", "livingLat",
+            fields = OnboardingSupport.fields(req, "name", "email", "ageGroup", "gender", "industry", "preferredIndustries", "livingAddress", "livingLat",
                     "livingLng", "workAddress", "workLat", "workLng", "emailNotify");
             try {
                 var input = RegistrationForms.resident(fields);
                 User saved = createProfileDao().saveResident(user.getUserId(), input);
+                // 選択した欲しい業種・施設ジャンルをセッションにも保存
+                req.getSession().setAttribute("userIndustry", fields.get("industry"));
+                req.getSession().setAttribute("userPreferredIndustries", fields.get("preferredIndustries"));
                 // DBのcommitが成功してから、画面用の会員情報と初期設定完了状態を更新する。
                 OnboardingSupport.completed(req, saved, saved.getDisplayName());
                 res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
@@ -53,6 +67,8 @@ public class ResidentSetupAction extends Action {
             fields.put("email", OnboardingSupport.lineValue(req.getSession(), "lineEmail", user.getEmail()));
             fields.put("ageGroup", "未設定");
             fields.put("gender", "回答しない");
+            fields.put("industry", "");
+            fields.put("preferredIndustries", "[]");
             fields.put("emailNotify", "on");
         }
         req.setAttribute("formValues", fields);

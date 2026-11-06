@@ -3707,6 +3707,247 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
   animation: flashAddressUpdate 1s ease-out;
 }
 
+/* S18: 地域住民向け「近くに欲しい店舗・施設ジャンル」ピル＆タブUI (コンパクト・スタイリッシュ版) */
+.resident-industry-picker {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 0.85rem 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1.25rem;
+}
+
+.resident-cat-tabs-bar {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding: 0.1rem 0 0.35rem 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.resident-cat-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0 0.65rem;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-sub);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  user-select: none;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 28px;
+  box-sizing: border-box;
+}
+
+.resident-cat-tab-btn:hover {
+  border-color: var(--primary-600);
+  color: var(--primary-800);
+  background: var(--primary-50);
+}
+
+.resident-cat-tab-btn.is-active {
+  background: var(--primary-600);
+  border-color: var(--primary-600);
+  color: var(--text-inverse);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(46, 125, 50, 0.2);
+}
+
+.resident-cat-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  background: var(--primary-600);
+  color: var(--text-inverse);
+}
+
+.resident-cat-tab-btn.is-active .resident-cat-tab-badge {
+  background: var(--bg-card);
+  color: var(--primary-700);
+}
+
+.resident-subcat-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.45rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  min-height: auto;
+  align-items: center;
+}
+
+.resident-ind-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.65rem;
+  border-radius: var(--radius-full);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 28px;
+  box-sizing: border-box;
+}
+
+.resident-ind-pill:hover {
+  border-color: var(--primary-500);
+  background: var(--primary-50);
+  color: var(--primary-800);
+  transform: translateY(-1px);
+}
+
+.resident-ind-pill.is-selected {
+  background: var(--primary-600);
+  border-color: var(--primary-600);
+  color: var(--text-inverse);
+  box-shadow: 0 1px 4px rgba(46, 125, 50, 0.2);
+}
+
+.resident-ind-pill.is-selected:hover {
+  background: var(--primary-700);
+  border-color: var(--primary-700);
+  color: var(--text-inverse);
+}
+
+.resident-ind-pill-all {
+  border-style: dashed;
+  font-weight: 700;
+  color: var(--primary-700);
+  background: var(--bg-card);
+}
+
+.resident-ind-pill-all.is-selected {
+  border-style: solid;
+  background: var(--primary-700);
+  color: var(--text-inverse);
+}
+
+.resident-ind-pill-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 800;
+  background: var(--border-color);
+  color: var(--text-sub);
+  transition: all 0.15s ease;
+}
+
+.resident-ind-pill:hover .resident-ind-pill-icon {
+  background: var(--primary-100);
+  color: var(--primary-800);
+}
+
+.resident-ind-pill.is-selected .resident-ind-pill-icon {
+  background: var(--bg-card);
+  color: var(--primary-700);
+}
+
+.resident-selected-tags-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.45rem;
+  min-height: 34px;
+  margin-bottom: 0.45rem;
+  padding: 0.35rem 0.6rem;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  align-items: center;
+}
+
+.resident-selected-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.65rem;
+  background: var(--primary-100);
+  color: var(--primary-900);
+  border: 1.5px solid var(--primary-600);
+  border-radius: var(--radius-full);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 28px;
+  box-sizing: border-box;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.resident-selected-tag-del {
+  min-height: 0 !important;
+  min-width: 0 !important;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  padding: 0;
+  margin: 0 0 0 0.25rem;
+  border: none;
+  background: transparent;
+  color: var(--primary-700);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  transition: color 0.12s ease;
+}
+
+.resident-selected-tag-del:hover {
+  background: transparent;
+  color: var(--danger-text);
+}
+
+.resident-clear-all-btn {
+  min-height: 0 !important;
+  min-width: 0 !important;
+  height: 28px;
+  line-height: 28px;
+  padding: 0 0.4rem;
+  background: none;
+  border: none;
+  color: var(--text-sub);
+  font-size: 0.775rem;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.resident-clear-all-btn:hover {
+  color: var(--danger-text);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

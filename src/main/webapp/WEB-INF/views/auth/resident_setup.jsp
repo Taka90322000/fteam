@@ -107,24 +107,34 @@
         </div>
       </div>
 
-      <!-- 業種 (任意) -->
-      <div class="form-group" style="margin-bottom:1.5rem;">
-        <label for="s18-industry" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
-          業種・ご職業 <span style="color:var(--text-muted); font-size:0.8rem;">(任意)</span>
-        </label>
-        <select id="s18-industry" name="industry" class="form-control">
-          <option value="">選択してください（任意）</option>
-          <%
-            String[] industryOptions = {
-              "飲食・カフェ", "小売・物販", "美容・サロン", "医療・介護・福祉",
-              "IT・通信・オフィス", "建設・不動産", "教育・スクール",
-              "サービス・エンタメ", "学生", "主婦・主夫", "その他"
-            };
-            for (String opt : industryOptions) {
-          %>
-            <option value="<%= Html.escape(opt) %>" <%= opt.equals(formValues.get("industry")) ? "selected" : "" %>><%= Html.escape(opt) %></option>
-          <% } %>
-        </select>
+      <!-- 近くに欲しい店舗・施設ジャンル (任意・複数選択) -->
+      <div class="form-group resident-industry-picker">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.45rem; flex-wrap:wrap; gap:0.4rem;">
+          <label style="font-weight:800; font-size:0.92rem; color:var(--text-main); display:flex; align-items:center; gap:0.35rem;">
+            <span>近くに欲しい店舗・施設ジャンル</span>
+            <span style="color:var(--text-muted); font-size:0.78rem; font-weight:normal;">(任意・複数選択可)</span>
+          </label>
+          <span id="s18-resident-ind-count" style="font-size:0.75rem; font-weight:700; color:var(--primary-700); background:var(--primary-50); border:1px solid var(--primary-100); padding:0.15rem 0.55rem; border-radius:var(--radius-full);">
+            選択中: 0件
+          </span>
+        </div>
+
+        <!-- 選択中のピル一覧（タグエリア） -->
+        <div id="s18-resident-selected-tags" class="resident-selected-tags-box">
+          <span style="font-size:0.75rem; color:var(--text-muted); padding:0.05rem 0.2rem;">※下のタブからジャンルを選んでください（複数選択可）</span>
+        </div>
+
+        <!-- 大分類タブバー -->
+        <div style="margin-bottom:0.45rem;">
+          <div class="resident-cat-tabs-bar" id="s18-resident-cat-tabs"></div>
+        </div>
+
+        <!-- 小分類ピル（チップ）選択エリア -->
+        <div id="s18-resident-subcat-panel" class="resident-subcat-grid"></div>
+
+        <!-- フォーム送信用の隠しフィールド -->
+        <input type="hidden" id="s18-preferred-industries" name="preferredIndustries" value="<%= Html.escape(formValues.getOrDefault("preferredIndustries", "[]")) %>">
+        <input type="hidden" id="s18-industry" name="industry" value="<%= Html.escape(formValues.getOrDefault("industry", "")) %>">
       </div>
 
       <!-- 居住地の住所 (マップ上で選択・必須) -->
@@ -238,6 +248,233 @@
     const lat = Number(latValue);
     const lng = Number(lngValue);
     return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+  }
+
+  // ==========================================
+  // S18: 地域住民向け「欲しい店舗・施設ジャンル」タブ＆ピル選択状態・ヘルパー
+  // ==========================================
+  const RESIDENT_TAXONOMY = [
+    {
+      id: "C01", name: "飲食",
+      subcategories: [
+        { id: "I0101", name: "カフェ・喫茶店" },
+        { id: "I0102", name: "レストラン" },
+        { id: "I0103", name: "ラーメン・麺類" },
+        { id: "I0104", name: "定食・食堂" },
+        { id: "I0105", name: "居酒屋・バー" },
+        { id: "I0106", name: "弁当・テイクアウト" },
+        { id: "I0107", name: "パン屋・ベーカリー" }
+      ]
+    },
+    {
+      id: "C02", name: "小売",
+      subcategories: [
+        { id: "I0201", name: "コンビニ・小型スーパー" },
+        { id: "I0202", name: "食料品・生鮮店" },
+        { id: "I0203", name: "雑貨・生活用品店" },
+        { id: "I0204", name: "衣料品・セレクトショップ" },
+        { id: "I0205", name: "書店・文具店" },
+        { id: "I0206", name: "花屋・フラワーショップ" }
+      ]
+    },
+    {
+      id: "C03", name: "美容・健康",
+      subcategories: [
+        { id: "I0301", name: "美容室・ヘアサロン" },
+        { id: "I0302", name: "理容室・バーバー" },
+        { id: "I0303", name: "ネイル・エステサロン" },
+        { id: "I0304", name: "ジム・フィットネススタジオ" }
+      ]
+    },
+    {
+      id: "C04", name: "教育・仕事",
+      subcategories: [
+        { id: "I0401", name: "学習塾・スクール" },
+        { id: "I0402", name: "コワーキングスペース" }
+      ]
+    },
+    {
+      id: "C05", name: "趣味・娯楽",
+      subcategories: [
+        { id: "I0501", name: "ゲーム・ホビーショップ" },
+        { id: "I0502", name: "娯楽施設" },
+        { id: "I0503", name: "文化・体験教室" }
+      ]
+    },
+    {
+      id: "C06", name: "生活サービス",
+      subcategories: [
+        { id: "I0601", name: "クリーニング店" },
+        { id: "I0602", name: "修理サービス" },
+        { id: "I0603", name: "ペット関連店舗" }
+      ]
+    },
+    {
+      id: "C07", name: "医療・福祉",
+      subcategories: [
+        { id: "I0701", name: "クリニック" },
+        { id: "I0702", name: "福祉・介護サービス" }
+      ]
+    }
+  ];
+
+  let residentActiveCatId = 'C01';
+  let residentSelectedIndustries = new Set();
+
+  function renderResidentCatTabsHtml() {
+    return RESIDENT_TAXONOMY.map(function(cat) {
+      var isActive = (cat.id === residentActiveCatId);
+      var count = cat.subcategories.filter(function(s) {
+        return residentSelectedIndustries.has(s.id) || residentSelectedIndustries.has(s.name);
+      }).length;
+      var activeCls = isActive ? ' is-active' : '';
+      var badgeHtml = (count > 0) ? '<span class="resident-cat-tab-badge">' + count + '</span>' : '';
+      return '<button type="button" class="resident-cat-tab-btn' + activeCls + '" onclick="switchResidentCatTab(\'' + cat.id + '\')">'
+        + '<span>' + cat.name + '</span>'
+        + badgeHtml
+        + '</button>';
+    }).join('');
+  }
+
+  function renderResidentSubcatPillsHtml(catId) {
+    var cat = RESIDENT_TAXONOMY.find(function(c) { return c.id === catId; }) || RESIDENT_TAXONOMY[0];
+    var allSelected = cat.subcategories.length > 0 && cat.subcategories.every(function(s) {
+      return residentSelectedIndustries.has(s.id) || residentSelectedIndustries.has(s.name);
+    });
+
+    var selectAllCls = allSelected ? ' is-selected' : '';
+    var selectAllIcon = allSelected ? '✓' : '+';
+    var selectAllLabel = allSelected ? 'すべて選択中' : 'すべて選択';
+
+    var selectAllBtnHtml = '<button type="button" class="resident-ind-pill resident-ind-pill-all' + selectAllCls + '" onclick="toggleAllResidentCatIndustries(\'' + cat.id + '\')">'
+      + '<span class="resident-ind-pill-icon">' + selectAllIcon + '</span>'
+      + '<span>' + selectAllLabel + '</span>'
+      + '</button>';
+
+    var pillsHtml = cat.subcategories.map(function(sub) {
+      var isSelected = residentSelectedIndustries.has(sub.id) || residentSelectedIndustries.has(sub.name);
+      var selCls = isSelected ? ' is-selected' : '';
+      var icon = isSelected ? '✓' : '+';
+      return '<button type="button" class="resident-ind-pill' + selCls + '" onclick="toggleResidentIndustry(\'' + sub.id + '\')">'
+        + '<span class="resident-ind-pill-icon">' + icon + '</span>'
+        + '<span>' + sub.name + '</span>'
+        + '</button>';
+    }).join('');
+
+    return selectAllBtnHtml + pillsHtml;
+  }
+
+  function toggleAllResidentCatIndustries(catId) {
+    var cat = RESIDENT_TAXONOMY.find(function(c) { return c.id === catId; }) || RESIDENT_TAXONOMY[0];
+    var allSubs = cat.subcategories;
+    var allSelected = allSubs.length > 0 && allSubs.every(function(s) {
+      return residentSelectedIndustries.has(s.id) || residentSelectedIndustries.has(s.name);
+    });
+
+    if (allSelected) {
+      allSubs.forEach(function(s) {
+        residentSelectedIndustries.delete(s.id);
+        residentSelectedIndustries.delete(s.name);
+      });
+    } else {
+      allSubs.forEach(function(s) {
+        residentSelectedIndustries.add(s.id);
+      });
+    }
+    syncResidentIndustryUI();
+  }
+
+  function renderResidentSelectedTagsHtml() {
+    var allSubs = [];
+    RESIDENT_TAXONOMY.forEach(function(c) {
+      c.subcategories.forEach(function(s) {
+        if (residentSelectedIndustries.has(s.id) || residentSelectedIndustries.has(s.name)) {
+          allSubs.push({ id: s.id, name: s.name, catName: c.name });
+        }
+      });
+    });
+
+    if (allSubs.length === 0) {
+      return '<span style="font-size:0.75rem; color:var(--text-muted); padding:0.05rem 0.2rem;">※下のタブからジャンルを選んでください（複数選択可）</span>';
+    }
+
+    var tagsHtml = allSubs.map(function(s) {
+      return '<span class="resident-selected-tag">'
+        + '<span>' + s.name + '</span>'
+        + '<button type="button" class="resident-selected-tag-del" onclick="removeResidentIndustry(\'' + s.id + '\')" title="' + s.name + 'を解除">×</button>'
+        + '</span>';
+    }).join('');
+
+    return '<div style="display:flex; flex-wrap:wrap; gap:0.3rem 0.4rem; align-items:center; width:100%;">'
+      + tagsHtml
+      + '<button type="button" class="resident-clear-all-btn" onclick="clearAllResidentIndustries()">'
+      + 'すべて解除'
+      + '</button>'
+      + '</div>';
+  }
+
+  function syncResidentIndustryUI() {
+    var countEl = document.getElementById('s18-resident-ind-count');
+    if (countEl) countEl.textContent = '選択中: ' + residentSelectedIndustries.size + '件';
+
+    var tagsEl = document.getElementById('s18-resident-selected-tags');
+    if (tagsEl) tagsEl.innerHTML = renderResidentSelectedTagsHtml();
+
+    var tabsEl = document.getElementById('s18-resident-cat-tabs');
+    if (tabsEl) tabsEl.innerHTML = renderResidentCatTabsHtml();
+
+    var panelEl = document.getElementById('s18-resident-subcat-panel');
+    if (panelEl) panelEl.innerHTML = renderResidentSubcatPillsHtml(residentActiveCatId);
+
+    var hiddenInput = document.getElementById('s18-preferred-industries');
+    if (hiddenInput) {
+      hiddenInput.value = JSON.stringify(Array.from(residentSelectedIndustries));
+    }
+    var industryInput = document.getElementById('s18-industry');
+    if (industryInput) {
+      var selectedNames = [];
+      RESIDENT_TAXONOMY.forEach(function(c) {
+        c.subcategories.forEach(function(s) {
+          if (residentSelectedIndustries.has(s.id) || residentSelectedIndustries.has(s.name)) {
+            selectedNames.push(s.name);
+          }
+        });
+      });
+      industryInput.value = selectedNames.join(', ');
+    }
+  }
+
+  function switchResidentCatTab(catId) {
+    residentActiveCatId = catId;
+    const tabsEl = document.getElementById('s18-resident-cat-tabs');
+    if (tabsEl) tabsEl.innerHTML = renderResidentCatTabsHtml();
+    const panelEl = document.getElementById('s18-resident-subcat-panel');
+    if (panelEl) panelEl.innerHTML = renderResidentSubcatPillsHtml(catId);
+  }
+
+  function toggleResidentIndustry(subId) {
+    if (residentSelectedIndustries.has(subId)) {
+      residentSelectedIndustries.delete(subId);
+    } else {
+      residentSelectedIndustries.add(subId);
+    }
+    syncResidentIndustryUI();
+  }
+
+  function removeResidentIndustry(subId) {
+    residentSelectedIndustries.delete(subId);
+    for (const cat of RESIDENT_TAXONOMY) {
+      const match = cat.subcategories.find(s => s.id === subId);
+      if (match) {
+        residentSelectedIndustries.delete(match.name);
+      }
+    }
+    syncResidentIndustryUI();
+  }
+
+  function clearAllResidentIndustries() {
+    residentSelectedIndustries.clear();
+    syncResidentIndustryUI();
   }
 
   function validateResidentForm() {
@@ -377,6 +614,14 @@
     ['living', 'work'].forEach((kind) => {
       document.getElementById('s18-' + kind + '-address').addEventListener('input', () => clearResidentCoords(kind));
     });
+    try {
+      var savedPref = JSON.parse(document.getElementById('s18-preferred-industries').value || '[]');
+      if (Array.isArray(savedPref)) {
+        residentSelectedIndustries = new Set(savedPref);
+      }
+    } catch (_) {}
+    syncResidentIndustryUI();
+
     const workAddress = document.getElementById('s18-work-address').value.trim();
     if (workAddress) toggleWorkMap(true);
     function mountMaps() {
