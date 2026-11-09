@@ -81,7 +81,8 @@
       <nav class="footer-links" aria-label="関連メニュー">
         <a href="#s01">空き店舗を探す</a>
         <a href="#s21">開店の相談</a>
-        <a href="#s16">ログイン</a>
+        <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action">ログイン</a>
+        <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action">新規会員登録</a>
       </nav>
     </div>
     <details class="prototype-tools">
@@ -111,7 +112,35 @@
           MachirikuStore.setRole("<%= Html.escape(userRole) %>");
         }
       <% } %>
-      MachirikuApp.init();
+      <% if (displayName != null && !displayName.trim().isEmpty() && !"LINEユーザー".equals(displayName)) { %>
+        if (window.MachirikuStore && typeof MachirikuStore.updateUserProfile === 'function') {
+          MachirikuStore.updateUserProfile({ name: "<%= Html.escape(displayName) %>" });
+        }
+        try {
+          if (window.sessionStorage) {
+            window.sessionStorage.setItem('machiriku_user_display_name', "<%= Html.escape(displayName) %>");
+          }
+        } catch (_) {}
+      <% } %>
+
+      // すでにサーブレット版が実装済みの画面へのアクセスは本番サーブレットへリダイレクト
+      var ctx = "${pageContext.request.contextPath}";
+      function checkServletRedirect() {
+        var h = (window.location.hash || '').toLowerCase();
+        if (h === '#s16') {
+          window.location.href = ctx + "/jp/machiriku/servlet/auth/Login.action";
+          return true;
+        } else if (h === '#s17') {
+          window.location.href = ctx + "/jp/machiriku/servlet/auth/Register.action";
+          return true;
+        }
+        return false;
+      }
+
+      window.addEventListener('hashchange', checkServletRedirect);
+      if (!checkServletRedirect()) {
+        MachirikuApp.init();
+      }
     });
   </script>
 </body>

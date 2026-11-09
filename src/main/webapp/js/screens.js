@@ -2160,17 +2160,27 @@ window.MachirikuScreens = (function() {
   // =========================================================================
   // S16: ログイン (全員)
   // =========================================================================
-  function renderS16() {
+  function renderS16(params = {}) {
+    const errorHtml = params && params.errorMessage ? `
+      <div style="background:#fee2e2; border:1px solid #f87171; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-md); font-size:0.875rem; margin-bottom:1.25rem;">
+        ${escapeHtml(params.errorMessage)}
+      </div>
+    ` : '';
+
     return `
       <section class="screen-view s16-view" data-screen="S16">
         ${renderHeaderBanner("S16", "ログイン", "共通認証", "登録済みアカウントでログインします。デモ確認用に各ロール（地域住民・事業主・オーナー・運営管理者）に1クリックで即時ログインできます。")}
 
         <div class="form-stepper-box" style="max-width:540px;">
+          ${errorHtml}
           <div style="margin-top:0.5rem; margin-bottom:1.5rem;">
             <button type="button" class="btn-line-login" onclick="MachirikuScreens.handleLineLogin()">
               <img src="assets/line_icon.svg" alt="LINE" class="line-icon-svg" style="width:24px; height:24px; flex-shrink:0;">
               <span>LINEでログイン</span>
             </button>
+            <p style="font-size:0.8125rem; color:var(--text-sub); text-align:center; margin-top:0.75rem; line-height:1.5;">
+              LINEの表示名・ユーザーIDと、取得できる場合はメールアドレスを取得し、会員情報の確認に利用します。
+            </p>
           </div>
 
           <div style="text-align:center; margin-top:1.25rem; font-size:0.875rem;">
@@ -2326,7 +2336,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-biz-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(isOnboarding ? '' : (user.phone || ''))}" required placeholder="例: 090-1234-5678">
+              <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(sessionData?.phone || '')}" required placeholder="例: 09012345678 (ハイフンなし)">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店応募や物件オーナーとの連絡・確認用に使用されます。</span>
             </div>
 
@@ -2524,7 +2534,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-owner-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(isOnboarding ? '' : (user.phone || ''))}" required placeholder="例: 028-633-9988">
+              <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(sessionData?.phone || '')}" required placeholder="例: 09012345678 (ハイフンなし)">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店希望者との連絡、物件問い合わせや運営確認用に使用されます。</span>
             </div>
 
@@ -3902,8 +3912,16 @@ window.MachirikuScreens = (function() {
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
         window.sessionStorage.removeItem('machiriku_onboarding');
+        if (name) {
+          window.sessionStorage.setItem('machiriku_user_display_name', name);
+        }
       }
     } catch (_) {}
+
+    const headerNameEl = document.getElementById('header-user-name');
+    if (headerNameEl && name) {
+      headerNameEl.textContent = name;
+    }
 
     if (typeof MachirikuApp !== 'undefined') {
       MachirikuApp.showToast('基本情報を登録しました！マチリクへようこそ');
