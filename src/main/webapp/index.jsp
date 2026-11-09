@@ -40,27 +40,33 @@
         </span>
       </a>
       <div class="header-nav-right">
-        <label class="role-picker" id="header-role-picker-wrap" for="preview-role">利用者
-          <select id="preview-role" onchange="MachirikuStore.setRole(this.value)">
-            <option value="resident" <%= "resident".equalsIgnoreCase(userRole) ? "selected" : "" %>>地域住民</option>
-            <option value="business" <%= "business".equalsIgnoreCase(userRole) ? "selected" : "" %>>出店事業主</option>
-            <option value="owner" <%= "owner".equalsIgnoreCase(userRole) ? "selected" : "" %>>物件オーナー</option>
-            <option value="admin" <%= "admin".equalsIgnoreCase(userRole) ? "selected" : "" %>>運営管理者</option>
-          </select>
-        </label>
-        <span id="header-role-badge" class="header-role-badge" style="display:none;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <span id="header-role-badge-text">地域住民</span>
-        </span>
-        <a href="#s06" class="btn-header-action notification-link" aria-label="通知一覧">
-          <svg class="m-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-          </svg>
-          <span id="header-notif-badge" class="badge-counter" hidden>0</span>
-        </a>
-        <a href="#s18" class="btn-header-action profile-link"><span id="header-user-name"><%= Html.escape(displayName) %></span></a>
+        <% if (currentUser == null) { %>
+          <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
+            <span>ログイン</span>
+          </a>
+        <% } else { %>
+          <label class="role-picker" id="header-role-picker-wrap" for="preview-role">利用者
+            <select id="preview-role" onchange="MachirikuStore.setRole(this.value)">
+              <option value="resident" <%= "resident".equalsIgnoreCase(userRole) ? "selected" : "" %>>地域住民</option>
+              <option value="business" <%= "business".equalsIgnoreCase(userRole) ? "selected" : "" %>>出店事業主</option>
+              <option value="owner" <%= "owner".equalsIgnoreCase(userRole) ? "selected" : "" %>>物件オーナー</option>
+              <option value="admin" <%= "admin".equalsIgnoreCase(userRole) ? "selected" : "" %>>運営管理者</option>
+            </select>
+          </label>
+          <span id="header-role-badge" class="header-role-badge" style="display:none;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span id="header-role-badge-text">地域住民</span>
+          </span>
+          <a href="#s06" class="btn-header-action notification-link" aria-label="通知一覧">
+            <svg class="m-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <span id="header-notif-badge" class="badge-counter" hidden>0</span>
+          </a>
+          <a href="#s18" class="btn-header-action profile-link"><span id="header-user-name"><%= Html.escape(displayName) %></span></a>
+        <% } %>
       </div>
     </div>
   </header>
@@ -81,8 +87,12 @@
       <nav class="footer-links" aria-label="関連メニュー">
         <a href="#s01">空き店舗を探す</a>
         <a href="#s21">開店の相談</a>
+        <% if (currentUser == null) { %>
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action">ログイン</a>
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action">新規会員登録</a>
+        <% } else { %>
+        <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('ログアウトしますか？');">ログアウト</a>
+        <% } %>
       </nav>
     </div>
     <details class="prototype-tools">
@@ -106,21 +116,45 @@
   <script src="${pageContext.request.contextPath}/js/screens.js?v=20261104_map_v3"></script>
   <script src="${pageContext.request.contextPath}/js/app.js?v=20261104_map_v3"></script>
   <script>
+    window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
     document.addEventListener('DOMContentLoaded', function () {
-      <% if (currentUser != null || !"resident".equals(userRole)) { %>
-        if (window.MachirikuStore && typeof MachirikuStore.setRole === 'function') {
-          MachirikuStore.setRole("<%= Html.escape(userRole) %>");
-        }
-      <% } %>
-      <% if (displayName != null && !displayName.trim().isEmpty() && !"LINEユーザー".equals(displayName)) { %>
-        if (window.MachirikuStore && typeof MachirikuStore.updateUserProfile === 'function') {
-          MachirikuStore.updateUserProfile({ name: "<%= Html.escape(displayName) %>" });
-        }
+      <% if (currentUser == null) { %>
+        // 未ログイン時はブラウザ側に残存するキャッシュを破棄し初期状態にリセット
         try {
           if (window.sessionStorage) {
-            window.sessionStorage.setItem('machiriku_user_display_name', "<%= Html.escape(displayName) %>");
+            window.sessionStorage.removeItem('machiriku_user_display_name');
+            window.sessionStorage.removeItem('machiriku_onboarding');
+          }
+          if (window.localStorage) {
+            const keysToRemove = [];
+            for (let i = 0; i < window.localStorage.length; i++) {
+              const k = window.localStorage.key(i);
+              if (k && k.startsWith('machiriku')) {
+                keysToRemove.push(k);
+              }
+            }
+            keysToRemove.forEach(k => window.localStorage.removeItem(k));
+          }
+          if (window.MachirikuStore && typeof window.MachirikuStore.resetState === 'function') {
+            window.MachirikuStore.resetState();
           }
         } catch (_) {}
+      <% } else { %>
+        <% if (!"resident".equals(userRole)) { %>
+          if (window.MachirikuStore && typeof MachirikuStore.setRole === 'function') {
+            MachirikuStore.setRole("<%= Html.escape(userRole) %>");
+          }
+        <% } %>
+        <% if (displayName != null && !displayName.trim().isEmpty() && !"LINEユーザー".equals(displayName)) { %>
+          if (window.MachirikuStore && typeof MachirikuStore.updateUserProfile === 'function') {
+            MachirikuStore.updateUserProfile({ name: "<%= Html.escape(displayName) %>" });
+          }
+          try {
+            if (window.sessionStorage) {
+              window.sessionStorage.setItem('machiriku_user_display_name', "<%= Html.escape(displayName) %>");
+            }
+          } catch (_) {}
+        <% } %>
       <% } %>
 
       // すでにサーブレット版が実装済みの画面へのアクセスは本番サーブレットへリダイレクト
@@ -134,6 +168,12 @@
           window.location.href = ctx + "/jp/machiriku/servlet/auth/Register.action";
           return true;
         }
+        <% if (currentUser == null) { %>
+        else if (h === '#s18' || h.startsWith('#s18?') || h.startsWith('#s18&')) {
+          window.location.href = ctx + "/jp/machiriku/servlet/auth/Login.action";
+          return true;
+        }
+        <% } %>
         return false;
       }
 

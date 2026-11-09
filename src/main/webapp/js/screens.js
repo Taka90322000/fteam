@@ -2259,6 +2259,30 @@ window.MachirikuScreens = (function() {
   let s18WorkGoogleMap = null;
   let s18WorkMarker = null;
 
+  function renderS18LogoutSection(isOnboarding) {
+    if (isOnboarding) {
+      return `
+        <div style="margin-top:1.5rem; text-align:center;">
+          <button type="button" onclick="MachirikuScreens.handleLogout(true)" style="background:none; border:none; color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer; padding:0.4rem 0.8rem;">
+            登録を中断してログアウト
+          </button>
+        </div>
+      `;
+    }
+    return `
+      <div style="margin-top:2.5rem; padding-top:1.5rem; border-top:1px solid var(--border-color); text-align:center;">
+        <button type="button" class="btn-outline" onclick="MachirikuScreens.handleLogout(false)" style="color:var(--danger-text, #c92a2a); border-color:var(--danger-border, #ffc9c9); background:var(--danger-bg-subtle, #fff5f5); width:100%; max-width:280px; min-height:44px; font-weight:700; font-size:0.95rem; border-radius:var(--radius-md); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; margin:0 auto; box-sizing:border-box;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          <span>ログアウト</span>
+        </button>
+      </div>
+    `;
+  }
+
   function renderS18Business(params, user, sessionData, displayName, email, activeRoleLabel, isOnboarding, emailNotify) {
     const bizCategories = [
       'カフェ・喫茶', '居酒屋・バー', 'ラーメン・麺類', 'レストラン・軽食',
@@ -2469,6 +2493,7 @@ window.MachirikuScreens = (function() {
               </button>
             </div>
           </form>
+          ${renderS18LogoutSection(isOnboarding)}
         </div>
       </section>
     `;
@@ -2577,6 +2602,7 @@ window.MachirikuScreens = (function() {
               </button>
             </div>
           </form>
+          ${renderS18LogoutSection(isOnboarding)}
         </div>
       </section>
     `;
@@ -3089,6 +3115,7 @@ window.MachirikuScreens = (function() {
               </button>
             </div>
           </form>
+          ${renderS18LogoutSection(isOnboarding)}
         </div>
       </section>
     `;
@@ -5700,6 +5727,52 @@ window.MachirikuScreens = (function() {
     handleLineLogin();
   }
 
+  function handleLogout(isOnboarding) {
+    const msg = isOnboarding ? '登録を中断してログアウトしますか？' : 'ログアウトしますか？';
+    if (!confirm(msg)) {
+      return;
+    }
+    try {
+      if (typeof window !== 'undefined') {
+        if (window.sessionStorage) {
+          window.sessionStorage.removeItem('machiriku_onboarding');
+          window.sessionStorage.removeItem('machiriku_user_display_name');
+        }
+        if (window.localStorage) {
+          const keysToRemove = [];
+          for (let i = 0; i < window.localStorage.length; i++) {
+            const k = window.localStorage.key(i);
+            if (k && k.startsWith('machiriku')) {
+              keysToRemove.push(k);
+            }
+          }
+          keysToRemove.forEach(k => window.localStorage.removeItem(k));
+        }
+        if (window.MachirikuStore && typeof window.MachirikuStore.resetState === 'function') {
+          window.MachirikuStore.resetState();
+        }
+      }
+    } catch (_) {}
+
+    const ctx = (typeof window !== 'undefined' && window.__MACHIRIKU_CONTEXT_PATH__ !== undefined)
+      ? window.__MACHIRIKU_CONTEXT_PATH__
+      : (window.location.pathname.startsWith('/machiriku') ? '/machiriku' : '');
+
+    if (ctx || window.location.pathname.includes('/machiriku')) {
+      window.location.href = (ctx || '/machiriku') + '/jp/machiriku/servlet/auth/Logout.action';
+    } else {
+      if (typeof MachirikuStore !== 'undefined' && typeof MachirikuStore.setRole === 'function') {
+        MachirikuStore.setRole('resident');
+      }
+      if (typeof MachirikuApp !== 'undefined') {
+        MachirikuApp.showToast('ログアウトしました');
+        MachirikuApp.navigate('s01');
+      } else {
+        window.location.href = 'index.html';
+      }
+    }
+  }
+
   function handleCreateSurveySubmit(form) {
     const prop = store.getPropertyById(form.storeSelect?.value);
     if (!prop) { MachirikuApp.showToast('対象物件を選んでください。'); return; }
@@ -5985,6 +6058,7 @@ window.MachirikuScreens = (function() {
     quickLogin,
     handleLineLogin,
     handleRegisterComplete,
+    handleLogout,
     initS18MapPicker,
     handleS18CurrentLocation,
     setS18Coords,

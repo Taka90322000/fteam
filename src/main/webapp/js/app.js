@@ -488,6 +488,7 @@ window.MachirikuApp = (function() {
     init,
     navigate,
     getCurrentScreen: () => currentScreenId,
-    showToast
+    showToast,
+    logout: (isOnboarding) => MachirikuScreens.handleLogout(isOnboarding)
   };
 })();

@@ -46,7 +46,7 @@
           </span>
           <span class="btn-header-action profile-link" style="cursor:default;"><span id="header-user-name"><%= escapeHtml(userName) %></span></span>
         <% } else if (currentUser != null) { %>
-          <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
+          <a href="${pageContext.request.contextPath}/index.jsp#s18" class="btn-header-action profile-link">
             <span><%= escapeHtml(currentUser.getDisplayName()) %> でログイン中</span>
           </a>
         <% } else { %>
@@ -65,6 +65,8 @@
       <% if (currentUser == null) { %>
       <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="subnav-link <%= "login".equals(request.getParameter("activeNav")) ? "is-active" : "" %>">ログイン</a>
       <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action" class="subnav-link <%= "register".equals(request.getParameter("activeNav")) ? "is-active" : "" %>">新規会員登録</a>
+      <% } else { %>
+      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('ログアウトしますか？');" class="subnav-link">ログアウト</a>
       <% } %>
     </div>
   </nav>

@@ -238,6 +238,11 @@
         </button>
       </div>
     </form>
+    <div style="margin-top:1.5rem; text-align:center;">
+      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('登録を中断してログアウトしますか？');" style="color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer;">
+        登録を中断してログアウト
+      </a>
+    </div>
   </div>
 </section>
 
