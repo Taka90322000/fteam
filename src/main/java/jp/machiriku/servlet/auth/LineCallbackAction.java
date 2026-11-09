@@ -78,35 +78,17 @@ public class LineCallbackAction extends Action {
                     }
                 }
             }
-            // 既存の役割・利用状態を維持し、利用可能なPENDING/ACTIVE以外や退会済み会員は拒否する。
-            if ((!"ACTIVE".equals(user.getAccountStatus()) && !"PENDING".equals(user.getAccountStatus()))
-                    || user.getWithdrawnAt() != null) {
+            // 本登録前の区分変更を行い、保存直前にDBの利用状態を再確認する。
+            if (registration && LineLoginSupport.available(user) && "PENDING".equals(user.getAccountStatus())) {
+                user = dao.updatePendingRole(profile.lineSubject(), attempt.registrationRole().toUpperCase(Locale.ROOT));
+            }
+            if (!LineLoginSupport.available(user)) {
                 LineLoginSupport.error(req, res, false, "このアカウントは利用できません。管理者にお問い合わせください。");
                 return;
             }
-            // デモや前の利用者の情報を引き継がず、セッションを作り直して固定化攻撃を防ぐ。
-            req.getSession().invalidate();
-            var session = req.getSession(true);
-            session.setAttribute("user", user);
-            session.setAttribute("userId", user.getUserId());
-            session.setAttribute("userRole", user.getUserRole().toLowerCase(Locale.ROOT));
-            // 初期設定では、DBの過去の編集値ではなく今回のLINE取得値を初期表示する。
-            session.setAttribute("lineDisplayName", profile.displayName());
-            session.setAttribute("lineEmail", profile.email() == null ? "" : profile.email());
-            // 登録経由の住民・事業主は、それぞれの追加設定画面へ進める。
-            if (registration && "RESIDENT".equalsIgnoreCase(user.getUserRole())) {
-                res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/ResidentSetup.action");
-                return;
-            }
-            if (registration && "BUSINESS".equalsIgnoreCase(user.getUserRole())) {
-                res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/BusinessSetup.action");
-                return;
-            }
-            if (registration && "OWNER".equalsIgnoreCase(user.getUserRole())) {
-                res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/OwnerSetup.action");
-                return;
-            }
-            res.sendRedirect(req.getContextPath() + "/index.jsp");
+            LineLoginSupport.signIn(req, user, profile.displayName(), profile.email());
+            res.sendRedirect(req.getContextPath() + (registration
+                    ? LineLoginSupport.registrationDestination(user) : "/index.jsp"));
         } catch (InterruptedException e) {
             // 通信中断の状態を上位の処理にも伝えられるよう、割り込みフラグを戻す。
             Thread.currentThread().interrupt();

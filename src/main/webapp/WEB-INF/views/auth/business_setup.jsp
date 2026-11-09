@@ -1,6 +1,6 @@
 <%-- 事業主の初期設定画面。初回はLINEのメールだけを反映し、名称や代表者名は本人に入力してもらう。 --%>
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="java.util.Map,java.util.Set,java.util.List,jp.machiriku.bean.RegistrationChoice,jp.machiriku.tool.Html" %>
+<%@ page import="java.util.Map,java.util.Set,java.util.List,jp.machiriku.bean.RegistrationChoice,jp.machiriku.bean.User,jp.machiriku.tool.Html" %>
 <%
   // 入力エラー時はテキスト・選択ID・地図の点列をそのまま再表示する。
   Map<String, String> formValues = request.getAttribute("formValues") instanceof Map
@@ -238,6 +238,14 @@
         </button>
       </div>
     </form>
+    <%-- 本登録前は、利用者区分の選択画面へ戻って登録を続けられる。 --%>
+    <% User registrationUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
+       if (registrationUser != null && "BUSINESS".equals(registrationUser.getUserRole()) && "PENDING".equals(registrationUser.getAccountStatus())
+        && registrationUser.getWithdrawnAt() == null) { %>
+      <div style="text-align:center; margin-top:1.25rem; font-size:0.875rem;">
+        <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action" style="color:var(--primary-700); font-weight:700; text-decoration:underline;">利用者区分を選び直す</a>
+      </div>
+    <% } %>
   </div>
 </section>
 

@@ -10,6 +10,7 @@ public class LoginAction extends Action {
 
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
+        if (LineLoginSupport.redirectAuthenticated(req, res, false)) { return; }
         // デモ用の利用区分は、設定が有効かつ許可された値の場合にだけ受け付ける。
         String demoRole = req.getParameter("demoRole");
         if ("true".equalsIgnoreCase(AppConfig.get("MACHIRIKU_DEMO_LOGIN_ENABLED"))

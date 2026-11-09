@@ -29,7 +29,7 @@
   <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css?v=20261106_resident_match28">
 </head>
 
-<body>
+<body data-context-path="${pageContext.request.contextPath}">
   <a class="skip-link" href="#main-app-container">本文へ移動</a>
   <header class="site-header">
     <div class="header-top">
@@ -103,7 +103,7 @@
   <script src="${pageContext.request.contextPath}/js/map.js"></script>
   <script src="${pageContext.request.contextPath}/js/store.js?v=20261104_map_v3"></script>
   <script src="${pageContext.request.contextPath}/js/screens.js?v=20261104_map_v3"></script>
-  <script src="${pageContext.request.contextPath}/js/app.js?v=20261104_map_v3"></script>
+  <script src="${pageContext.request.contextPath}/js/app.js?v=20261106_auth_navigation"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       <% if (currentUser != null || !"resident".equals(userRole)) { %>

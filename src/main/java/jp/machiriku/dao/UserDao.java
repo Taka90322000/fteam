@@ -54,6 +54,45 @@ public class UserDao extends Dao {
         }
     }
 
+    /** 本登録前の会員だけ利用区分を選び直す。本登録処理と同じ会員行をロックして競合を防ぐ。 */
+    public User updatePendingRole(String lineSubject, String role) throws SQLException {
+        if (!validText(lineSubject, 255) || role == null || !ROLES.contains(role)) {
+            throw new IllegalArgumentException("User registration fields are invalid.");
+        }
+        try (Connection connection = openConnection()) {
+            boolean autoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                User current;
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT " + COLUMNS + " FROM users WHERE line_subject=? FOR UPDATE")) {
+                    statement.setString(1, lineSubject);
+                    try (ResultSet rows = statement.executeQuery()) {
+                        current = rows.next() ? readUser(rows) : null;
+                    }
+                }
+                if (current != null && "PENDING".equals(current.getAccountStatus()) && current.getWithdrawnAt() == null) {
+                    try (PreparedStatement statement = connection.prepareStatement(
+                            "UPDATE users SET user_role=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? RETURNING " + COLUMNS)) {
+                        statement.setString(1, role);
+                        statement.setInt(2, current.getUserId());
+                        try (ResultSet rows = statement.executeQuery()) {
+                            if (!rows.next()) { throw new SQLException("The updated user could not be read."); }
+                            current = readUser(rows);
+                        }
+                    }
+                }
+                connection.commit();
+                return current;
+            } catch (SQLException | RuntimeException error) {
+                try { connection.rollback(); } catch (SQLException rollbackError) { error.addSuppressed(rollbackError); }
+                throw error;
+            } finally {
+                connection.setAutoCommit(autoCommit);
+            }
+        }
+    }
+
     /** DB制約に合わせて必須項目・文字数・公開登録用の利用区分を確認する。 */
     private static void validate(User user) {
         if (user == null || !validText(user.getDisplayName(), 100)

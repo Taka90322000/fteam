@@ -93,6 +93,14 @@ window.MachirikuApp = (function() {
     currentScreenId = parsed.screenId;
     currentParams = parsed.params;
 
+    // トップ画面内の認証リンクも、サーバー側のログイン状態と登録状態で振り分ける。
+    const contextPath = document.body?.getAttribute?.('data-context-path');
+    if (contextPath != null && (currentScreenId === 's16' || currentScreenId === 's17')) {
+      const action = currentScreenId === 's16' ? 'Login' : 'Register';
+      window.location.replace(`${contextPath}/jp/machiriku/servlet/auth/${action}.action`);
+      return;
+    }
+
     // 初期設定中ガード: オンボーディングセッション未完了時に他画面への離脱を防止
     if (currentScreenId !== 's18') {
       try {

@@ -1,6 +1,6 @@
 <%-- 住民の初期設定画面。Actionから渡されたLINE表示名と任意のメールアドレスを初期表示に使う。 --%>
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="java.util.Map,jp.machiriku.tool.Html" %>
+<%@ page import="java.util.Map,jp.machiriku.bean.User,jp.machiriku.tool.Html" %>
 <%
   String displayName = (String) request.getAttribute("displayName");
   if (displayName == null) displayName = "";
@@ -227,6 +227,15 @@
         </button>
       </div>
     </form>
+    <%-- 本登録前の本人に、利用者区分の選択画面への導線を表示する。 --%>
+    <% User registrationUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
+       if (registrationUser != null && "RESIDENT".equals(registrationUser.getUserRole()) && "PENDING".equals(registrationUser.getAccountStatus())
+        && registrationUser.getWithdrawnAt() == null
+        && !("1".equals(request.getParameter("preview")) || "true".equalsIgnoreCase(request.getParameter("preview")))) { %>
+      <div style="text-align:center; margin-top:1.25rem; font-size:0.875rem;">
+        <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action" style="color:var(--primary-700); font-weight:700; text-decoration:underline;">利用者区分を選び直す</a>
+      </div>
+    <% } %>
   </div>
 </section>
 

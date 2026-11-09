@@ -6,8 +6,8 @@
 BEGIN;
 -- publicスキーマ内のオブジェクトを利用できるようにする。
 GRANT USAGE ON SCHEMA public TO :"app_user";
--- 既存会員の検索と新規会員の登録に必要な権限を付与する。
-GRANT SELECT, INSERT ON TABLE public.users TO :"app_user";
+-- 会員の検索・登録と、本登録前の利用区分の更新に必要な権限を付与する。
+GRANT SELECT, INSERT, UPDATE ON TABLE public.users TO :"app_user";
 -- 会員IDの自動採番に使うシーケンスを利用できるようにする。
 GRANT USAGE ON SEQUENCE public.users_user_id_seq TO :"app_user";
 COMMIT;

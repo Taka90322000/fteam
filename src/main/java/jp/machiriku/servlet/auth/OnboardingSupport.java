@@ -87,6 +87,7 @@ final class OnboardingSupport {
         session.setAttribute("userEmail", saved.getEmail() == null ? "" : saved.getEmail());
         session.setAttribute("isOnboarded", true);
         session.removeAttribute(CSRF_KEY);
+        session.removeAttribute(LineLoginSupport.REGISTRATION_CSRF_KEY);
     }
 
     static void logDatabaseError(HttpServletRequest req, java.sql.SQLException error) {

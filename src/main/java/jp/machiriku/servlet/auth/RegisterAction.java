@@ -9,6 +9,8 @@ public class RegisterAction extends Action {
 
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
+        if (LineLoginSupport.redirectAuthenticated(req, res, true)) { return; }
+        LineLoginSupport.prepareRegistration(req);
         // 新規会員登録画面JSPへフォワード
         req.getRequestDispatcher("/WEB-INF/views/auth/register.jsp").forward(req, res);
     }
