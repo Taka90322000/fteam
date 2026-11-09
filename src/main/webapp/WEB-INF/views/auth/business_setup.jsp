@@ -99,7 +99,7 @@
         <label for="s18-biz-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-        <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.get("phone")) %>" required placeholder="例: 090-1234-5678">
+        <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.get("phone")) %>" required placeholder="例: 09012345678 (ハイフンなし)">
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店応募や物件オーナーとの連絡・確認用に使用されます。</span>
       </div>
 
@@ -238,6 +238,11 @@
         </button>
       </div>
     </form>
+    <div style="margin-top:1.5rem; text-align:center;">
+      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('登録を中断してログアウトしますか？');" style="color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer;">
+        登録を中断してログアウト
+      </a>
+    </div>
     <%-- 本登録前は、利用者区分の選択画面へ戻って登録を続けられる。 --%>
     <% User registrationUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
        if (registrationUser != null && "BUSINESS".equals(registrationUser.getUserRole()) && "PENDING".equals(registrationUser.getAccountStatus())

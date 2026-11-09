@@ -1607,7 +1607,7 @@ window.MACHIRIKU_DATA = (function() {
       brand: "日光焙煎珈琲スタンド / 釜川クラフトピッツァ",
       company: "合同会社日光珈琲舎",
       email: "suzuki.kenta@nikko-coffee.jp",
-      phone: "028-600-1122",
+      phone: "",
       experienceYears: "飲食業界歴12年（うち店舗統括マネージャー5年）",
       qualifications: [
         { name: "調理師免許", number: "第12458号 (栃木県知事)", verified: true },
@@ -1626,7 +1626,7 @@ window.MACHIRIKU_DATA = (function() {
       role: "owner",
       roleName: "物件オーナー",
       email: "sato.takeo@sato-fudosan.co.jp",
-      phone: "028-633-9988",
+      phone: "",
       company: "佐藤不動産管理（個人オーナー）",
       ownedPropIds: [],
       activePrPropIds: []

@@ -136,30 +136,31 @@ public class ProfileDao extends Dao {
     }
 
     public User saveBusiness(int userId, BusinessProfileInput input) throws SQLException {
-        if (input == null || input.areaGeoJson() == null || input.areaGeoJson().isBlank()
-                || input.industryTypeIds() == null || input.industryTypeIds().isEmpty()) {
-            throw new IllegalArgumentException("希望業種と地図上の希望範囲を指定してください。");
+        if (input == null || input.industryTypeIds() == null || input.industryTypeIds().isEmpty()) {
+            throw new IllegalArgumentException("希望業種を指定してください。");
         }
         return save(userId, "BUSINESS", (connection, user) -> {
             List<Integer> industries = uniqueIds(input.industryTypeIds());
             List<Integer> qualifications = uniqueIds(input.qualificationIds());
             validateMasterIds(connection, industries, true);
             validateMasterIds(connection, qualifications, false);
-            // 自己交差など、数値の範囲だけでは検出できない不正なポリゴンもPostGISで確認する。
-            validatePolygon(connection, input.areaGeoJson());
+            if (input.areaGeoJson() != null && !input.areaGeoJson().isBlank()) {
+                // 自己交差など、数値の範囲だけでは検出できない不正なポリゴンもPostGISで確認する。
+                validatePolygon(connection, input.areaGeoJson());
+            }
             try (PreparedStatement statement = connection.prepareStatement(
                     "UPDATE users SET email=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
                 statement.setString(1, nullable(input.email()));
                 statement.setInt(2, userId);
                 statement.executeUpdate();
             }
-            // LINEの表示名は保持し、本人が入力した代表者名は事業主プロフィールへ保存する。
+            // LINEの表示名は保持し、本人が入力した代表者名や電話番号は事業主プロフィールへ保存する。
             try (PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,area,phone_e164,icon_image_url) "
-                    + "VALUES (?,?,?,?,?,?,?,ST_SetSRID(ST_GeomFromGeoJSON(?),4326),?,?) "
+                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,phone_e164,icon_image_url) "
+                    + "VALUES (?,?,?,?,?,?,?,?,?) "
                     + "ON CONFLICT (user_id) DO UPDATE SET business_name=EXCLUDED.business_name,representative_name=EXCLUDED.representative_name,"
                     + "employee_count=EXCLUDED.employee_count,preferred_area=EXCLUDED.preferred_area,industry_experience=EXCLUDED.industry_experience,"
-                    + "management_experience=EXCLUDED.management_experience,area=EXCLUDED.area,phone_e164=EXCLUDED.phone_e164,"
+                    + "management_experience=EXCLUDED.management_experience,phone_e164=EXCLUDED.phone_e164,"
                     + "icon_image_url=EXCLUDED.icon_image_url,updated_at=CURRENT_TIMESTAMP")) {
                 statement.setInt(1, userId);
                 statement.setString(2, input.businessName());
@@ -168,9 +169,8 @@ public class ProfileDao extends Dao {
                 statement.setString(5, input.preferredArea());
                 statement.setString(6, input.industryExperience());
                 statement.setString(7, input.managementExperience());
-                statement.setString(8, input.areaGeoJson());
-                statement.setString(9, input.phoneE164());
-                statement.setString(10, nullable(input.iconImageUrl()));
+                statement.setString(8, input.phoneE164());
+                statement.setString(9, nullable(input.iconImageUrl()));
                 statement.executeUpdate();
             }
             try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_industry_preferences WHERE user_id=?")) {

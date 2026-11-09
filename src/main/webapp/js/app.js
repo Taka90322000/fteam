@@ -391,15 +391,29 @@ window.MachirikuApp = (function() {
       let displayName = null;
       if (typeof window !== 'undefined' && window.sessionStorage) {
         try {
-          const raw = window.sessionStorage.getItem('machiriku_onboarding');
-          if (raw) {
-            const data = JSON.parse(raw);
-            if (data && data.name) displayName = data.name;
+          const savedName = window.sessionStorage.getItem('machiriku_user_display_name');
+          if (savedName) displayName = savedName;
+          if (!displayName) {
+            const raw = window.sessionStorage.getItem('machiriku_onboarding');
+            if (raw) {
+              const data = JSON.parse(raw);
+              if (data && data.name) displayName = data.name;
+            }
           }
         } catch (_) {}
       }
       if (!displayName && currentParams && currentParams.displayName) {
         displayName = currentParams.displayName;
+      }
+      if (!displayName && user && user.name && user.name !== '田中 一郎') {
+        displayName = user.name;
+      }
+      // JSP/サーバー側で既にDOMに出力されている名前がある場合はそれを最優先で尊重
+      if (!displayName && userNameEl.textContent && userNameEl.textContent.trim()) {
+        const textInDom = userNameEl.textContent.trim();
+        if (textInDom !== '田中 一郎') {
+          displayName = textInDom;
+        }
       }
       if (!displayName) {
         displayName = (user && user.name && user.name !== '田中 一郎') ? user.name : (isOnboarding ? 'LINEユーザー' : (user.name || 'LINEユーザー'));
@@ -482,6 +496,7 @@ window.MachirikuApp = (function() {
     init,
     navigate,
     getCurrentScreen: () => currentScreenId,
-    showToast
+    showToast,
+    logout: (isOnboarding) => MachirikuScreens.handleLogout(isOnboarding)
   };
 })();

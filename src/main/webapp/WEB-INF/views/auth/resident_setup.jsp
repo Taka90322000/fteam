@@ -227,6 +227,11 @@
         </button>
       </div>
     </form>
+    <div style="margin-top:1.5rem; text-align:center;">
+      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('登録を中断してログアウトしますか？');" style="color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer;">
+        登録を中断してログアウト
+      </a>
+    </div>
     <%-- 本登録前の本人に、利用者区分の選択画面への導線を表示する。 --%>
     <% User registrationUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
        if (registrationUser != null && "RESIDENT".equals(registrationUser.getUserRole()) && "PENDING".equals(registrationUser.getAccountStatus())

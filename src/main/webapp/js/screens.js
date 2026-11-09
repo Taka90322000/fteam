@@ -2160,17 +2160,27 @@ window.MachirikuScreens = (function() {
   // =========================================================================
   // S16: ログイン (全員)
   // =========================================================================
-  function renderS16() {
+  function renderS16(params = {}) {
+    const errorHtml = params && params.errorMessage ? `
+      <div style="background:#fee2e2; border:1px solid #f87171; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-md); font-size:0.875rem; margin-bottom:1.25rem;">
+        ${escapeHtml(params.errorMessage)}
+      </div>
+    ` : '';
+
     return `
       <section class="screen-view s16-view" data-screen="S16">
         ${renderHeaderBanner("S16", "ログイン", "共通認証", "登録済みアカウントでログインします。デモ確認用に各ロール（地域住民・事業主・オーナー・運営管理者）に1クリックで即時ログインできます。")}
 
         <div class="form-stepper-box" style="max-width:540px;">
+          ${errorHtml}
           <div style="margin-top:0.5rem; margin-bottom:1.5rem;">
             <button type="button" class="btn-line-login" onclick="MachirikuScreens.handleLineLogin()">
               <img src="assets/line_icon.svg" alt="LINE" class="line-icon-svg" style="width:24px; height:24px; flex-shrink:0;">
               <span>LINEでログイン</span>
             </button>
+            <p style="font-size:0.8125rem; color:var(--text-sub); text-align:center; margin-top:0.75rem; line-height:1.5;">
+              LINEの表示名・ユーザーIDと、取得できる場合はメールアドレスを取得し、会員情報の確認に利用します。
+            </p>
           </div>
 
           <div style="text-align:center; margin-top:1.25rem; font-size:0.875rem;">
@@ -2249,6 +2259,30 @@ window.MachirikuScreens = (function() {
   let s18WorkGoogleMap = null;
   let s18WorkMarker = null;
 
+  function renderS18LogoutSection(isOnboarding) {
+    if (isOnboarding) {
+      return `
+        <div style="margin-top:1.5rem; text-align:center;">
+          <button type="button" onclick="MachirikuScreens.handleLogout(true)" style="background:none; border:none; color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer; padding:0.4rem 0.8rem;">
+            登録を中断してログアウト
+          </button>
+        </div>
+      `;
+    }
+    return `
+      <div style="margin-top:2.5rem; padding-top:1.5rem; border-top:1px solid var(--border-color); text-align:center;">
+        <button type="button" class="btn-outline" onclick="MachirikuScreens.handleLogout(false)" style="color:var(--danger-text, #c92a2a); border-color:var(--danger-border, #ffc9c9); background:var(--danger-bg-subtle, #fff5f5); width:100%; max-width:280px; min-height:44px; font-weight:700; font-size:0.95rem; border-radius:var(--radius-md); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; margin:0 auto; box-sizing:border-box;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          <span>ログアウト</span>
+        </button>
+      </div>
+    `;
+  }
+
   function renderS18Business(params, user, sessionData, displayName, email, activeRoleLabel, isOnboarding, emailNotify) {
     const bizCategories = [
       'カフェ・喫茶', '居酒屋・バー', 'ラーメン・麺類', 'レストラン・軽食',
@@ -2326,7 +2360,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-biz-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(isOnboarding ? '' : (user.phone || ''))}" required placeholder="例: 090-1234-5678">
+              <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(sessionData?.phone || '')}" required placeholder="例: 09012345678 (ハイフンなし)">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店応募や物件オーナーとの連絡・確認用に使用されます。</span>
             </div>
 
@@ -2459,6 +2493,7 @@ window.MachirikuScreens = (function() {
               </button>
             </div>
           </form>
+          ${renderS18LogoutSection(isOnboarding)}
         </div>
       </section>
     `;
@@ -2524,7 +2559,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-owner-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(isOnboarding ? '' : (user.phone || ''))}" required placeholder="例: 028-633-9988">
+              <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(sessionData?.phone || '')}" required placeholder="例: 09012345678 (ハイフンなし)">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店希望者との連絡、物件問い合わせや運営確認用に使用されます。</span>
             </div>
 
@@ -2567,6 +2602,7 @@ window.MachirikuScreens = (function() {
               </button>
             </div>
           </form>
+          ${renderS18LogoutSection(isOnboarding)}
         </div>
       </section>
     `;
@@ -3079,6 +3115,7 @@ window.MachirikuScreens = (function() {
               </button>
             </div>
           </form>
+          ${renderS18LogoutSection(isOnboarding)}
         </div>
       </section>
     `;
@@ -3902,8 +3939,16 @@ window.MachirikuScreens = (function() {
     try {
       if (typeof window !== 'undefined' && window.sessionStorage) {
         window.sessionStorage.removeItem('machiriku_onboarding');
+        if (name) {
+          window.sessionStorage.setItem('machiriku_user_display_name', name);
+        }
       }
     } catch (_) {}
+
+    const headerNameEl = document.getElementById('header-user-name');
+    if (headerNameEl && name) {
+      headerNameEl.textContent = name;
+    }
 
     if (typeof MachirikuApp !== 'undefined') {
       MachirikuApp.showToast('基本情報を登録しました！マチリクへようこそ');
@@ -5682,6 +5727,52 @@ window.MachirikuScreens = (function() {
     handleLineLogin();
   }
 
+  function handleLogout(isOnboarding) {
+    const msg = isOnboarding ? '登録を中断してログアウトしますか？' : 'ログアウトしますか？';
+    if (!confirm(msg)) {
+      return;
+    }
+    try {
+      if (typeof window !== 'undefined') {
+        if (window.sessionStorage) {
+          window.sessionStorage.removeItem('machiriku_onboarding');
+          window.sessionStorage.removeItem('machiriku_user_display_name');
+        }
+        if (window.localStorage) {
+          const keysToRemove = [];
+          for (let i = 0; i < window.localStorage.length; i++) {
+            const k = window.localStorage.key(i);
+            if (k && k.startsWith('machiriku')) {
+              keysToRemove.push(k);
+            }
+          }
+          keysToRemove.forEach(k => window.localStorage.removeItem(k));
+        }
+        if (window.MachirikuStore && typeof window.MachirikuStore.resetState === 'function') {
+          window.MachirikuStore.resetState();
+        }
+      }
+    } catch (_) {}
+
+    const ctx = (typeof window !== 'undefined' && window.__MACHIRIKU_CONTEXT_PATH__ !== undefined)
+      ? window.__MACHIRIKU_CONTEXT_PATH__
+      : (window.location.pathname.startsWith('/machiriku') ? '/machiriku' : '');
+
+    if (ctx || window.location.pathname.includes('/machiriku')) {
+      window.location.href = (ctx || '/machiriku') + '/jp/machiriku/servlet/auth/Logout.action';
+    } else {
+      if (typeof MachirikuStore !== 'undefined' && typeof MachirikuStore.setRole === 'function') {
+        MachirikuStore.setRole('resident');
+      }
+      if (typeof MachirikuApp !== 'undefined') {
+        MachirikuApp.showToast('ログアウトしました');
+        MachirikuApp.navigate('s01');
+      } else {
+        window.location.href = 'index.html';
+      }
+    }
+  }
+
   function handleCreateSurveySubmit(form) {
     const prop = store.getPropertyById(form.storeSelect?.value);
     if (!prop) { MachirikuApp.showToast('対象物件を選んでください。'); return; }
@@ -5967,6 +6058,7 @@ window.MachirikuScreens = (function() {
     quickLogin,
     handleLineLogin,
     handleRegisterComplete,
+    handleLogout,
     initS18MapPicker,
     handleS18CurrentLocation,
     setS18Coords,
