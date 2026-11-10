@@ -248,6 +248,7 @@ public class ProfileDaoTest {
         assertEquals("4326", text("SELECT ST_SRID(area)::text FROM business_profiles WHERE user_id=2"));
         assertEquals("POLYGON", text("SELECT GeometryType(area) FROM business_profiles WHERE user_id=2"));
         assertEquals("true", text("SELECT ST_IsValid(area)::text FROM business_profiles WHERE user_id=2"));
+        assertBusinessArea(AREA);
         assertEquals(2, count("SELECT count(*) FROM user_industry_preferences WHERE user_id=2"));
         assertEquals(1, count("SELECT count(*) FROM business_qualifications WHERE business_user_id=2 AND is_active"));
         assertEquals("true", text("SELECT email_enabled::text FROM notification_settings WHERE user_id=2"));
@@ -262,16 +263,18 @@ public class ProfileDaoTest {
     }
 
     @Test
-    public void businessResubmissionPreservesQualificationDetailsAndReplacesIndustrySelection() throws Exception {
+    public void businessResubmissionReplacesAreaAndIndustrySelectionAndPreservesQualificationDetails() throws Exception {
         dao.saveBusiness(2, business(null, List.of(10), List.of(100, 101), AREA, false));
         execute("UPDATE business_qualifications SET credential_number='TEST-CREDENTIAL',obtained_on=DATE '2020-01-01' WHERE business_user_id=2 AND qualification_id=100");
-        dao.saveBusiness(2, business(null, List.of(11), List.of(100), AREA, false));
+        String updatedArea = "{\"type\":\"Polygon\",\"coordinates\":[[[139.90,36.58],[139.91,36.58],[139.91,36.59],[139.90,36.58]]]}";
+        dao.saveBusiness(2, business(null, List.of(11), List.of(100), updatedArea, false));
         assertEquals(1, count("SELECT count(*) FROM business_profiles WHERE user_id=2"));
+        assertBusinessArea(updatedArea);
         assertEquals("11", text("SELECT industry_type_id::text FROM user_industry_preferences WHERE user_id=2"));
         assertEquals("TEST-CREDENTIAL", text("SELECT credential_number FROM business_qualifications WHERE business_user_id=2 AND qualification_id=100"));
         assertEquals("2020-01-01", text("SELECT obtained_on::text FROM business_qualifications WHERE business_user_id=2 AND qualification_id=100"));
         assertEquals("false", text("SELECT is_active::text FROM business_qualifications WHERE business_user_id=2 AND qualification_id=101"));
-        dao.saveBusiness(2, business(null, List.of(11), List.of(101), AREA, false));
+        dao.saveBusiness(2, business(null, List.of(11), List.of(101), updatedArea, false));
         assertEquals("true", text("SELECT is_active::text FROM business_qualifications WHERE business_user_id=2 AND qualification_id=101"));
     }
 
@@ -353,6 +356,17 @@ public class ProfileDaoTest {
     private LocationInput work() { return location("WORK", "駅前通り2-2"); }
     private LocationInput location(String kind, String address) {
         return new LocationInput(kind, "栃木県", "宇都宮市", address, new BigDecimal("36.561000"), new BigDecimal("139.883000"));
+    }
+
+    private void assertBusinessArea(String geoJson) throws SQLException {
+        try (var statement = connection.prepareStatement(
+                "SELECT ST_Equals(area, ST_SetSRID(ST_GeomFromGeoJSON(?),4326)) FROM business_profiles WHERE user_id=2")) {
+            statement.setString(1, geoJson);
+            try (ResultSet row = statement.executeQuery()) {
+                assertTrue(row.next());
+                assertTrue("送信した出店希望範囲が保存されること", row.getBoolean(1));
+            }
+        }
     }
 
     private void execute(String query) throws SQLException { try (Statement sql = connection.createStatement()) { sql.execute(query); } }

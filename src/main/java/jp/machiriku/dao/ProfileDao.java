@@ -144,9 +144,10 @@ public class ProfileDao extends Dao {
             List<Integer> qualifications = uniqueIds(input.qualificationIds());
             validateMasterIds(connection, industries, true);
             validateMasterIds(connection, qualifications, false);
-            if (input.areaGeoJson() != null && !input.areaGeoJson().isBlank()) {
+            String areaGeoJson = nullable(input.areaGeoJson());
+            if (areaGeoJson != null) {
                 // 自己交差など、数値の範囲だけでは検出できない不正なポリゴンもPostGISで確認する。
-                validatePolygon(connection, input.areaGeoJson());
+                validatePolygon(connection, areaGeoJson);
             }
             try (PreparedStatement statement = connection.prepareStatement(
                     "UPDATE users SET email=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
@@ -156,12 +157,12 @@ public class ProfileDao extends Dao {
             }
             // LINEの表示名は保持し、本人が入力した代表者名や電話番号は事業主プロフィールへ保存する。
             try (PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,phone_e164,icon_image_url) "
-                    + "VALUES (?,?,?,?,?,?,?,?,?) "
+                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,phone_e164,icon_image_url,area) "
+                    + "VALUES (?,?,?,?,?,?,?,?,?,ST_SetSRID(ST_GeomFromGeoJSON(?),4326)) "
                     + "ON CONFLICT (user_id) DO UPDATE SET business_name=EXCLUDED.business_name,representative_name=EXCLUDED.representative_name,"
                     + "employee_count=EXCLUDED.employee_count,preferred_area=EXCLUDED.preferred_area,industry_experience=EXCLUDED.industry_experience,"
                     + "management_experience=EXCLUDED.management_experience,phone_e164=EXCLUDED.phone_e164,"
-                    + "icon_image_url=EXCLUDED.icon_image_url,updated_at=CURRENT_TIMESTAMP")) {
+                    + "icon_image_url=EXCLUDED.icon_image_url,area=EXCLUDED.area,updated_at=CURRENT_TIMESTAMP")) {
                 statement.setInt(1, userId);
                 statement.setString(2, input.businessName());
                 statement.setString(3, input.representativeName());
@@ -171,6 +172,7 @@ public class ProfileDao extends Dao {
                 statement.setString(7, input.managementExperience());
                 statement.setString(8, input.phoneE164());
                 statement.setString(9, nullable(input.iconImageUrl()));
+                statement.setString(10, areaGeoJson);
                 statement.executeUpdate();
             }
             try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_industry_preferences WHERE user_id=?")) {
