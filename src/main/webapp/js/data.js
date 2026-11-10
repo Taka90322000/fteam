@@ -80,18 +80,6 @@ window.MACHIRIKU_DATA = (function() {
 
   // Virtual property catalog. Galleries: tools/update-generated-galleries.cjs
   const DATASET_VERSION = "machiriku-ai-v1";
-  const AREAS = [
-  "オリオン通り・中心街",
-  "宇都宮駅西口・大通り",
-  "東武駅前・中央",
-  "ユニオン通り・西",
-  "宇都宮駅東口・宿郷",
-  "釜川・中央",
-  "バンバ通り・二荒山",
-  "南宇都宮・滝の原",
-  "戸祭・競輪場通り",
-  "御幸ケ原・岡本"
-];
   const PROPERTIES = [
   {
     "id": "prop-orion-01",
@@ -109,8 +97,7 @@ window.MACHIRIKU_DATA = (function() {
     "buildingName": "オリオン通りサウスビル",
     "unitNumber": "101",
     "propertyType": "賃貸店舗",
-    "subtitle": "路面貸店舗 / 1階/4階建 / 52.8㎡",
-    "area": "オリオン通り・中心街",
+    "subtitle": "使用部分面積: 52.8㎡",
     "sourceArea": "宇都宮市江野町",
     "address": "栃木県宇都宮市江野町5-12",
     "access": "東武宇都宮駅 徒歩3分",
@@ -227,17 +214,17 @@ window.MACHIRIKU_DATA = (function() {
     "sourceNotes": [],
     "residentVoices": [
       {
-        "author": "近隣にお勤めの会社員（30代女性）",
+        "author": "30代・女性（地域住民）",
         "text": "オリオン通りを毎朝通勤で通るので、朝7時台からテイクアウトできる焼きたてパンとコーヒーのお店があったら絶対通います！",
         "date": "2026-10-24"
       },
       {
-        "author": "地元在住の主婦（40代）",
+        "author": "40代・女性（地域住民）",
         "text": "買い物の合間にゆっくり座れる落ち着いたカフェが欲しいです。ベビーカーでも入りやすい段差なしの路面店なら最高です。",
         "date": "2026-10-22"
       },
       {
-        "author": "市内の学生（20代）",
+        "author": "20代（地域住民）",
         "text": "放課後や休日に友達と立ち寄れる映えるスイーツやカフェがあると嬉しい。夜も少し遅くまで営業してほしい！",
         "date": "2026-10-20"
       }
@@ -259,8 +246,7 @@ window.MACHIRIKU_DATA = (function() {
     "buildingName": "宇都宮大通りフロントタワー",
     "unitNumber": "102",
     "propertyType": "賃貸店舗事務所",
-    "subtitle": "大通り角地店舗 / 1階/8階建 / 66.2㎡",
-    "area": "宇都宮駅西口・大通り",
+    "subtitle": "使用部分面積: 66.2㎡",
     "sourceArea": "宇都宮市本町",
     "address": "栃木県宇都宮市本町3-8",
     "access": "東武宇都宮駅 徒歩8分",
@@ -376,12 +362,12 @@ window.MACHIRIKU_DATA = (function() {
     "sourceNotes": [],
     "residentVoices": [
       {
-        "author": "近隣マンション在住（60代女性）",
+        "author": "60代以上・女性（地域住民）",
         "text": "大通り沿いに気軽に相談できる専門クリニックやドラッグストアがあると、高齢者でも通いやすくて非常に助かります。",
         "date": "2026-10-23"
       },
       {
-        "author": "周辺オフィス勤務（40代男性）",
+        "author": "40代・男性（地域住民）",
         "text": "昼休みや仕事帰りにサッと立ち寄れる調剤薬局や健康相談スポットができると重宝します。",
         "date": "2026-10-21"
       }
@@ -404,8 +390,7 @@ window.MACHIRIKU_DATA = (function() {
     "buildingName": "東武宇都宮駅前ダイニングテラス",
     "unitNumber": "201",
     "propertyType": "賃貸店舗",
-    "subtitle": "飲食専用フロア / 2階/3階建 / 59.4㎡",
-    "area": "東武駅前・中央",
+    "subtitle": "使用部分面積: 59.4㎡",
     "sourceArea": "宇都宮市池上町",
     "address": "栃木県宇都宮市池上町4-2",
     "access": "東武宇都宮駅 徒歩2分",
@@ -527,12 +512,12 @@ window.MACHIRIKU_DATA = (function() {
     "sourceNotes": [],
     "residentVoices": [
       {
-        "author": "東武線通勤の会社員（30代男性）",
+        "author": "30代・男性（地域住民）",
         "text": "仕事帰りにふらっと一人でも立ち寄れる、ワインやクラフトビールが美味しいバルを熱望しています！",
         "date": "2026-10-25"
       },
       {
-        "author": "近隣住民（20代女性）",
+        "author": "20代・女性（地域住民）",
         "text": "女子会やデートに使える雰囲気が良くて美味しい料理が出るビストロができると嬉しいです。",
         "date": "2026-10-22"
       }
@@ -555,8 +540,7 @@ window.MACHIRIKU_DATA = (function() {
     "buildingName": "ユニオンストリートスクエア",
     "unitNumber": "101",
     "propertyType": "賃貸店舗",
-    "subtitle": "路面セレクトショップ / 1階/3階建 / 41.2㎡",
-    "area": "ユニオン通り・西",
+    "subtitle": "使用部分面積: 41.2㎡",
     "sourceArea": "宇都宮市伝馬町",
     "address": "栃木県宇都宮市伝馬町2-18",
     "access": "東武宇都宮駅 徒歩5分",
@@ -672,12 +656,12 @@ window.MACHIRIKU_DATA = (function() {
     "sourceNotes": [],
     "residentVoices": [
       {
-        "author": "市内在住のファッション好き（20代男性）",
+        "author": "20代・男性（地域住民）",
         "text": "ユニオン通りらしい、エッジの効いた国内デザイナーズや上質な古着を扱うセレクトショップが入ってほしいです！",
         "date": "2026-10-24"
       },
       {
-        "author": "近隣のアート愛好家（30代女性）",
+        "author": "30代・女性（地域住民）",
         "text": "器や日用品を丁寧にセレクトした暮らしの道具店があると、散歩ついでに立ち寄りたい。",
         "date": "2026-10-21"
       }
@@ -700,8 +684,7 @@ window.MACHIRIKU_DATA = (function() {
     "buildingName": "東宿郷LRTステーションフロント",
     "unitNumber": "202",
     "propertyType": "賃貸店舗事務所",
-    "subtitle": "LRT駅前オフィス / 2階/6階建 / 74.5㎡",
-    "area": "宇都宮駅東口・宿郷",
+    "subtitle": "使用部分面積: 74.5㎡",
     "sourceArea": "宇都宮市東宿郷",
     "address": "栃木県宇都宮市東宿郷3丁目2-5",
     "access": "東宿郷駅 徒歩2分",
@@ -817,12 +800,12 @@ window.MACHIRIKU_DATA = (function() {
     "sourceNotes": [],
     "residentVoices": [
       {
-        "author": "東宿郷在住のテレワーカー（30代男性）",
+        "author": "30代・男性（地域住民）",
         "text": "LRT通勤沿線でドロップイン利用できる電源・Wi-Fi完備のコワーキングスペースが欲しいです。",
         "date": "2026-10-23"
       },
       {
-        "author": "地元IT起業家（40代男性）",
+        "author": "40代・男性（地域住民）",
         "text": "新幹線とLRTの両方に近いこの立地で、打ち合わせもできる洗練されたシェアオフィスを希望します。",
         "date": "2026-10-19"
       }
@@ -845,8 +828,7 @@ window.MACHIRIKU_DATA = (function() {
     "buildingName": "釜川プロムナードビル",
     "unitNumber": "101",
     "propertyType": "賃貸店舗",
-    "subtitle": "親水遊歩道テラス店舗 / 1階/3階建 / 46.5㎡",
-    "area": "釜川・中央",
+    "subtitle": "使用部分面積: 46.5㎡",
     "sourceArea": "宇都宮市中央",
     "address": "栃木県宇都宮市中央5丁目1-14",
     "access": "東武宇都宮駅 徒歩7分",
@@ -969,12 +951,12 @@ window.MACHIRIKU_DATA = (function() {
     "sourceNotes": [],
     "residentVoices": [
       {
-        "author": "釜川散歩が日課の住民（50代女性）",
+        "author": "50代・女性（地域住民）",
         "text": "釜川の景色を見ながら美味しいランチやお茶を楽しめるテラスカフェが復活してくれたら嬉しいです。",
         "date": "2026-10-24"
       },
       {
-        "author": "近隣デザイナー（30代男性）",
+        "author": "30代・男性（地域住民）",
         "text": "夜にふらっと寄ってナチュールワインと小皿料理が楽しめる大人のビストロを期待しています。",
         "date": "2026-10-22"
       }
@@ -997,8 +979,7 @@ window.MACHIRIKU_DATA = (function() {
     "buildingName": "バンバスクエア",
     "unitNumber": "103",
     "propertyType": "賃貸店舗",
-    "subtitle": "門前町和モダン店舗 / 1階/3階建 / 49.6㎡",
-    "area": "バンバ通り・二荒山",
+    "subtitle": "使用部分面積: 49.6㎡",
     "sourceArea": "宇都宮市馬場通り",
     "address": "栃木県宇都宮市馬場通り1丁目3-6",
     "access": "東武宇都宮駅 徒歩6分",
@@ -1114,12 +1095,12 @@ window.MACHIRIKU_DATA = (function() {
     "sourceNotes": [],
     "residentVoices": [
       {
-        "author": "神社参拝によく訪れる市民（50代女性）",
+        "author": "50代・女性（地域住民）",
         "text": "お参りの帰りにお抹茶や季節の和菓子を楽しめる上品な甘味処があると本当に嬉しいです。",
         "date": "2026-10-25"
       },
       {
-        "author": "中心街散策好き（30代男性）",
+        "author": "30代・男性（地域住民）",
         "text": "宇都宮の伝統や食文化を発信するような、こだわりの和カフェやテイクアウト店を期待しています。",
         "date": "2026-10-20"
       }
@@ -1142,8 +1123,7 @@ window.MACHIRIKU_DATA = (function() {
     "buildingName": "南宇都宮大谷石蔵スタジオ",
     "unitNumber": "1階",
     "propertyType": "賃貸店舗事務所",
-    "subtitle": "大谷石蔵リノベ物件 / 1階/1階建 / 57.2㎡",
-    "area": "南宇都宮・滝の原",
+    "subtitle": "使用部分面積: 57.2㎡",
     "sourceArea": "宇都宮市吉野",
     "address": "栃木県宇都宮市吉野2丁目6-15",
     "access": "南宇都宮駅 徒歩3分",
@@ -1273,12 +1253,12 @@ window.MACHIRIKU_DATA = (function() {
     "sourceNotes": [],
     "residentVoices": [
       {
-        "author": "近隣のアート作家（30代女性）",
+        "author": "30代・女性（地域住民）",
         "text": "大谷石の蔵の空間は本当に特別。ワークショップや展示ができるギャラリースタジオができると文化の発信地になります！",
         "date": "2026-10-23"
       },
       {
-        "author": "地元住民（40代男性）",
+        "author": "40代・男性（地域住民）",
         "text": "南宇都宮の石蔵文化を守りつつ、休日に行きたくなるような体験工房やカフェに期待しています。",
         "date": "2026-10-18"
       }
@@ -1301,8 +1281,7 @@ window.MACHIRIKU_DATA = (function() {
     "buildingName": "戸祭競輪場通りサニープレイス",
     "unitNumber": "102",
     "propertyType": "賃貸店舗",
-    "subtitle": "ロードサイドサロン / 1階/2階建 / 78.0㎡",
-    "area": "戸祭・競輪場通り",
+    "subtitle": "使用部分面積: 78.0㎡",
     "sourceArea": "宇都宮市中戸祭町",
     "address": "栃木県宇都宮市中戸祭町825-4",
     "access": "東武宇都宮駅 徒歩28分",
@@ -1418,12 +1397,12 @@ window.MACHIRIKU_DATA = (function() {
     "sourceNotes": [],
     "residentVoices": [
       {
-        "author": "戸祭在住の主婦（30代女性）",
+        "author": "30代・女性（地域住民）",
         "text": "駐車場があって通いやすい美容室やネイルサロンが欲しいです。平日の昼間にサッと行けるお店を希望！",
         "date": "2026-10-24"
       },
       {
-        "author": "近隣住民（40代男性）",
+        "author": "40代・男性（地域住民）",
         "text": "仕事帰りや週末に寄れるパーソナルジムや整体院ができると健康のために通いたいです。",
         "date": "2026-10-20"
       }
@@ -1446,8 +1425,7 @@ window.MACHIRIKU_DATA = (function() {
     "buildingName": "御幸ケ原コミュニティプラザ",
     "unitNumber": "101",
     "propertyType": "賃貸店舗事務所",
-    "subtitle": "郊外タウン複合店舗 / 1階/2階建 / 80.5㎡",
-    "area": "御幸ケ原・岡本",
+    "subtitle": "使用部分面積: 80.5㎡",
     "sourceArea": "宇都宮市御幸ケ原町",
     "address": "栃木県宇都宮市御幸ケ原町142-8",
     "access": "岡本駅 徒歩18分",
@@ -1570,12 +1548,12 @@ window.MACHIRIKU_DATA = (function() {
     "sourceNotes": [],
     "residentVoices": [
       {
-        "author": "御幸ケ原在住の保護者（40代女性）",
+        "author": "40代・女性（地域住民）",
         "text": "子供が安全に通えるプログラミングや英語のスクールが徒歩圏内にできたらぜひ通わせたいです。",
         "date": "2026-10-22"
       },
       {
-        "author": "近隣子育て世帯（30代男性）",
+        "author": "30代・男性（地域住民）",
         "text": "駐車場が広くて送り迎えがしやすい学習塾や習い事教室がこの地域には必要です。",
         "date": "2026-10-18"
       }
@@ -1684,7 +1662,6 @@ window.MACHIRIKU_DATA = (function() {
 
   return {
     DATASET_VERSION,
-    AREAS,
     CATEGORIES,
     SUBCATS,
     PROPERTIES,

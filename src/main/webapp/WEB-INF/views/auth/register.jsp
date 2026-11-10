@@ -21,6 +21,7 @@
   </div>
 
   <div class="form-stepper-box" style="max-width:540px; margin:0 auto; background:var(--bg-card); padding:2rem; border-radius:var(--radius-lg); border:1px solid var(--border-color); box-shadow:var(--shadow-sm);">
+    <h1 style="font-size:1.35rem; font-weight:800; color:var(--text-main); margin:0 0 1.25rem 0; text-align:center;">種別別 会員登録</h1>
     
     <%-- 認証開始時や登録処理でActionから戻された案内文を表示する。 --%>
     <% if (request.getAttribute("errorMessage") != null) { %>

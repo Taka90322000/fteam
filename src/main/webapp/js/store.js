@@ -31,7 +31,6 @@ window.MachirikuStore = (function() {
       adminReports: [],
       filters: {
         keyword: "",
-        area: "all",
         pref: "栃木",
         cities: ["宇都宮市"],
         category: "all",
@@ -157,7 +156,7 @@ window.MachirikuStore = (function() {
     if (keyword && keyword.trim()) {
       const kw = keyword.trim().toLowerCase();
       list = list.filter(p => 
-        [p.title, p.address, p.subtitle, p.condition, p.area, p.access, p.description].some(value => String(value || '').toLowerCase().includes(kw))
+        [p.title, p.address, p.subtitle, p.condition, p.access, p.description].some(value => String(value || '').toLowerCase().includes(kw))
       );
     }
 
@@ -169,9 +168,7 @@ window.MachirikuStore = (function() {
       list = list.filter(p => cities.some(city => p.address && p.address.includes(city)));
     }
 
-    if (area && area !== "all") {
-      list = list.filter(p => p.area.includes(area));
-    }
+
 
     if (categories && Array.isArray(categories) && categories.length > 0) {
       list = list.filter(p => {
@@ -614,7 +611,6 @@ window.MachirikuStore = (function() {
       code: "UT-NEW-" + Math.floor(Math.random() * 90 + 10),
       title: propData.title,
       subtitle: propData.subtitle || "宇都宮中心市街地の新規登録空き店舗",
-      area: propData.area || "中心部",
       address: propData.address,
       access: propData.access,
       rent: Number(propData.rent),

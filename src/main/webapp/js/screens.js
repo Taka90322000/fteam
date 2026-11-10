@@ -98,7 +98,6 @@ window.MachirikuScreens = (function() {
     return `<div class="listing-source">
       <p>掲載元: ${escapeHtml(prop.source.site)} / 情報更新日: ${escapeHtml(prop.source.listingUpdatedAt)} / 取得日: ${escapeHtml(prop.source.retrievedAt.slice(0, 10))}</p>
       <p>掲載条件は取得時点の情報です。現在の募集状況・利用可能な業種は掲載元でご確認ください。</p>
-      <a class="btn-secondary" href="${escapeHtml(prop.source.url)}" target="_blank" rel="noopener noreferrer">HOME'Sで物件の写真・掲載情報を見る</a>
       ${prop.sourceNotes?.length ? `<details><summary>掲載情報の補足</summary><ul>${prop.sourceNotes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul></details>` : ''}
     </div>`;
   }
@@ -571,16 +570,7 @@ window.MachirikuScreens = (function() {
               : `<span class="preview-zero-text">該当する物件: <strong>0件</strong> <small class="zero-hint">（賃料の範囲を広げてください）</small></span>`}
           </div>
 
-          <div class="rent-options-stack">
-            <label class="rent-option-check">
-              <input type="checkbox" id="check-include-mgmt" ${rentPopoverState.includeMgmtFee ? 'checked' : ''} onchange="MachirikuScreens.handleRentOptionChange('mgmt', this.checked)">
-              <span>管理費・共益費を含む</span>
-            </label>
-            <label class="rent-option-check">
-              <input type="checkbox" id="check-no-deposit" ${rentPopoverState.noDeposit ? 'checked' : ''} onchange="MachirikuScreens.handleRentOptionChange('deposit', this.checked)">
-              <span>敷金・礼金なし</span>
-            </label>
-          </div>
+
         </div>
         <div class="popover-footer">
           <button type="button" class="btn-text-action" onclick="MachirikuScreens.resetRentFilters()">リセット</button>
@@ -706,15 +696,12 @@ window.MachirikuScreens = (function() {
             <div class="card-info-pane">
               <div>
                 <h2 class="card-prop-title"><a class="property-title-link" href="#s02?id=${p.id}">${p.title}</a></h2>
-                <div class="card-prop-address">${p.address}（${p.access}）${p.isOutOfMap ? '<span class="map-range-label">中心街の模式図の範囲外</span>' : ''}</div>
+                <div class="card-prop-address">${p.address}</div>
                 <div class="card-rent-row">
                   <div class="rent-main">${rentMan}万円<small>/月</small></div>
-                  <div class="rent-sub">${mgmt}</div>
                 </div>
                 <div class="card-specs-row">
-                  <span><strong>${p.areaTsubo}</strong> 坪 (${p.areaSqm}㎡)</span>
-                  <span><strong>${p.floor}</strong></span>
-                  <span>${p.condition}</span>
+                  <span><strong>${p.areaSqm}㎡</strong>（約${p.areaTsubo}坪）</span>
                 </div>
               </div>
 
@@ -859,6 +846,22 @@ window.MachirikuScreens = (function() {
     const rentMan = formatRent(prop.rent);
     const mgmt = prop.managementFee == null ? '掲載なし（要確認）' : `${formatMoney(prop.managementFee)}円`;
 
+    const top3DemandsHtml = prop.topDemands.slice(0, 3).map((d, idx) => {
+      const sub = data.SUBCATS[d.subcatId] || { name: d.label, color: "var(--primary-600)", icon: "" };
+      const percent = Math.min(Math.round((d.score / (prop.demandScore || 1)) * 100), 100);
+      return `
+        <div class="demand-bar-item">
+          <div class="demand-bar-header" style="font-size:0.85rem;">
+            <span>第${idx + 1}位: ${sub.icon} ${sub.name}</span>
+            <span style="color:var(--primary-700); font-weight:700;">${d.votes}票 (${percent}%)</span>
+          </div>
+          <div class="demand-progress-track" style="height:8px; background:rgba(0,0,0,0.06);">
+            <div class="demand-progress-fill" style="width: ${percent}%; background-color: ${sub.color};"></div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
     const topDemandsHtml = prop.topDemands.map((d, idx) => {
       const sub = data.SUBCATS[d.subcatId] || { name: d.label, color: "var(--primary-600)", icon: "" };
       const percent = Math.min(Math.round((d.score / (prop.demandScore || 1)) * 100), 100);
@@ -919,12 +922,16 @@ window.MachirikuScreens = (function() {
       items: galleryItems
     };
 
+    setTimeout(() => {
+      initGallerySlider();
+    }, 0);
+
     const activeItem = galleryItems[initialIdx] || galleryItems[0];
     const kindLabel = getKindLabel(activeItem.kind);
 
     return `
       <section class="screen-view s02-view" data-screen="S02">
-        ${renderHeaderBanner("S02", prop.title, prop.statusLabel, prop.subtitle, [{ label: "物件検索", hash: "#s01" }])}
+        ${renderHeaderBanner("S02", prop.title, prop.statusLabel, `使用部分面積: ${prop.areaSqm}㎡（約${prop.areaTsubo}坪）`, [{ label: "物件検索", hash: "#s01" }])}
 
         <div class="detail-layout-grid">
           <!-- 左メインコンテンツ -->
@@ -938,27 +945,27 @@ window.MachirikuScreens = (function() {
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                   </button>
                 ` : ''}
-                <div class="gallery-main-view">
-                  <img id="gallery-active-image" src="${escapeHtml(activeItem.url)}" alt="${escapeHtml(prop.title)} - ${escapeHtml(activeItem.label)}" loading="eager" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
+                <div class="gallery-main-view" id="gallery-main-view">
+                  <div class="gallery-slider-track" id="gallery-slider-track" style="transform: translateX(-${initialIdx * 100}%);">
+                    ${galleryItems.map((item, idx) => `
+                      <div class="gallery-slide-item" data-index="${idx}">
+                        <img src="${escapeHtml(item.url)}" alt="${escapeHtml(prop.title)} - ${escapeHtml(item.label || '')}" loading="${idx === initialIdx ? 'eager' : 'lazy'}" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
+                      </div>
+                    `).join('')}
+                  </div>
                 </div>
                 ${galleryItems.length > 1 ? `
                   <button type="button" class="gallery-nav-btn next" onclick="MachirikuScreens.navGallery(1)" aria-label="次の写真">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                   </button>
                 ` : ''}
+                <!-- 右上: すべての写真ボタン -->
+                <button type="button" class="btn-gallery-all-overlay" onclick="MachirikuScreens.openAllPhotosModal('${prop.id}')" title="すべての写真を一覧表示">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:4px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>すべての写真 (${galleryItems.length}枚)
+                </button>
+                <!-- 右下: 枚数カウンター -->
                 <div class="gallery-counter-badge">
                   <span id="gallery-current-index">${initialIdx + 1}</span> / <span id="gallery-total-count">${galleryItems.length}</span>
-                </div>
-              </div>
-
-              <!-- 写真キャプション & 全写真ボタン -->
-              <div class="gallery-caption-row">
-                <div class="gallery-caption-left">
-                  <span class="gallery-kind-badge" id="gallery-kind-label">${escapeHtml(kindLabel)}</span>
-                  <span class="gallery-image-title" id="gallery-caption-text">${escapeHtml(activeItem.label)}</span>
-                </div>
-                <div class="gallery-caption-right">
-                  <button type="button" class="btn-text-gallery" onclick="MachirikuScreens.openAllPhotosModal('${prop.id}')">すべての写真 (${galleryItems.length}枚)</button>
                 </div>
               </div>
 
@@ -972,7 +979,6 @@ window.MachirikuScreens = (function() {
                     ${galleryItems.map((img, i) => `
                       <button type="button" class="gallery-thumb-btn ${i === initialIdx ? 'is-selected' : ''}" data-index="${i}" onclick="MachirikuScreens.selectGalleryImage(${i})" title="${escapeHtml(img.label)}">
                         <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.label)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
-                        <span class="thumb-kind-tag">${escapeHtml(getKindLabel(img.kind))}</span>
                       </button>
                     `).join('')}
                   </div>
@@ -983,59 +989,36 @@ window.MachirikuScreens = (function() {
               ` : ''}
             </div>
 
-            <!-- 物件概要カード (アットホーム仕様) -->
+            <!-- 物件概要カード (DB仕様準拠) -->
             <div class="detail-card">
               <h2 class="detail-card-title">物件募集概要</h2>
               <table class="specs-table">
                 <tbody>
                   <tr>
-                    <th>賃料 / 管理費等</th>
-                    <td><strong style="font-size:1.3rem; color:var(--accent-price);">${rentMan}万円</strong> /月 （管理費等: ${mgmt}）${prop.source && prop.rentTaxStatus === 'unknown' ? '<br><small>税区分は掲載元に確認</small>' : ''}</td>
-                  </tr>
-                  <tr>
-                    <th>敷金 / 礼金 / 保証金</th>
-                    <td>敷金: ${prop.deposit ?? '掲載なし（要確認）'} / 礼金: ${prop.keyMoney ?? '掲載なし（要確認）'} / 保証金: ${prop.securityDeposit ?? '掲載なし（要確認）'}</td>
+                    <th>月額賃料</th>
+                    <td><strong style="font-size:1.3rem; color:var(--accent-price);">${rentMan}万円</strong> /月</td>
                   </tr>
                   <tr>
                     <th>所在地</th>
                     <td>${prop.address}</td>
                   </tr>
-                  ${prop.otherFees?.length ? `<tr><th>その他の掲載費用</th><td><ul class="listing-fees">${prop.otherFees.map(f => `<li>${escapeHtml(f.name)}: ${escapeHtml(f.amountRaw)}</li>`).join('')}</ul></td></tr>` : ''}
-                  <tr>
-                    <th>交通・最寄駅</th>
-                    <td>${prop.access}</td>
-                  </tr>
                   <tr>
                     <th>使用部分面積</th>
-                    <td><strong>${prop.areaTsubo}坪</strong> （${prop.areaSqm}㎡）</td>
+                    <td><strong>${prop.areaSqm}㎡</strong>（約${prop.areaTsubo}坪）</td>
                   </tr>
                   <tr>
-                    <th>階数・構造</th>
-                    <td>${prop.floor} / ${prop.structure}（${prop.builtYear}）</td>
+                    <th>募集状態</th>
+                    <td><span class="badge-status status-voting">${prop.statusLabel || '募集中'}</span></td>
                   </tr>
                   <tr>
-                    <th>現況 / 引渡し</th>
-                    <td>${prop.listingStatusRaw || '掲載なし'} / ${prop.handover}</td>
-                  </tr>
-                  <tr>
-                    <th>業種条件</th>
-                    <td>${prop.condition}</td>
-                  </tr>
-                  <tr>
-                    <th>主要設備</th>
-                    <td>
-                      <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
-                        ${prop.facilities.map(f => `<span class="qual-badge"> ${f}</span>`).join("")}
-                      </div>
-                    </td>
+                    <th>現況</th>
+                    <td>${prop.listingStatusRaw || '空き店舗'}</td>
                   </tr>
                 </tbody>
               </table>
-              ${prop.broker ? `<p class="listing-broker">取扱会社: ${escapeHtml(prop.broker.name)}</p>` : ''}
               <div style="margin-top:1.25rem; font-size:0.9rem; line-height:1.7; color:var(--text-sub);">
                 ${prop.description}
               </div>
-              ${renderSourceInformation(prop)}
             </div>
 
             <!-- Decidim風 住民需要分析セクション -->
@@ -1069,21 +1052,28 @@ window.MachirikuScreens = (function() {
                 ${topDemandsHtml || '<p class="sample-note">まだ投票がありません。</p>'}
               </div>
 
-              <h3 style="font-size:0.95rem; font-weight:800; color:var(--primary-700); margin-bottom:0.75rem;">住民からの声・リクエスト</h3>
-              <div class="resident-quotes-stream">
-                ${residentVoicesHtml || '<p class="sample-note">まだリクエストはありません。</p>'}
-              </div>
             </div>
           </div>
 
           <!-- 右サイドバー: アクションCTA -->
           <div class="detail-side-pane">
             <div class="cta-box-card">
-              <div class="cta-price-banner">
-                <div style="font-size:0.875rem; color:var(--text-muted);">月額賃料${prop.rentTaxStatus === 'inclusive' ? '（税込）' : prop.rentTaxStatus === 'exclusive' ? '（税別）' : ''}</div>
-                <div style="font-size:1.8rem; font-weight:900; color:var(--accent-price);">${rentMan}万円</div>
-                <div style="font-size:0.875rem; color:var(--text-sub);">管理費等: ${mgmt}</div>
-              </div>
+              ${(state.currentRole === 'business' || state.currentRole === 'owner') ? `
+                <div class="cta-price-banner">
+                  <div style="font-size:0.875rem; color:var(--text-muted);">月額賃料${prop.rentTaxStatus === 'inclusive' ? '（税込）' : prop.rentTaxStatus === 'exclusive' ? '（税別）' : ''}</div>
+                  <div style="font-size:1.8rem; font-weight:900; color:var(--accent-price);">${rentMan}万円</div>
+                  <div style="font-size:0.875rem; color:var(--text-sub);">管理費等: ${mgmt}</div>
+                </div>
+              ` : `
+                <div class="cta-demand-summary-banner">
+                  <div style="font-size:0.95rem; font-weight:800; color:var(--primary-800); margin-bottom:0.75rem;">
+                    人気ランキング Top 3
+                  </div>
+                  <div class="demand-bar-list" style="margin-bottom:0; gap:0.65rem;">
+                    ${top3DemandsHtml || '<p class="sample-note">まだ投票がありません。</p>'}
+                  </div>
+                </div>
+              `}
 
               <div class="cta-buttons-stack">
                 ${state.currentRole === 'resident' ? `
@@ -1109,16 +1099,13 @@ window.MachirikuScreens = (function() {
               </nav>` : ''}
             </div>
 
-            <!-- 物件所在地ミニマップカード -->
+            <!-- 物件所在地GoogleMapカード -->
             <div class="detail-card" style="padding:1rem;">
               <div style="font-weight:700; font-size:0.875rem; margin-bottom:0.5rem;">所在地・周辺情報</div>
               <div style="font-size:0.875rem; color:var(--text-sub); margin-bottom:0.75rem;">
-                ${prop.address}<br>
-                ${prop.area}
+                ${prop.address}
               </div>
-              <button type="button" class="btn-secondary" style="width:100%; font-size:0.875rem;" onclick="MachirikuApp.navigate('s01')">
-                ${prop.isOutOfMap ? '物件一覧に戻る' : '模式図で位置を確認する'}
-              </button>
+              <div id="s02-location-map" data-lat="${prop.location?.lat || 36.559312}" data-lng="${prop.location?.lng || 139.882105}" data-title="${escapeHtml(prop.title)}" style="width:100%; height:200px; border-radius:var(--radius-sm); border:1px solid var(--border-color); overflow:hidden; background:var(--bg-subtle);"></div>
             </div>
           </div>
         </div>
@@ -1878,11 +1865,10 @@ window.MachirikuScreens = (function() {
     const editProp = editId ? store.getPropertyById(editId) : null;
     const isEdit = Boolean(editProp);
     const title = isEdit ? "物件情報の編集" : "新規物件の登録・掲載申請";
-    const facs = editProp ? (editProp.facilities || []) : ["都市ガス", "給排水設備"];
 
     return `
       <section class="screen-view s12-view" data-screen="S12">
-        ${renderHeaderBanner("S12", title, "物件オーナー", isEdit ? "登録済み物件の条件・賃料・設備情報を更新します。" : "所有する空き店舗の情報を入力して掲載申請を行います。審査承認後に住民投票がスタートします。", [{ label: "物件管理", hash: "#s11" }])}
+        ${renderHeaderBanner("S12", title, "物件オーナー", isEdit ? "登録済み物件の条件・賃料・面積情報を更新します。" : "所有する空き店舗の情報を入力して掲載申請を行います。審査承認後に住民投票がスタートします。", [{ label: "物件管理", hash: "#s11" }])}
 
         <div class="form-stepper-box">
           <form id="s12-prop-form" onsubmit="event.preventDefault(); MachirikuScreens.handlePropRegisterSubmit(this, '${isEdit ? editProp.id : ""}');">
@@ -1894,77 +1880,36 @@ window.MachirikuScreens = (function() {
               <label for="field-16">所在地（住所） *必須</label>
               <input id="field-16" type="text" name="address" class="form-control" required placeholder="例: 栃木県宇都宮市江野町5-12" value="${editProp ? editProp.address : ""}">
             </div>
-            <div class="form-group" style="margin-bottom:1rem;">
-              <label for="field-17">交通・最寄駅アクセス *必須</label>
-              <input id="field-17" type="text" name="access" class="form-control" required placeholder="例: 東武宇都宮駅 徒歩3分" value="${editProp ? editProp.access : ""}">
-            </div>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
               <div class="form-group">
-                <label for="field-18">月額賃料 (円・税込) *必須</label>
+                <label for="field-18">月額賃料 (円) *必須</label>
                 <input id="field-18" type="number" name="rent" class="form-control" required placeholder="180000" value="${editProp ? editProp.rent : "180000"}">
               </div>
               <div class="form-group">
-                <label for="field-19">月額共益費 (円)</label>
-                <input id="field-19" type="number" name="managementFee" class="form-control" placeholder="10000" value="${editProp ? (editProp.managementFee || 0) : "10000"}">
+                <label for="field-22">使用部分面積 (㎡) *必須</label>
+                <input id="field-22" type="number" step="0.1" name="areaSqm" class="form-control" required placeholder="52.8" value="${editProp ? (editProp.areaSqm || "52.8") : "52.8"}">
               </div>
             </div>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
               <div class="form-group">
-                <label for="field-20">敷金・礼金条件</label>
-                <input id="field-20" type="text" name="deposit" class="form-control" value="${editProp ? (editProp.deposit || "敷金2ヶ月 / 礼金1ヶ月") : "敷金2ヶ月 / 礼金1ヶ月"}">
+                <label for="field-permit">営業許可状況</label>
+                <input id="field-permit" type="text" name="permitStatus" class="form-control" placeholder="飲食店営業許可対応可" value="${editProp ? (editProp.permitStatus || "飲食店営業許可対応可") : "飲食店営業許可対応可"}">
               </div>
               <div class="form-group">
-                <label for="field-21">保証金</label>
-                <input id="field-21" type="text" name="securityDeposit" class="form-control" value="${editProp ? (editProp.securityDeposit || "30万円") : "30万円"}">
+                <label for="field-status">募集状態</label>
+                <select id="field-status" name="statusLabel" class="form-control">
+                  <option value="募集中" ${editProp && editProp.statusLabel === '募集中' ? 'selected' : ''}>募集中</option>
+                  <option value="審査中" ${editProp && editProp.statusLabel === '審査中' ? 'selected' : ''}>審査中</option>
+                  <option value="商談中" ${editProp && editProp.statusLabel === '商談中' ? 'selected' : ''}>商談中</option>
+                </select>
               </div>
-            </div>
-
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
-              <div class="form-group">
-                <label for="field-22">使用部分面積 (坪) *必須</label>
-                <input id="field-22" type="number" step="0.1" name="areaTsubo" class="form-control" required placeholder="20.5" value="${editProp ? editProp.areaTsubo : "20.5"}">
-              </div>
-              <div class="form-group">
-                <label for="field-23">所在階数</label>
-                <input id="field-23" type="text" name="floor" class="form-control" placeholder="1階路面店舗" value="${editProp ? editProp.floor : "地上1階部分"}">
-              </div>
-            </div>
-
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
-              <div class="form-group">
-                <label for="field-24">建物構造</label>
-                <input id="field-24" type="text" name="structure" class="form-control" value="${editProp ? (editProp.structure || "鉄骨造") : "鉄骨鉄筋コンクリート造"}">
-              </div>
-              <div class="form-group">
-                <label for="field-25">築年月</label>
-                <input id="field-25" type="text" name="builtYear" class="form-control" value="${editProp ? (editProp.builtYear || "1995年築") : "1992年築"}">
-              </div>
-            </div>
-
-            <div class="form-group" style="margin-bottom:1rem;">
-              <label>主要設備（該当するものにチェック）</label>
-              <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5rem; margin-top:0.4rem; font-size:0.875rem;">
-                <label><input type="checkbox" name="facGas" ${facs.includes("都市ガス") ? "checked" : ""}> 都市ガス</label>
-                <label><input type="checkbox" name="facWater" ${facs.includes("給排水設備") || facs.includes("給排水") ? "checked" : ""}> 給排水設備</label>
-                <label><input type="checkbox" name="facGrease" ${facs.includes("グリストラップ") ? "checked" : ""}> グリストラップ</label>
-                <label><input type="checkbox" name="facDuct" ${facs.includes("換気ダクト") ? "checked" : ""}> 換気ダクト</label>
-                <label><input type="checkbox" name="facPower" ${facs.includes("動力電力") ? "checked" : ""}> 動力電力</label>
-                <label><input type="checkbox" name="facSign" ${facs.includes("看板スペース") ? "checked" : ""}> 看板スペース</label>
-                <label><input type="checkbox" name="facPark" ${facs.includes("駐車場") ? "checked" : ""}> 駐車場あり</label>
-                <label><input type="checkbox" name="facToilet" checked> 専用トイレ</label>
-              </div>
-            </div>
-
-            <div class="form-group" style="margin-bottom:1rem;">
-              <label for="field-26">業種条件・希望</label>
-              <input id="field-26" type="text" name="condition" class="form-control" placeholder="飲食相談可（重飲食応相談）・カフェ・物販歓迎" value="${editProp ? editProp.condition : "カフェ・物販・飲食相談可"}">
             </div>
 
             <div class="form-group" style="margin-bottom:1.5rem;">
-              <label for="field-27">物件の特徴・アピール説明</label>
-              <textarea id="field-27" name="description" class="form-control" rows="4" placeholder="アーケード街に面し、人通りが絶えない好立地です。">${editProp ? editProp.description : "宇都宮中心街の好立地。住民の需要投票結果を踏まえた出店者を募集します。"}</textarea>
+              <label for="field-27">物件紹介文 *必須</label>
+              <textarea id="field-27" name="description" class="form-control" rows="4" required placeholder="物件の特徴や立地、募集の想いを記入してください。">${editProp ? editProp.description : "宇都宮中心街の好立地空き店舗。住民の需要投票結果を踏まえた出店者を募集します。"}</textarea>
             </div>
 
             <div style="display:flex; justify-content:flex-end; gap:1rem;">
@@ -2169,9 +2114,8 @@ window.MachirikuScreens = (function() {
 
     return `
       <section class="screen-view s16-view" data-screen="S16">
-        ${renderHeaderBanner("S16", "ログイン", "共通認証", "登録済みアカウントでログインします。デモ確認用に各ロール（地域住民・事業主・オーナー・運営管理者）に1クリックで即時ログインできます。")}
-
         <div class="form-stepper-box" style="max-width:540px;">
+          <h1 style="font-size:1.35rem; font-weight:800; color:var(--text-main); margin:0 0 1.25rem 0; text-align:center;">ログイン</h1>
           ${errorHtml}
           <div style="margin-top:0.5rem; margin-bottom:1.5rem;">
             <button type="button" class="btn-line-login" onclick="MachirikuScreens.handleLineLogin()">
@@ -2212,9 +2156,8 @@ window.MachirikuScreens = (function() {
   function renderS17() {
     return `
       <section class="screen-view s17-view" data-screen="S17">
-        ${renderHeaderBanner("S17", "種別別 会員登録", "共通", "利用者区分（地域住民・出店事業主・物件オーナー）を選択し、LINE公式アカウント連携でスムーズに登録・ログインできます。")}
-
         <div class="form-stepper-box" style="max-width:540px;">
+          <h1 style="font-size:1.35rem; font-weight:800; color:var(--text-main); margin:0 0 1.25rem 0; text-align:center;">種別別 会員登録</h1>
           <div class="form-group" style="margin-bottom:1.5rem;">
             <label style="font-size:0.9rem; font-weight:800;">利用区分を選択してください *必須</label>
             <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem; margin-top:0.5rem;">
@@ -2224,7 +2167,7 @@ window.MachirikuScreens = (function() {
               </label>
               <label style="border:1px solid var(--border-color); padding:0.85rem; border-radius:var(--radius-md); text-align:center; cursor:pointer;">
                 <input type="radio" name="regRole" value="business">
-                <div style="font-weight:700; margin-top:0.3rem;">出店希望事業主</div>
+                <div style="font-weight:700; margin-top:0.3rem;">出店事業主</div>
               </label>
               <label style="border:1px solid var(--border-color); padding:0.85rem; border-radius:var(--radius-md); text-align:center; cursor:pointer;">
                 <input type="radio" name="regRole" value="owner">
@@ -2967,7 +2910,7 @@ window.MachirikuScreens = (function() {
               <label style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.4rem;">
                 年齢 <span style="color:var(--text-muted); font-size:0.8rem;">(任意)</span>
               </label>
-              <div style="display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:0.35rem; width:100%; box-sizing:border-box;">
+              <div class="setup-age-grid" style="display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:0.35rem; width:100%; box-sizing:border-box;">
                 ${ageOptions.map(opt => `
                   <label style="display:flex; align-items:center; justify-content:center; gap:0.25rem; padding:0.45rem 0.15rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.8125rem; white-space:nowrap; text-align:center; box-sizing:border-box;">
                     <input type="radio" name="ageGroup" value="${opt}" ${(ageGroup === opt || (!ageGroup && opt === '未設定')) ? 'checked' : ''} style="cursor:pointer; margin:0; flex-shrink:0;">
@@ -4550,7 +4493,7 @@ window.MachirikuScreens = (function() {
                 <div class="quote-bubble">
                   <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem;">
                     <span class="response-score">満足度 ${r.rating} / 5</span>
-                    <span style="font-size:0.875rem; color:var(--text-muted);">${r.age} ${r.gender}（${r.area}）- ${r.date}</span>
+                    <span style="font-size:0.875rem; color:var(--text-muted);">${r.age} ${r.gender} - ${r.date}</span>
                   </div>
                   <div style="font-size:0.88rem; color:var(--text-main); font-weight:600; margin-bottom:0.25rem;">
                     注文: ${r.q2}
@@ -4898,7 +4841,6 @@ window.MachirikuScreens = (function() {
   function resetSearch() {
     store.setFilters({
       keyword: '',
-      area: 'all',
       pref: 'all',
       cities: [],
       category: 'all',
@@ -5609,19 +5551,15 @@ window.MachirikuScreens = (function() {
   }
 
   function handlePropRegisterSubmit(form, editId) {
+    const areaSqm = Number(form.areaSqm?.value) || 50;
     const propData = {
       title: form.title.value,
       address: form.address.value,
-      access: form.access.value,
       rent: Number(form.rent.value),
-      managementFee: Number(form.managementFee?.value) || 0,
-      deposit: form.deposit?.value || "敷金2ヶ月 / 礼金1ヶ月",
-      securityDeposit: form.securityDeposit?.value || "30万円",
-      areaTsubo: Number(form.areaTsubo.value),
-      floor: form.floor?.value || "1階路面",
-      structure: form.structure?.value || "鉄骨造",
-      builtYear: form.builtYear?.value || "1995年築",
-      condition: form.condition?.value || "業種相談可",
+      areaSqm: areaSqm,
+      areaTsubo: Math.round((areaSqm / 3.305785) * 100) / 100,
+      permitStatus: form.permitStatus?.value || "飲食店営業許可対応可",
+      statusLabel: form.statusLabel?.value || "募集中",
       description: form.description?.value || ""
     };
 
@@ -5877,14 +5815,14 @@ window.MachirikuScreens = (function() {
   function selectGalleryImage(index) {
     if (!currentGallery.items || !currentGallery.items[index]) return;
     currentGallery.index = index;
-    updateGalleryView();
+    updateGalleryView(true);
   }
 
   function navGallery(delta) {
     if (!currentGallery.items || !currentGallery.items.length) return;
     const len = currentGallery.items.length;
     currentGallery.index = (currentGallery.index + delta + len) % len;
-    updateGalleryView();
+    updateGalleryView(true);
   }
 
   function scrollThumbs(direction) {
@@ -5894,14 +5832,17 @@ window.MachirikuScreens = (function() {
     }
   }
 
-  function updateGalleryView() {
+  function updateGalleryView(withTransition = true) {
     const item = currentGallery.items[currentGallery.index];
     if (!item) return;
-    const imgEl = document.getElementById('gallery-active-image');
-    if (imgEl) {
-      imgEl.src = item.url;
-      imgEl.alt = item.label;
+
+    // スライダートラックをアニメーション移動
+    const sliderTrack = document.getElementById('gallery-slider-track');
+    if (sliderTrack) {
+      sliderTrack.style.transition = withTransition ? 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)' : 'none';
+      sliderTrack.style.transform = `translateX(-${currentGallery.index * 100}%)`;
     }
+
     const idxEl = document.getElementById('gallery-current-index');
     if (idxEl) idxEl.textContent = String(currentGallery.index + 1);
     const captionEl = document.getElementById('gallery-caption-text');
@@ -5925,35 +5866,110 @@ window.MachirikuScreens = (function() {
     }
   }
 
+  // スライダーのポインタードラッグ＆スワイプ＆キーボード対応
+  function initGallerySlider() {
+    const view = document.getElementById('gallery-main-view');
+    const track = document.getElementById('gallery-slider-track');
+    if (!view || !track) return;
+    if (view.dataset.sliderInit === 'true') return;
+    view.dataset.sliderInit = 'true';
+
+    let isDragging = false;
+    let startX = 0;
+    let currentDeltaX = 0;
+    let viewWidth = 0;
+
+    function onPointerDown(e) {
+      if (e.target.closest('.gallery-nav-btn, .btn-gallery-all-overlay')) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+      isDragging = true;
+      startX = e.clientX;
+      currentDeltaX = 0;
+      viewWidth = view.offsetWidth || 1;
+      track.style.transition = 'none';
+      view.style.cursor = 'grabbing';
+      if (view.setPointerCapture) {
+        try { view.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+      currentDeltaX = e.clientX - startX;
+      const basePercent = -currentGallery.index * 100;
+      const dragPercent = (currentDeltaX / viewWidth) * 100;
+      track.style.transform = `translateX(${basePercent + dragPercent}%)`;
+    }
+
+    function onPointerUp(e) {
+      if (!isDragging) return;
+      isDragging = false;
+      view.style.cursor = '';
+      if (view.releasePointerCapture) {
+        try { view.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+
+      const threshold = Math.min(60, viewWidth * 0.15);
+      if (currentDeltaX < -threshold) {
+        navGallery(1);
+      } else if (currentDeltaX > threshold) {
+        navGallery(-1);
+      } else {
+        updateGalleryView(true);
+      }
+      currentDeltaX = 0;
+    }
+
+    view.addEventListener('pointerdown', onPointerDown);
+    view.addEventListener('pointermove', onPointerMove);
+    view.addEventListener('pointerup', onPointerUp);
+    view.addEventListener('pointercancel', onPointerUp);
+
+    function onKeyDown(e) {
+      if (!document.getElementById('gallery-main-view')) {
+        window.removeEventListener('keydown', onKeyDown);
+        return;
+      }
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+      if (document.getElementById('photos-modal') || document.getElementById('lightbox-modal')) return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navGallery(-1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navGallery(1);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+  }
+
+  let modalGalleryItems = [];
+  let currentLightboxIdx = 0;
+
   function openAllPhotosModal(propId) {
     const prop = store.getPropertyById(propId);
     if (!prop) return;
     const items = (prop.gallery && prop.gallery.length) ? prop.gallery : currentGallery.items;
+    modalGalleryItems = items;
     closeAllPhotosModal();
-
-    const kinds = ['all', ...new Set(items.map(it => it.kind))];
 
     const modalHtml = `
       <div class="photos-modal-overlay" id="photos-modal" onclick="if(event.target === this) MachirikuScreens.closeAllPhotosModal()">
         <div class="photos-modal-box">
           <div class="photos-modal-header">
-            <h3 class="photos-modal-title">${escapeHtml(prop.title)} の写真一覧 (全${items.length}枚)</h3>
-            <button type="button" class="btn-secondary" onclick="MachirikuScreens.closeAllPhotosModal()" style="padding: 4px 12px;">閉じる</button>
-          </div>
-          <div class="photos-modal-filter">
-            <button type="button" class="filter-chip-btn is-active" data-kind="all" onclick="MachirikuScreens.filterPhotosModal('all')">すべて (${items.length})</button>
-            ${kinds.filter(k => k !== 'all').map(k => {
-              const count = items.filter(it => it.kind === k).length;
-              return `<button type="button" class="filter-chip-btn" data-kind="${k}" onclick="MachirikuScreens.filterPhotosModal('${k}')">${escapeHtml(getKindLabel(k))} (${count})</button>`;
-            }).join('')}
+            <h3 class="photos-modal-title">${escapeHtml(prop.title)} の写真 (${items.length}枚)</h3>
+            <button type="button" class="photos-modal-close-btn" onclick="MachirikuScreens.closeAllPhotosModal()" aria-label="閉じる">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
           </div>
           <div class="photos-modal-grid" id="photos-modal-grid">
             ${items.map((item, idx) => `
-              <div class="photos-grid-card" data-kind="${item.kind}" onclick="MachirikuScreens.selectGalleryFromModal(${idx})">
-                <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label)}" loading="lazy">
-                <div class="photos-grid-meta">
-                  <span class="gallery-kind-badge" style="width: fit-content; font-size: 0.7rem; padding: 1px 6px;">${escapeHtml(getKindLabel(item.kind))}</span>
-                  <span class="photos-grid-label" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>
+              <div class="photo-tile-item" onclick="MachirikuScreens.openLightbox(${idx})" title="クリックして拡大表示">
+                <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label || prop.title)}" loading="lazy">
+                <div class="photo-tile-hover-overlay">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                 </div>
               </div>
             `).join('')}
@@ -5969,20 +5985,90 @@ window.MachirikuScreens = (function() {
   function closeAllPhotosModal() {
     const modal = document.getElementById('photos-modal');
     if (modal) modal.remove();
+    closeLightbox();
   }
 
-  function filterPhotosModal(kind) {
-    const modal = document.getElementById('photos-modal');
-    if (!modal) return;
-    modal.querySelectorAll('.filter-chip-btn').forEach(btn => {
-      btn.classList.toggle('is-active', btn.getAttribute('data-kind') === kind);
-    });
-    modal.querySelectorAll('.photos-grid-card').forEach(card => {
-      const match = (kind === 'all' || card.getAttribute('data-kind') === kind);
-      card.style.display = match ? 'block' : 'none';
-    });
+  let lightboxKeyHandler = null;
+
+  function openLightbox(idx) {
+    if (!modalGalleryItems || !modalGalleryItems[idx]) return;
+    currentLightboxIdx = idx;
+    closeLightbox();
+
+    const item = modalGalleryItems[idx];
+    const total = modalGalleryItems.length;
+
+    const lightboxHtml = `
+      <div class="lightbox-overlay" id="lightbox-modal" onclick="if(event.target === this) MachirikuScreens.closeLightbox()">
+        <button type="button" class="lightbox-close-btn" onclick="MachirikuScreens.closeLightbox()" aria-label="拡大表示を閉じる">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+        ${total > 1 ? `
+          <button type="button" class="lightbox-nav-btn prev" onclick="event.stopPropagation(); MachirikuScreens.navLightbox(-1)" aria-label="前の写真">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button type="button" class="lightbox-nav-btn next" onclick="event.stopPropagation(); MachirikuScreens.navLightbox(1)" aria-label="次の写真">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        ` : ''}
+        <div class="lightbox-content-box" onclick="event.stopPropagation()">
+          <img id="lightbox-img" src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label || '')}" class="lightbox-image">
+          <div class="lightbox-counter">${idx + 1} / ${total}</div>
+        </div>
+      </div>
+    `;
+    if (document.body && document.body.insertAdjacentHTML) {
+      document.body.insertAdjacentHTML('beforeend', lightboxHtml);
+    }
+
+    if (typeof window !== 'undefined') {
+      if (lightboxKeyHandler) window.removeEventListener('keydown', lightboxKeyHandler);
+      lightboxKeyHandler = (e) => {
+        if (e.key === 'Escape') MachirikuScreens.closeLightbox();
+        else if (e.key === 'ArrowLeft') MachirikuScreens.navLightbox(-1);
+        else if (e.key === 'ArrowRight') MachirikuScreens.navLightbox(1);
+      };
+      window.addEventListener('keydown', lightboxKeyHandler);
+    }
   }
 
+  function closeLightbox() {
+    const lb = document.getElementById('lightbox-modal');
+    if (lb) lb.remove();
+    if (typeof window !== 'undefined' && lightboxKeyHandler) {
+      window.removeEventListener('keydown', lightboxKeyHandler);
+      lightboxKeyHandler = null;
+    }
+  }
+
+  function navLightbox(delta) {
+    if (!modalGalleryItems.length) return;
+    const nextIdx = (currentLightboxIdx + delta + modalGalleryItems.length) % modalGalleryItems.length;
+    currentLightboxIdx = nextIdx;
+
+    const item = modalGalleryItems[nextIdx];
+    const total = modalGalleryItems.length;
+
+    const img = document.getElementById('lightbox-img');
+    const counter = document.querySelector('#lightbox-modal .lightbox-counter');
+    if (!img) {
+      openLightbox(nextIdx);
+      return;
+    }
+
+    // DOMを破棄せず、画像とカウンターのみをスムーズにインプレース更新（裏画面の露出を完全防止）
+    img.style.opacity = '0.5';
+    img.src = item.url;
+    img.alt = item.label || '';
+    img.onload = () => { img.style.opacity = '1'; };
+    setTimeout(() => { if (img) img.style.opacity = '1'; }, 80);
+
+    if (counter) {
+      counter.textContent = `${nextIdx + 1} / ${total}`;
+    }
+  }
+
+  function filterPhotosModal(kind) {}
   function selectGalleryFromModal(index) {
     selectGalleryImage(index);
     closeAllPhotosModal();
@@ -6059,6 +6145,7 @@ window.MachirikuScreens = (function() {
     handleLineLogin,
     handleRegisterComplete,
     handleLogout,
+    initS02MiniMap,
     initS18MapPicker,
     handleS18CurrentLocation,
     setS18Coords,
@@ -6082,11 +6169,15 @@ window.MachirikuScreens = (function() {
     handleApplyPr,
     markAllNotifsRead,
     renderQrCode,
+    initGallerySlider,
     selectGalleryImage,
     navGallery,
     scrollThumbs,
     openAllPhotosModal,
     closeAllPhotosModal,
+    openLightbox,
+    closeLightbox,
+    navLightbox,
     filterPhotosModal,
     selectGalleryFromModal,
     switchResidentCatTab,
@@ -6096,3 +6187,53 @@ window.MachirikuScreens = (function() {
     clearAllResidentIndustries
   };
 })();
+
+  let s02GoogleMap = null;
+  function initS02MiniMap() {
+    if (typeof document === 'undefined') return;
+    const container = document.getElementById('s02-location-map');
+    if (!container) return;
+
+    const lat = parseFloat(container.getAttribute('data-lat'));
+    const lng = parseFloat(container.getAttribute('data-lng'));
+    const title = container.getAttribute('data-title') || '対象物件';
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    function renderNativeMap() {
+      const pos = { lat, lng };
+      s02GoogleMap = new google.maps.Map(container, {
+        center: pos,
+        zoom: 16,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        zoomControl: false,
+        gestureHandling: 'greedy',
+        scrollwheel: true
+      });
+      new google.maps.Marker({
+        position: pos,
+        map: s02GoogleMap,
+        title: title
+      });
+    }
+
+    if (typeof google !== 'undefined' && google.maps && google.maps.Map) {
+      renderNativeMap();
+    } else {
+      // Fallback iframe or wait for script load
+      const q = encodeURIComponent(`${lat},${lng}`);
+      container.innerHTML = `<iframe width="100%" height="100%" style="border:0;" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?q=${q}&z=16&output=embed"></iframe>`;
+      
+      let checks = 0;
+      const interval = setInterval(() => {
+        checks++;
+        if (typeof google !== 'undefined' && google.maps && google.maps.Map) {
+          clearInterval(interval);
+          renderNativeMap();
+        } else if (checks > 10) {
+          clearInterval(interval);
+        }
+      }, 500);
+    }
+  }

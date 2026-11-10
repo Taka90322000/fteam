@@ -228,6 +228,13 @@ window.MachirikuApp = (function() {
     if (currentScreenId === "s01") {
       if (patched) mapEngine.updateProperties(store.getFilteredProperties());
       else initS01Map();
+    } else if (currentScreenId === "s02") {
+      if (typeof screens.initS02MiniMap === 'function') {
+        screens.initS02MiniMap();
+      }
+      if (typeof screens.initGallerySlider === 'function') {
+        screens.initGallerySlider();
+      }
     } else if (currentScreenId === "s18") {
       if (typeof screens.initS18MapPicker === 'function') {
         screens.initS18MapPicker();

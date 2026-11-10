@@ -213,7 +213,6 @@
           保有資格・許認可 <span style="color:var(--text-muted); font-size:0.8rem;">(任意・複数選択可)</span>
         </label>
         <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
-          <%--String[] qList = {"食品衛生責任者", "防火管理者", "調理師免許", "美容師・理容師免許", "宅地建物取引士", "その他資格・許認可"};--%>
           <% for (RegistrationChoice choice : qualificationChoices) { %>
             <label style="display:inline-flex; align-items:center; gap:0.4rem; padding:0.45rem 0.75rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.84rem;">
               <input type="checkbox" name="qualification" value="<%= Html.escape(choice.id()) %>" <%= selectedQualifications.contains(String.valueOf(choice.id())) ? "checked" : "" %> style="cursor:pointer; margin:0;">
