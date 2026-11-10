@@ -570,7 +570,16 @@ window.MachirikuScreens = (function() {
               : `<span class="preview-zero-text">該当する物件: <strong>0件</strong> <small class="zero-hint">（賃料の範囲を広げてください）</small></span>`}
           </div>
 
-
+          <div class="rent-options-stack">
+            <label class="rent-option-check">
+              <input type="checkbox" id="check-include-mgmt" ${rentPopoverState.includeMgmtFee ? 'checked' : ''} onchange="MachirikuScreens.handleRentOptionChange('mgmt', this.checked)">
+              <span>管理費・共益費を含む</span>
+            </label>
+            <label class="rent-option-check">
+              <input type="checkbox" id="check-no-deposit" ${rentPopoverState.noDeposit ? 'checked' : ''} onchange="MachirikuScreens.handleRentOptionChange('deposit', this.checked)">
+              <span>敷金・礼金なし</span>
+            </label>
+          </div>
         </div>
         <div class="popover-footer">
           <button type="button" class="btn-text-action" onclick="MachirikuScreens.resetRentFilters()">リセット</button>
@@ -696,12 +705,15 @@ window.MachirikuScreens = (function() {
             <div class="card-info-pane">
               <div>
                 <h2 class="card-prop-title"><a class="property-title-link" href="#s02?id=${p.id}">${p.title}</a></h2>
-                <div class="card-prop-address">${p.address}</div>
+                <div class="card-prop-address">${p.address}（${p.access}）</div>
                 <div class="card-rent-row">
                   <div class="rent-main">${rentMan}万円<small>/月</small></div>
+                  <div class="rent-sub">${mgmt}</div>
                 </div>
                 <div class="card-specs-row">
-                  <span><strong>${p.areaSqm}㎡</strong>（約${p.areaTsubo}坪）</span>
+                  <span><strong>${p.areaTsubo}</strong> 坪 (${p.areaSqm}㎡)</span>
+                  <span><strong>${p.floor}</strong></span>
+                  <span>${p.condition}</span>
                 </div>
               </div>
 
@@ -931,7 +943,7 @@ window.MachirikuScreens = (function() {
 
     return `
       <section class="screen-view s02-view" data-screen="S02">
-        ${renderHeaderBanner("S02", prop.title, prop.statusLabel, `使用部分面積: ${prop.areaSqm}㎡（約${prop.areaTsubo}坪）`, [{ label: "物件検索", hash: "#s01" }])}
+        ${renderHeaderBanner("S02", prop.title, prop.statusLabel, prop.subtitle, [{ label: "物件検索", hash: "#s01" }])}
 
         <div class="detail-layout-grid">
           <!-- 左メインコンテンツ -->
@@ -989,33 +1001,72 @@ window.MachirikuScreens = (function() {
               ` : ''}
             </div>
 
-            <!-- 物件概要カード (DB仕様準拠) -->
+            <!-- 物件概要カード (アットホーム仕様) -->
             <div class="detail-card">
               <h2 class="detail-card-title">物件募集概要</h2>
               <table class="specs-table">
                 <tbody>
                   <tr>
-                    <th>月額賃料</th>
-                    <td><strong style="font-size:1.3rem; color:var(--accent-price);">${rentMan}万円</strong> /月</td>
+                    <th>賃料 / 管理費等</th>
+                    <td><strong style="font-size:1.3rem; color:var(--accent-price);">${rentMan}万円</strong> /月 （管理費等: ${mgmt}）${prop.source && prop.rentTaxStatus === 'unknown' ? '<br><small>税区分は掲載元に確認</small>' : ''}</td>
+                  </tr>
+                  <tr>
+                    <th>敷金 / 礼金 / 保証金</th>
+                    <td>敷金: ${prop.deposit ?? '掲載なし（要確認）'} / 礼金: ${prop.keyMoney ?? '掲載なし（要確認）'} / 保証金: ${prop.securityDeposit ?? '掲載なし（要確認）'}</td>
                   </tr>
                   <tr>
                     <th>所在地</th>
                     <td>${prop.address}</td>
                   </tr>
+                  ${prop.otherFees?.length ? `<tr><th>その他の掲載費用</th><td><ul class="listing-fees">${prop.otherFees.map(f => `<li>${escapeHtml(f.name)}: ${escapeHtml(f.amountRaw)}</li>`).join('')}</ul></td></tr>` : ''}
+                  <tr>
+                    <th>交通・最寄駅</th>
+                    <td>${prop.access}</td>
+                  </tr>
                   <tr>
                     <th>使用部分面積</th>
-                    <td><strong>${prop.areaSqm}㎡</strong>（約${prop.areaTsubo}坪）</td>
+                    <td><strong>${prop.areaTsubo}坪</strong> （${prop.areaSqm}㎡）</td>
                   </tr>
                   <tr>
-                    <th>募集状態</th>
-                    <td><span class="badge-status status-voting">${prop.statusLabel || '募集中'}</span></td>
+                    <th>階数・構造</th>
+                    <td>${prop.floor} / ${prop.structure}（${prop.builtYear}）</td>
                   </tr>
                   <tr>
-                    <th>現況</th>
-                    <td>${prop.listingStatusRaw || '空き店舗'}</td>
+                    <th>現況 / 引渡し</th>
+                    <td>${prop.listingStatusRaw || '掲載なし'} / ${prop.handover}</td>
                   </tr>
+                  <tr>
+                    <th>業種条件</th>
+                    <td>${prop.condition}</td>
+                  </tr>
+                  <tr>
+                    <th>主要設備</th>
+                    <td>
+                      <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
+                        ${(prop.facilities || ['電気','上水道','下水道']).map(fac => `<span class="badge-feature">${fac}</span>`).join('')}
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>飲食店営業許可</th>
+                    <td><span class="badge-check-ok">✔ ${prop.permitStatus || "取得相談可"}</span></td>
+                  </tr>
+                  ${prop.sourceNotes?.length ? `<tr><th>掲載情報の備考</th><td><ul class="listing-fees">${prop.sourceNotes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul></td></tr>` : ''}
                 </tbody>
               </table>
+
+              ${prop.source ? renderSourceInformation(prop) : `
+                <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px dashed var(--border-color); display:flex; justify-content:space-between; align-items:center; font-size:0.875rem; color:var(--text-sub);">
+                  <div>
+                    <strong>取扱不動産会社:</strong> ${prop.agent ? prop.agent.name : (prop.broker ? prop.broker.name : "株式会社宇都宮不動産 本店")}<br>
+                    <span style="font-size:0.8rem; color:var(--text-muted);">${prop.agent ? prop.agent.license : "栃木県知事 (4) 第12345号"} / 免許番号・取引態様: 専任媒介</span>
+                  </div>
+                  <div style="text-align:right;">
+                    <span style="font-size:0.75rem; color:var(--text-muted);">物件番号: ${prop.id}</span>
+                  </div>
+                </div>
+              `}
+
               <div style="margin-top:1.25rem; font-size:0.9rem; line-height:1.7; color:var(--text-sub);">
                 ${prop.description}
               </div>
@@ -1208,6 +1259,15 @@ window.MachirikuScreens = (function() {
                   <option value="月1回以下">月1回以下</option>
                 </select>
               </div>
+              <div class="form-group" style="margin-bottom:1rem;">
+                <label for="field-6">主に利用したい時間帯</label>
+                <select id="field-6" name="timing" class="form-select">
+                  <option value="ランチタイム（11:30〜14:00）">昼・ランチタイム</option>
+                  <option value="カフェタイム（14:00〜17:00）" selected>午後・カフェタイム</option>
+                  <option value="ディナー・夜（18:00〜22:00）">夜・ディナー・バータイム</option>
+                  <option value="朝・通勤前（7:00〜9:00）">朝・モーニング</option>
+                </select>
+              </div>
               <div class="form-group">
                 <label for="field-7">出店する事業主・店舗への要望や応援メッセージ（自由記述）</label>
                 <textarea id="field-7" name="comment" class="form-control" rows="3" placeholder="例: オリオン通りでゆっくり本が読める静かなカフェがあると嬉しいです。テイクアウトもできると助かります。">${curVote?.comment || ''}</textarea>
@@ -1281,16 +1341,8 @@ window.MachirikuScreens = (function() {
     const application = state.applications.find(a => a.propId === preparingProp.id && a.status !== 'rejected');
     if (preparingProp.source && !preparingProp.storePlan && !application) return renderEmptyState('S05', '開店計画はまだありません', `${preparingProp.title}の出店・開店情報はまだ登録されていません。`, `#s02?id=${preparingProp.id}`, '物件の詳細を見る');
     const plan = preparingProp.storePlan || {};
-    // DB specifications: opening_plans.progress_status ('PREPARING', 'CONSTRUCTION', 'DATE_FIXED', 'OPENED')
-    const stages = [
-      { code: 'PREPARING', label: '開店準備中' },
-      { code: 'CONSTRUCTION', label: '内装工事中' },
-      { code: 'DATE_FIXED', label: 'オープン日決定' },
-      { code: 'OPENED', label: '開店' }
-    ];
-    let currentStatusCode = plan.progressStatus || (preparingProp.status === 'opened' ? 'OPENED' : 'PREPARING');
-    let stage = stages.findIndex(s => s.code === currentStatusCode);
-    if (stage === -1) stage = 0;
+    const stages = ['希望を集める', '出店者を選ぶ', '契約・引き渡し', '開店の準備', '開店'];
+    const stage = Math.max(0, ['voting','reviewing','agreed','preparing','opened'].indexOf(preparingProp.status));
     const followed = state.currentUser.followedProps?.includes(preparingProp.id);
     const coupons = state.coupons.filter(c => c.propId === preparingProp.id);
     return `
@@ -1302,7 +1354,7 @@ window.MachirikuScreens = (function() {
             <div class="detail-card">
               <h2 class="detail-card-title">${escapeHtml(preparingProp.title)}</h2>
               <ol class="opening-steps" aria-label="開店までの進み具合">
-                ${stages.map((stg, index) => `<li class="${index < stage ? 'is-complete' : index === stage ? 'is-current' : ''}" ${index === stage ? 'aria-current="step"' : ''}><span class="step-number">${index + 1}</span><span>${stg.label}${index === stage ? '<small>現在</small>' : ''}</span></li>`).join('')}
+                ${stages.map((label, index) => `<li class="${index < stage ? 'is-complete' : index === stage ? 'is-current' : ''}" ${index === stage ? 'aria-current="step"' : ''}><span class="step-number">${index + 1}</span><span>${label}${index === stage ? '<small>現在</small>' : ''}</span></li>`).join('')}
               </ol>
             </div>
             <div class="story-card-box">
@@ -1581,6 +1633,16 @@ window.MachirikuScreens = (function() {
                     </optgroup>
                   `).join("")}
                 </select>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+                <div class="form-group">
+                  <label for="field-11">希望賃料帯 (月額/円)</label>
+                  <input id="field-11" type="number" name="targetRent" class="form-control" value="${prop.rent}">
+                </div>
+                <div class="form-group">
+                  <label for="field-12">希望オープン時期</label>
+                  <input id="field-12" type="text" name="targetOpenDate" class="form-control" value="2026年12月上旬">
+                </div>
               </div>
               <!-- 契約種別 (DB: contract_kind) -->
               <div class="form-group" style="margin-bottom:1rem;">
@@ -1906,10 +1968,11 @@ window.MachirikuScreens = (function() {
     const editProp = editId ? store.getPropertyById(editId) : null;
     const isEdit = Boolean(editProp);
     const title = isEdit ? "物件情報の編集" : "新規物件の登録・掲載申請";
+    const facs = editProp ? (editProp.facilities || []) : ["都市ガス", "給排水設備"];
 
     return `
       <section class="screen-view s12-view" data-screen="S12">
-        ${renderHeaderBanner("S12", title, "物件オーナー", isEdit ? "登録済み物件の条件・賃料・面積情報を更新します。" : "所有する空き店舗の情報を入力して掲載申請を行います。審査承認後に住民投票がスタートします。", [{ label: "物件管理", hash: "#s11" }])}
+        ${renderHeaderBanner("S12", title, "物件オーナー", isEdit ? "登録済み物件の条件・賃料・設備情報を更新します。" : "所有する空き店舗の情報を入力して掲載申請を行います。審査承認後に住民投票がスタートします。", [{ label: "物件管理", hash: "#s11" }])}
 
         <div class="form-stepper-box">
           <form id="s12-prop-form" onsubmit="event.preventDefault(); MachirikuScreens.handlePropRegisterSubmit(this, '${isEdit ? editProp.id : ""}');">
@@ -1921,36 +1984,77 @@ window.MachirikuScreens = (function() {
               <label for="field-16">所在地（住所） *必須</label>
               <input id="field-16" type="text" name="address" class="form-control" required placeholder="例: 栃木県宇都宮市江野町5-12" value="${editProp ? editProp.address : ""}">
             </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+              <label for="field-17">交通・最寄駅アクセス *必須</label>
+              <input id="field-17" type="text" name="access" class="form-control" required placeholder="例: 東武宇都宮駅 徒歩3分" value="${editProp ? editProp.access : ""}">
+            </div>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
               <div class="form-group">
-                <label for="field-18">月額賃料 (円) *必須</label>
+                <label for="field-18">月額賃料 (円・税込) *必須</label>
                 <input id="field-18" type="number" name="rent" class="form-control" required placeholder="180000" value="${editProp ? editProp.rent : "180000"}">
               </div>
               <div class="form-group">
-                <label for="field-22">使用部分面積 (㎡) *必須</label>
-                <input id="field-22" type="number" step="0.1" name="areaSqm" class="form-control" required placeholder="52.8" value="${editProp ? (editProp.areaSqm || "52.8") : "52.8"}">
+                <label for="field-19">月額共益費 (円)</label>
+                <input id="field-19" type="number" name="managementFee" class="form-control" placeholder="10000" value="${editProp ? (editProp.managementFee || 0) : "10000"}">
               </div>
             </div>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
               <div class="form-group">
-                <label for="field-permit">営業許可状況</label>
-                <input id="field-permit" type="text" name="permitStatus" class="form-control" placeholder="飲食店営業許可対応可" value="${editProp ? (editProp.permitStatus || "飲食店営業許可対応可") : "飲食店営業許可対応可"}">
+                <label for="field-20">敷金・礼金条件</label>
+                <input id="field-20" type="text" name="deposit" class="form-control" value="${editProp ? (editProp.deposit || "敷金2ヶ月 / 礼金1ヶ月") : "敷金2ヶ月 / 礼金1ヶ月"}">
               </div>
               <div class="form-group">
-                <label for="field-status">募集状態</label>
-                <select id="field-status" name="statusLabel" class="form-control">
-                  <option value="募集中" ${editProp && editProp.statusLabel === '募集中' ? 'selected' : ''}>募集中</option>
-                  <option value="審査中" ${editProp && editProp.statusLabel === '審査中' ? 'selected' : ''}>審査中</option>
-                  <option value="商談中" ${editProp && editProp.statusLabel === '商談中' ? 'selected' : ''}>商談中</option>
-                </select>
+                <label for="field-21">保証金</label>
+                <input id="field-21" type="text" name="securityDeposit" class="form-control" value="${editProp ? (editProp.securityDeposit || "30万円") : "30万円"}">
               </div>
             </div>
 
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+              <div class="form-group">
+                <label for="field-22">使用部分面積 (坪) *必須</label>
+                <input id="field-22" type="number" step="0.1" name="areaTsubo" class="form-control" required placeholder="20.5" value="${editProp ? editProp.areaTsubo : "20.5"}">
+              </div>
+              <div class="form-group">
+                <label for="field-23">所在階数</label>
+                <input id="field-23" type="text" name="floor" class="form-control" placeholder="1階路面店舗" value="${editProp ? editProp.floor : "地上1階部分"}">
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+              <div class="form-group">
+                <label for="field-24">建物構造</label>
+                <input id="field-24" type="text" name="structure" class="form-control" value="${editProp ? (editProp.structure || "鉄骨造") : "鉄骨鉄筋コンクリート造"}">
+              </div>
+              <div class="form-group">
+                <label for="field-25">築年月</label>
+                <input id="field-25" type="text" name="builtYear" class="form-control" value="${editProp ? (editProp.builtYear || "1995年築") : "1992年築"}">
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:1rem;">
+              <label>主要設備（該当するものにチェック）</label>
+              <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5rem; margin-top:0.4rem; font-size:0.875rem;">
+                <label><input type="checkbox" name="facGas" ${facs.includes("都市ガス") ? "checked" : ""}> 都市ガス</label>
+                <label><input type="checkbox" name="facWater" ${facs.includes("給排水設備") || facs.includes("給排水") ? "checked" : ""}> 給排水設備</label>
+                <label><input type="checkbox" name="facGrease" ${facs.includes("グリストラップ") ? "checked" : ""}> グリストラップ</label>
+                <label><input type="checkbox" name="facDuct" ${facs.includes("換気ダクト") ? "checked" : ""}> 換気ダクト</label>
+                <label><input type="checkbox" name="facPower" ${facs.includes("動力電力") ? "checked" : ""}> 動力電力</label>
+                <label><input type="checkbox" name="facSign" ${facs.includes("看板スペース") ? "checked" : ""}> 看板スペース</label>
+                <label><input type="checkbox" name="facPark" ${facs.includes("駐車場") ? "checked" : ""}> 駐車場あり</label>
+                <label><input type="checkbox" name="facToilet" checked> 専用トイレ</label>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:1rem;">
+              <label for="field-26">業種条件・希望</label>
+              <input id="field-26" type="text" name="condition" class="form-control" placeholder="飲食相談可（重飲食応相談）・カフェ・物販歓迎" value="${editProp ? editProp.condition : "カフェ・物販・飲食相談可"}">
+            </div>
+
             <div class="form-group" style="margin-bottom:1.5rem;">
-              <label for="field-27">物件紹介文 *必須</label>
-              <textarea id="field-27" name="description" class="form-control" rows="4" required placeholder="物件の特徴や立地、募集の想いを記入してください。">${editProp ? editProp.description : "宇都宮中心街の好立地空き店舗。住民の需要投票結果を踏まえた出店者を募集します。"}</textarea>
+              <label for="field-27">物件の特徴・アピール説明</label>
+              <textarea id="field-27" name="description" class="form-control" rows="4" placeholder="アーケード街に面し、人通りが絶えない好立地です。">${editProp ? editProp.description : "宇都宮中心街の好立地。住民の需要投票結果を踏まえた出店者を募集します。"}</textarea>
             </div>
 
             <div style="display:flex; justify-content:flex-end; gap:1rem;">
@@ -5565,6 +5669,7 @@ window.MachirikuScreens = (function() {
     const ranks = [form.rank1.value, form.rank2.value, form.rank3.value].filter(Boolean);
     const surveyData = {
       frequency: form.frequency ? form.frequency.value : '',
+      timing: form.timing ? form.timing.value : '',
       comment: form.comment ? form.comment.value : ''
     };
 
@@ -5583,11 +5688,14 @@ window.MachirikuScreens = (function() {
       propTitle: prop.title,
       storeName: form.storeName.value,
       genreId: form.genreId.value,
+      targetRent: form.targetRent?.value || prop.rent,
+      targetOpenDate: form.targetOpenDate?.value || form.requestedStartOn?.value || '',
       contractKind: form.contractKind?.value || 'MONTHLY',
       requestedStartOn: form.requestedStartOn?.value || '',
       requestedEndOn: form.requestedEndOn?.value || '',
       viewingRequestedAt: form.viewingRequestedAt?.value || '',
-      message: form.message?.value || form.concept?.value || ''
+      message: form.message?.value || form.concept?.value || '',
+      concept: form.message?.value || form.concept?.value || ''
     };
 
     store.submitApplication(appData);
@@ -5602,14 +5710,32 @@ window.MachirikuScreens = (function() {
   }
 
   function handlePropRegisterSubmit(form, editId) {
-    const areaSqm = Number(form.areaSqm?.value) || 50;
+    const areaTsubo = Number(form.areaTsubo?.value) || 20;
+    const facs = [];
+    if (form.facGas?.checked) facs.push("都市ガス");
+    if (form.facWater?.checked) facs.push("給排水設備");
+    if (form.facGrease?.checked) facs.push("グリストラップ");
+    if (form.facDuct?.checked) facs.push("換気ダクト");
+    if (form.facPower?.checked) facs.push("動力電力");
+    if (form.facSign?.checked) facs.push("看板スペース");
+    if (form.facPark?.checked) facs.push("駐車場あり");
+    if (form.facToilet?.checked) facs.push("専用トイレ");
+
     const propData = {
       title: form.title.value,
       address: form.address.value,
+      access: form.access ? form.access.value : "東武宇都宮駅 徒歩5分",
       rent: Number(form.rent.value),
-      areaSqm: areaSqm,
-      areaTsubo: Math.round((areaSqm / 3.305785) * 100) / 100,
-      permitStatus: form.permitStatus?.value || "飲食店営業許可対応可",
+      managementFee: Number(form.managementFee?.value) || 0,
+      deposit: form.deposit?.value || "敷金2ヶ月 / 礼金1ヶ月",
+      securityDeposit: form.securityDeposit?.value || "30万円",
+      areaTsubo: areaTsubo,
+      areaSqm: Math.round(areaTsubo * 3.305785 * 10) / 10,
+      floor: form.floor?.value || "1階路面",
+      structure: form.structure?.value || "鉄骨造",
+      builtYear: form.builtYear?.value || "1995年築",
+      condition: form.condition?.value || "業種相談可",
+      facilities: facs.length > 0 ? facs : ["都市ガス", "給排水設備"],
       statusLabel: form.statusLabel?.value || "募集中",
       description: form.description?.value || ""
     };
