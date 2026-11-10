@@ -1731,13 +1731,35 @@ window.MachirikuScreens = (function() {
                 
                 <div>
                   <h2 style="font-size:1.3rem; font-weight:800; color:var(--text-main);">${app.storeName}</h2>
-                  <div style="font-size:0.875rem; color:var(--text-muted);">応募者: ${app.applicantName} / 業種: ${app.genreName}</div>
+                  <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.75rem;">応募者: ${app.applicantName} / 業種: ${app.genreName}</div>
                 </div>
               </div>
+
+              <!-- 申込条件概要 (DB: applications準拠) -->
+              <table class="specs-table" style="margin-bottom:1.25rem;">
+                <tbody>
+                  <tr>
+                    <th style="width:140px;">希望契約形態</th>
+                    <td><strong>${app.contractKind === 'POPUP' ? 'ポップアップ短期出店' : '通常賃貸契約（月額）'}</strong></td>
+                  </tr>
+                  ${app.requestedStartOn ? `
+                    <tr>
+                      <th>利用希望期間</th>
+                      <td>${escapeHtml(app.requestedStartOn)} 〜 ${escapeHtml(app.requestedEndOn || '相談')}</td>
+                    </tr>
+                  ` : ''}
+                  ${app.viewingRequestedAt ? `
+                    <tr>
+                      <th>現地内覧希望日時</th>
+                      <td>${escapeHtml(app.viewingRequestedAt.replace('T', ' '))}</td>
+                    </tr>
+                  ` : ''}
+                </tbody>
+              </table>
               
-              <div style="font-weight:700; margin-bottom:0.5rem; color:var(--text-main);">■ 出店への想い・コンセプト</div>
+              <div style="font-weight:700; margin-bottom:0.5rem; color:var(--text-main);">■ 出店への想い・メッセージ</div>
               <div class="story-content-body" style="margin-bottom:1.25rem;">
-                ${app.concept}
+                ${escapeHtml(app.message || app.concept || '')}
               </div>
 
               <div style="font-weight:700; margin-bottom:0.5rem; color:var(--text-main);">■ 資格・許認可情報</div>
