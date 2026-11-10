@@ -2,14 +2,15 @@ package jp.machiriku.servlet.auth;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jp.machiriku.tool.Action;
 import jp.machiriku.config.AppConfig;
+import jp.machiriku.tool.Action;
 
 /** ログイン画面の表示と、設定で明示的に有効にしたデモログインを担当する。 */
 public class LoginAction extends Action {
 
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
+        // ログイン済みの会員は、トップ画面へリダイレクトする。
         if (LineLoginSupport.redirectAuthenticated(req, res, false)) { return; }
         // デモ用の利用区分は、設定が有効かつ許可された値の場合にだけ受け付ける。
         String demoRole = req.getParameter("demoRole");
