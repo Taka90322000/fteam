@@ -1570,7 +1570,7 @@ window.MACHIRIKU_DATA = (function() {
       roleName: "地域住民",
       email: "tanaka.ichiro@example.com",
       phone: "090-1234-5678",
-      livingArea: "宇都宮市江野町（中心部在住）",
+      livingArea: "宇都宮市江野町",
       livingDistanceKm: 0.4,
       followedProps: [],
       votedProps: {},
