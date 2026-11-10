@@ -364,9 +364,12 @@ window.MachirikuStore = (function() {
       genreId: appData.genreId,
       genreName: data.SUBCATS[appData.genreId]?.name || "飲食店",
       storeName: appData.storeName,
-      concept: appData.concept,
-      targetRent: Number(appData.targetRent),
-      targetOpenDate: appData.targetOpenDate,
+      message: appData.message || appData.concept || "",
+      concept: appData.message || appData.concept || "",
+      contractKind: appData.contractKind || "MONTHLY",
+      requestedStartOn: appData.requestedStartOn || "",
+      requestedEndOn: appData.requestedEndOn || "",
+      viewingRequestedAt: appData.viewingRequestedAt || "",
       status: "applying",
       statusLabel: "新規応募受付中",
       submittedAt: new Date().toLocaleString("ja-JP"),
@@ -430,6 +433,7 @@ window.MachirikuStore = (function() {
       prop.storePlan = {
         storeName: planData.storeName,
         operatorName: state.currentUser.name,
+        progressStatus: planData.progressStatus || "PREPARING",
         concept: planData.concept,
         openDate: planData.openDate,
         message: planData.message

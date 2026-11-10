@@ -26,7 +26,7 @@
   <meta name="theme-color" content="#1b4332">
   <title>マチリク | 宇都宮の空き店舗と、欲しいお店</title>
   <meta name="description" content="宇都宮市の空き店舗を探し、欲しいお店に投票。地域の声を出店につなげるマチリク。">
-  <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css?v=20261110_slide_anim_v1">
+  <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css?v=20261110_db_align_v1">
 </head>
 
 <body data-context-path="${pageContext.request.contextPath}">
@@ -110,11 +110,11 @@
   <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNWrNbVnBfZsjuTJ3sHCKDemfkxNsIv7w&libraries=marker"></script>
   <script src="${pageContext.request.contextPath}/js/qrcode.js"></script>
-  <script src="${pageContext.request.contextPath}/js/data.js?v=20261110_slide_anim_v1"></script>
-  <script src="${pageContext.request.contextPath}/js/map.js?v=20261110_slide_anim_v1"></script>
-  <script src="${pageContext.request.contextPath}/js/store.js?v=20261110_slide_anim_v1"></script>
-  <script src="${pageContext.request.contextPath}/js/screens.js?v=20261110_slide_anim_v1"></script>
-  <script src="${pageContext.request.contextPath}/js/app.js?v=20261110_slide_anim_v1"></script>
+  <script src="${pageContext.request.contextPath}/js/data.js?v=20261110_db_align_v1"></script>
+  <script src="${pageContext.request.contextPath}/js/map.js?v=20261110_db_align_v1"></script>
+  <script src="${pageContext.request.contextPath}/js/store.js?v=20261110_db_align_v1"></script>
+  <script src="${pageContext.request.contextPath}/js/screens.js?v=20261110_db_align_v1"></script>
+  <script src="${pageContext.request.contextPath}/js/app.js?v=20261110_db_align_v1"></script>
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
     document.addEventListener('DOMContentLoaded', function () {

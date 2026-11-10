@@ -1208,15 +1208,6 @@ window.MachirikuScreens = (function() {
                   <option value="月1回以下">月1回以下</option>
                 </select>
               </div>
-              <div class="form-group" style="margin-bottom:1rem;">
-                <label for="field-6">主に利用したい時間帯</label>
-                <select id="field-6" name="timing" class="form-select">
-                  <option value="ランチタイム（11:30〜14:00）">昼・ランチタイム</option>
-                  <option value="カフェタイム（14:00〜17:00）" selected>午後・カフェタイム</option>
-                  <option value="ディナー・夜（18:00〜22:00）">夜・ディナー・バータイム</option>
-                  <option value="朝・通勤前（7:00〜9:00）">朝・モーニング</option>
-                </select>
-              </div>
               <div class="form-group">
                 <label for="field-7">出店する事業主・店舗への要望や応援メッセージ（自由記述）</label>
                 <textarea id="field-7" name="comment" class="form-control" rows="3" placeholder="例: オリオン通りでゆっくり本が読める静かなカフェがあると嬉しいです。テイクアウトもできると助かります。">${curVote?.comment || ''}</textarea>
@@ -1290,8 +1281,16 @@ window.MachirikuScreens = (function() {
     const application = state.applications.find(a => a.propId === preparingProp.id && a.status !== 'rejected');
     if (preparingProp.source && !preparingProp.storePlan && !application) return renderEmptyState('S05', '開店計画はまだありません', `${preparingProp.title}の出店・開店情報はまだ登録されていません。`, `#s02?id=${preparingProp.id}`, '物件の詳細を見る');
     const plan = preparingProp.storePlan || {};
-    const stages = ['希望を集める', '出店者を選ぶ', '契約・引き渡し', '開店の準備', '開店'];
-    const stage = Math.max(0, ['voting','reviewing','agreed','preparing','opened'].indexOf(preparingProp.status));
+    // DB specifications: opening_plans.progress_status ('PREPARING', 'CONSTRUCTION', 'DATE_FIXED', 'OPENED')
+    const stages = [
+      { code: 'PREPARING', label: '開店準備中' },
+      { code: 'CONSTRUCTION', label: '内装工事中' },
+      { code: 'DATE_FIXED', label: 'オープン日決定' },
+      { code: 'OPENED', label: '開店' }
+    ];
+    let currentStatusCode = plan.progressStatus || (preparingProp.status === 'opened' ? 'OPENED' : 'PREPARING');
+    let stage = stages.findIndex(s => s.code === currentStatusCode);
+    if (stage === -1) stage = 0;
     const followed = state.currentUser.followedProps?.includes(preparingProp.id);
     const coupons = state.coupons.filter(c => c.propId === preparingProp.id);
     return `
@@ -1303,7 +1302,7 @@ window.MachirikuScreens = (function() {
             <div class="detail-card">
               <h2 class="detail-card-title">${escapeHtml(preparingProp.title)}</h2>
               <ol class="opening-steps" aria-label="開店までの進み具合">
-                ${stages.map((label,index) => `<li class="${index < stage ? 'is-complete' : index === stage ? 'is-current' : ''}" ${index === stage ? 'aria-current="step"' : ''}><span class="step-number">${index + 1}</span><span>${label}${index === stage ? '<small>現在</small>' : ''}</span></li>`).join('')}
+                ${stages.map((stg, index) => `<li class="${index < stage ? 'is-complete' : index === stage ? 'is-current' : ''}" ${index === stage ? 'aria-current="step"' : ''}><span class="step-number">${index + 1}</span><span>${stg.label}${index === stage ? '<small>現在</small>' : ''}</span></li>`).join('')}
               </ol>
             </div>
             <div class="story-card-box">
@@ -1583,26 +1582,46 @@ window.MachirikuScreens = (function() {
                   `).join("")}
                 </select>
               </div>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+              <!-- 契約種別 (DB: contract_kind) -->
+              <div class="form-group" style="margin-bottom:1rem;">
+                <label style="font-weight:700; display:block; margin-bottom:0.4rem;">希望契約形態 *必須</label>
+                <div style="display:flex; gap:1.25rem;">
+                  <label style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                    <input type="radio" name="contractKind" value="MONTHLY" checked style="accent-color:var(--primary-700);">
+                    <span>通常賃貸契約（月額契約）</span>
+                  </label>
+                  <label style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                    <input type="radio" name="contractKind" value="POPUP" style="accent-color:var(--primary-700);">
+                    <span>ポップアップ短期出店</span>
+                  </label>
+                </div>
+              </div>
+              <!-- 希望利用期間 (DB: requested_start_on / requested_end_on) -->
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
                 <div class="form-group">
-                  <label for="field-11">希望賃料帯 (月額/円)</label>
-                  <input id="field-11" type="number" name="targetRent" class="form-control" value="${prop.rent}">
+                  <label for="field-start-on">利用開始希望日 *必須</label>
+                  <input id="field-start-on" type="date" name="requestedStartOn" class="form-control" required value="${new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]}">
                 </div>
                 <div class="form-group">
-                  <label for="field-12">希望オープン時期</label>
-                  <input id="field-12" type="text" name="targetOpenDate" class="form-control" value="2026年12月上旬">
+                  <label for="field-end-on">利用終了希望日 *必須</label>
+                  <input id="field-end-on" type="date" name="requestedEndOn" class="form-control" required value="${new Date(Date.now() + 395 * 86400000).toISOString().split('T')[0]}">
                 </div>
+              </div>
+              <!-- 内覧希望日時 (DB: viewing_requested_at) -->
+              <div class="form-group">
+                <label for="field-viewing">現地内覧の希望日時 (任意)</label>
+                <input id="field-viewing" type="datetime-local" name="viewingRequestedAt" class="form-control">
               </div>
             </div>
 
-            <!-- Step 2: 想い・ストーリー (さかさま不動産風) -->
+            <!-- Step 2: 想い・ストーリー (DB: message) -->
             <div style="margin-bottom:1.5rem;">
               <h3 style="font-size:1rem; font-weight:800; border-bottom:2px solid var(--primary-100); padding-bottom:0.5rem; margin-bottom:1rem;">
                 2. 出店への想い・ストーリー（オーナーへのメッセージ）
               </h3>
               <div class="form-group">
                 <label for="field-13">なぜこの場所で出店したいのか、どんなお店にしたいのかをお書きください *必須</label>
-                <textarea id="field-13" name="concept" class="form-control" rows="4" required placeholder="例: 地元日光の厳選コーヒー豆と宇都宮の食材を使ったカフェを開きたいです。若者とシニアが交差する居心地の良い空間をつくります。">${state.currentUser.story || ''}</textarea>
+                <textarea id="field-13" name="message" class="form-control" rows="4" required placeholder="例: 地元日光の厳選コーヒー豆と宇都宮の食材を使ったカフェを開きたいです。若者とシニアが交差する居心地の良い空間をつくります。">${state.currentUser.story || ''}</textarea>
               </div>
             </div>
 
@@ -2077,6 +2096,15 @@ window.MachirikuScreens = (function() {
             <div class="form-group" style="margin-bottom:1rem;">
               <label for="field-37">店舗正式名称 *必須</label>
               <input id="field-37" type="text" name="storeName" class="form-control" required value="${prop.storePlan?.storeName || ''}">
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+              <label for="field-progress-status">現在の進捗状況（DB: progress_status） *必須</label>
+              <select id="field-progress-status" name="progressStatus" class="form-select" required>
+                <option value="PREPARING" ${(!prop.storePlan?.progressStatus || prop.storePlan?.progressStatus === 'PREPARING') ? 'selected' : ''}>開店準備中</option>
+                <option value="CONSTRUCTION" ${prop.storePlan?.progressStatus === 'CONSTRUCTION' ? 'selected' : ''}>内装・設備工事中</option>
+                <option value="DATE_FIXED" ${prop.storePlan?.progressStatus === 'DATE_FIXED' ? 'selected' : ''}>オープン日決定</option>
+                <option value="OPENED" ${prop.storePlan?.progressStatus === 'OPENED' ? 'selected' : ''}>開店・オープン</option>
+              </select>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
               <div class="form-group">
@@ -5514,9 +5542,8 @@ window.MachirikuScreens = (function() {
   function handleVoteSubmit(propId, form) {
     const ranks = [form.rank1.value, form.rank2.value, form.rank3.value].filter(Boolean);
     const surveyData = {
-      frequency: form.frequency.value,
-      timing: form.timing.value,
-      comment: form.comment.value
+      frequency: form.frequency ? form.frequency.value : '',
+      comment: form.comment ? form.comment.value : ''
     };
 
     const res = store.submitVote(propId, ranks, surveyData);
@@ -5534,9 +5561,11 @@ window.MachirikuScreens = (function() {
       propTitle: prop.title,
       storeName: form.storeName.value,
       genreId: form.genreId.value,
-      targetRent: form.targetRent.value,
-      targetOpenDate: form.targetOpenDate.value,
-      concept: form.concept.value
+      contractKind: form.contractKind?.value || 'MONTHLY',
+      requestedStartOn: form.requestedStartOn?.value || '',
+      requestedEndOn: form.requestedEndOn?.value || '',
+      viewingRequestedAt: form.viewingRequestedAt?.value || '',
+      message: form.message?.value || form.concept?.value || ''
     };
 
     store.submitApplication(appData);
@@ -5601,12 +5630,14 @@ window.MachirikuScreens = (function() {
 
   function handlePublishPlanSubmit(form, propId) {
     const targetPropId = propId || form.propId?.value || store.getProperties()[0]?.id;
+    const progressStatus = form.progressStatus?.value || 'PREPARING';
     store.publishStorePlan({
       propId: targetPropId,
       storeName: form.storeName.value,
+      progressStatus: progressStatus,
       openDate: form.openDate.value,
       message: form.message.value,
-      isOpenNow: false
+      isOpenNow: progressStatus === 'OPENED'
     });
     MachirikuApp.showToast("出店計画を公開しました。 住民の進捗画面に反映されました");
     MachirikuApp.navigate('s05');
