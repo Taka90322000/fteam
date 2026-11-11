@@ -76,7 +76,7 @@
         <label style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.4rem;">
           年齢 <span style="color:var(--text-muted); font-size:0.8rem;">(任意)</span>
         </label>
-        <div style="display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:0.35rem; width:100%; box-sizing:border-box;">
+        <div class="setup-age-grid" style="display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:0.35rem; width:100%; box-sizing:border-box;">
           <%
             String[] ageOptions = {"未設定", "10代", "20代", "30代", "40代", "50代", "60代以上"};
             for (String opt : ageOptions) {

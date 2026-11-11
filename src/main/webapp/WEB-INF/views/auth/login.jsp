@@ -7,15 +7,9 @@
 </jsp:include>
 
 <section class="screen-view s16-view" data-screen="S16">
-  <div class="screen-header-banner" style="background:var(--primary-50); border:1px solid var(--primary-100); border-radius:var(--radius-lg); padding:1rem 1.25rem; margin-bottom:1.5rem; display:flex; align-items:center; gap:1rem;">
-    <span class="screen-header-badge" style="background:var(--primary-700); color:var(--text-inverse); font-weight:800; font-size:0.85rem; padding:0.25rem 0.6rem; border-radius:var(--radius-full);">S16</span>
-    <div>
-      <h1 class="screen-header-title" style="font-size:1.25rem; font-weight:800; color:var(--primary-900); margin:0;">ログイン</h1>
-      <p class="screen-header-desc" style="font-size:0.85rem; color:var(--text-sub); margin:0.25rem 0 0 0;">登録済みアカウントでログインします。LINE公式アカウント連携でスムーズにログインできます。</p>
-    </div>
-  </div>
 
   <div class="form-stepper-box" style="max-width:540px; margin:0 auto; background:var(--bg-card); padding:2rem; border-radius:var(--radius-lg); border:1px solid var(--border-color); box-shadow:var(--shadow-sm);">
+    <h1 style="font-size:1.35rem; font-weight:800; color:var(--text-main); margin:0 0 1.25rem 0; text-align:center;">ログイン</h1>
     
     <%-- Actionが再表示時に設定した案内文がある場合に、フォームの上部へ表示する。 --%>
     <% if (request.getAttribute("errorMessage") != null) { %>

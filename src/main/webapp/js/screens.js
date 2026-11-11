@@ -98,7 +98,6 @@ window.MachirikuScreens = (function() {
     return `<div class="listing-source">
       <p>掲載元: ${escapeHtml(prop.source.site)} / 情報更新日: ${escapeHtml(prop.source.listingUpdatedAt)} / 取得日: ${escapeHtml(prop.source.retrievedAt.slice(0, 10))}</p>
       <p>掲載条件は取得時点の情報です。現在の募集状況・利用可能な業種は掲載元でご確認ください。</p>
-      <a class="btn-secondary" href="${escapeHtml(prop.source.url)}" target="_blank" rel="noopener noreferrer">HOME'Sで物件の写真・掲載情報を見る</a>
       ${prop.sourceNotes?.length ? `<details><summary>掲載情報の補足</summary><ul>${prop.sourceNotes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul></details>` : ''}
     </div>`;
   }
@@ -706,7 +705,7 @@ window.MachirikuScreens = (function() {
             <div class="card-info-pane">
               <div>
                 <h2 class="card-prop-title"><a class="property-title-link" href="#s02?id=${p.id}">${p.title}</a></h2>
-                <div class="card-prop-address">${p.address}（${p.access}）${p.isOutOfMap ? '<span class="map-range-label">中心街の模式図の範囲外</span>' : ''}</div>
+                <div class="card-prop-address">${p.address}（${p.access}）</div>
                 <div class="card-rent-row">
                   <div class="rent-main">${rentMan}万円<small>/月</small></div>
                   <div class="rent-sub">${mgmt}</div>
@@ -859,6 +858,22 @@ window.MachirikuScreens = (function() {
     const rentMan = formatRent(prop.rent);
     const mgmt = prop.managementFee == null ? '掲載なし（要確認）' : `${formatMoney(prop.managementFee)}円`;
 
+    const top3DemandsHtml = prop.topDemands.slice(0, 3).map((d, idx) => {
+      const sub = data.SUBCATS[d.subcatId] || { name: d.label, color: "var(--primary-600)", icon: "" };
+      const percent = Math.min(Math.round((d.score / (prop.demandScore || 1)) * 100), 100);
+      return `
+        <div class="demand-bar-item">
+          <div class="demand-bar-header" style="font-size:0.85rem;">
+            <span>第${idx + 1}位: ${sub.icon} ${sub.name}</span>
+            <span style="color:var(--primary-700); font-weight:700;">${d.votes}票 (${percent}%)</span>
+          </div>
+          <div class="demand-progress-track" style="height:8px; background:rgba(0,0,0,0.06);">
+            <div class="demand-progress-fill" style="width: ${percent}%; background-color: ${sub.color};"></div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
     const topDemandsHtml = prop.topDemands.map((d, idx) => {
       const sub = data.SUBCATS[d.subcatId] || { name: d.label, color: "var(--primary-600)", icon: "" };
       const percent = Math.min(Math.round((d.score / (prop.demandScore || 1)) * 100), 100);
@@ -919,6 +934,10 @@ window.MachirikuScreens = (function() {
       items: galleryItems
     };
 
+    setTimeout(() => {
+      initGallerySlider();
+    }, 0);
+
     const activeItem = galleryItems[initialIdx] || galleryItems[0];
     const kindLabel = getKindLabel(activeItem.kind);
 
@@ -938,27 +957,27 @@ window.MachirikuScreens = (function() {
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                   </button>
                 ` : ''}
-                <div class="gallery-main-view">
-                  <img id="gallery-active-image" src="${escapeHtml(activeItem.url)}" alt="${escapeHtml(prop.title)} - ${escapeHtml(activeItem.label)}" loading="eager" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
+                <div class="gallery-main-view" id="gallery-main-view">
+                  <div class="gallery-slider-track" id="gallery-slider-track" style="transform: translateX(-${initialIdx * 100}%);">
+                    ${galleryItems.map((item, idx) => `
+                      <div class="gallery-slide-item" data-index="${idx}">
+                        <img src="${escapeHtml(item.url)}" alt="${escapeHtml(prop.title)} - ${escapeHtml(item.label || '')}" loading="${idx === initialIdx ? 'eager' : 'lazy'}" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
+                      </div>
+                    `).join('')}
+                  </div>
                 </div>
                 ${galleryItems.length > 1 ? `
                   <button type="button" class="gallery-nav-btn next" onclick="MachirikuScreens.navGallery(1)" aria-label="次の写真">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                   </button>
                 ` : ''}
+                <!-- 右上: すべての写真ボタン -->
+                <button type="button" class="btn-gallery-all-overlay" onclick="MachirikuScreens.openAllPhotosModal('${prop.id}')" title="すべての写真を一覧表示">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:4px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>すべての写真 (${galleryItems.length}枚)
+                </button>
+                <!-- 右下: 枚数カウンター -->
                 <div class="gallery-counter-badge">
                   <span id="gallery-current-index">${initialIdx + 1}</span> / <span id="gallery-total-count">${galleryItems.length}</span>
-                </div>
-              </div>
-
-              <!-- 写真キャプション & 全写真ボタン -->
-              <div class="gallery-caption-row">
-                <div class="gallery-caption-left">
-                  <span class="gallery-kind-badge" id="gallery-kind-label">${escapeHtml(kindLabel)}</span>
-                  <span class="gallery-image-title" id="gallery-caption-text">${escapeHtml(activeItem.label)}</span>
-                </div>
-                <div class="gallery-caption-right">
-                  <button type="button" class="btn-text-gallery" onclick="MachirikuScreens.openAllPhotosModal('${prop.id}')">すべての写真 (${galleryItems.length}枚)</button>
                 </div>
               </div>
 
@@ -972,7 +991,6 @@ window.MachirikuScreens = (function() {
                     ${galleryItems.map((img, i) => `
                       <button type="button" class="gallery-thumb-btn ${i === initialIdx ? 'is-selected' : ''}" data-index="${i}" onclick="MachirikuScreens.selectGalleryImage(${i})" title="${escapeHtml(img.label)}">
                         <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.label)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
-                        <span class="thumb-kind-tag">${escapeHtml(getKindLabel(img.kind))}</span>
                       </button>
                     `).join('')}
                   </div>
@@ -1025,17 +1043,33 @@ window.MachirikuScreens = (function() {
                     <th>主要設備</th>
                     <td>
                       <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
-                        ${prop.facilities.map(f => `<span class="qual-badge"> ${f}</span>`).join("")}
+                        ${(prop.facilities || ['電気','上水道','下水道']).map(fac => `<span class="badge-feature">${fac}</span>`).join('')}
                       </div>
                     </td>
                   </tr>
+                  <tr>
+                    <th>飲食店営業許可</th>
+                    <td><span class="badge-check-ok">✔ ${prop.permitStatus || "取得相談可"}</span></td>
+                  </tr>
+                  ${prop.sourceNotes?.length ? `<tr><th>掲載情報の備考</th><td><ul class="listing-fees">${prop.sourceNotes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul></td></tr>` : ''}
                 </tbody>
               </table>
-              ${prop.broker ? `<p class="listing-broker">取扱会社: ${escapeHtml(prop.broker.name)}</p>` : ''}
+
+              ${prop.source ? renderSourceInformation(prop) : `
+                <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px dashed var(--border-color); display:flex; justify-content:space-between; align-items:center; font-size:0.875rem; color:var(--text-sub);">
+                  <div>
+                    <strong>取扱不動産会社:</strong> ${prop.agent ? prop.agent.name : (prop.broker ? prop.broker.name : "株式会社宇都宮不動産 本店")}<br>
+                    <span style="font-size:0.8rem; color:var(--text-muted);">${prop.agent ? prop.agent.license : "栃木県知事 (4) 第12345号"} / 免許番号・取引態様: 専任媒介</span>
+                  </div>
+                  <div style="text-align:right;">
+                    <span style="font-size:0.75rem; color:var(--text-muted);">物件番号: ${prop.id}</span>
+                  </div>
+                </div>
+              `}
+
               <div style="margin-top:1.25rem; font-size:0.9rem; line-height:1.7; color:var(--text-sub);">
                 ${prop.description}
               </div>
-              ${renderSourceInformation(prop)}
             </div>
 
             <!-- Decidim風 住民需要分析セクション -->
@@ -1069,21 +1103,28 @@ window.MachirikuScreens = (function() {
                 ${topDemandsHtml || '<p class="sample-note">まだ投票がありません。</p>'}
               </div>
 
-              <h3 style="font-size:0.95rem; font-weight:800; color:var(--primary-700); margin-bottom:0.75rem;">住民からの声・リクエスト</h3>
-              <div class="resident-quotes-stream">
-                ${residentVoicesHtml || '<p class="sample-note">まだリクエストはありません。</p>'}
-              </div>
             </div>
           </div>
 
           <!-- 右サイドバー: アクションCTA -->
           <div class="detail-side-pane">
             <div class="cta-box-card">
-              <div class="cta-price-banner">
-                <div style="font-size:0.875rem; color:var(--text-muted);">月額賃料${prop.rentTaxStatus === 'inclusive' ? '（税込）' : prop.rentTaxStatus === 'exclusive' ? '（税別）' : ''}</div>
-                <div style="font-size:1.8rem; font-weight:900; color:var(--accent-price);">${rentMan}万円</div>
-                <div style="font-size:0.875rem; color:var(--text-sub);">管理費等: ${mgmt}</div>
-              </div>
+              ${(state.currentRole === 'business' || state.currentRole === 'owner') ? `
+                <div class="cta-price-banner">
+                  <div style="font-size:0.875rem; color:var(--text-muted);">月額賃料${prop.rentTaxStatus === 'inclusive' ? '（税込）' : prop.rentTaxStatus === 'exclusive' ? '（税別）' : ''}</div>
+                  <div style="font-size:1.8rem; font-weight:900; color:var(--accent-price);">${rentMan}万円</div>
+                  <div style="font-size:0.875rem; color:var(--text-sub);">管理費等: ${mgmt}</div>
+                </div>
+              ` : `
+                <div class="cta-demand-summary-banner">
+                  <div style="font-size:0.95rem; font-weight:800; color:var(--primary-800); margin-bottom:0.75rem;">
+                    人気ランキング Top 3
+                  </div>
+                  <div class="demand-bar-list" style="margin-bottom:0; gap:0.65rem;">
+                    ${top3DemandsHtml || '<p class="sample-note">まだ投票がありません。</p>'}
+                  </div>
+                </div>
+              `}
 
               <div class="cta-buttons-stack">
                 ${state.currentRole === 'resident' ? `
@@ -1109,16 +1150,13 @@ window.MachirikuScreens = (function() {
               </nav>` : ''}
             </div>
 
-            <!-- 物件所在地ミニマップカード -->
+            <!-- 物件所在地GoogleMapカード -->
             <div class="detail-card" style="padding:1rem;">
               <div style="font-weight:700; font-size:0.875rem; margin-bottom:0.5rem;">所在地・周辺情報</div>
               <div style="font-size:0.875rem; color:var(--text-sub); margin-bottom:0.75rem;">
-                ${prop.address}<br>
-                ${prop.area}
+                ${prop.address}
               </div>
-              <button type="button" class="btn-secondary" style="width:100%; font-size:0.875rem;" onclick="MachirikuApp.navigate('s01')">
-                ${prop.isOutOfMap ? '物件一覧に戻る' : '模式図で位置を確認する'}
-              </button>
+              <div id="s02-location-map" data-lat="${prop.location?.lat || 36.559312}" data-lng="${prop.location?.lng || 139.882105}" data-title="${escapeHtml(prop.title)}" style="width:100%; height:200px; border-radius:var(--radius-sm); border:1px solid var(--border-color); overflow:hidden; background:var(--bg-subtle);"></div>
             </div>
           </div>
         </div>
@@ -1316,7 +1354,7 @@ window.MachirikuScreens = (function() {
             <div class="detail-card">
               <h2 class="detail-card-title">${escapeHtml(preparingProp.title)}</h2>
               <ol class="opening-steps" aria-label="開店までの進み具合">
-                ${stages.map((label,index) => `<li class="${index < stage ? 'is-complete' : index === stage ? 'is-current' : ''}" ${index === stage ? 'aria-current="step"' : ''}><span class="step-number">${index + 1}</span><span>${label}${index === stage ? '<small>現在</small>' : ''}</span></li>`).join('')}
+                ${stages.map((label, index) => `<li class="${index < stage ? 'is-complete' : index === stage ? 'is-current' : ''}" ${index === stage ? 'aria-current="step"' : ''}><span class="step-number">${index + 1}</span><span>${label}${index === stage ? '<small>現在</small>' : ''}</span></li>`).join('')}
               </ol>
             </div>
             <div class="story-card-box">
@@ -1596,7 +1634,7 @@ window.MachirikuScreens = (function() {
                   `).join("")}
                 </select>
               </div>
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
                 <div class="form-group">
                   <label for="field-11">希望賃料帯 (月額/円)</label>
                   <input id="field-11" type="number" name="targetRent" class="form-control" value="${prop.rent}">
@@ -1606,16 +1644,46 @@ window.MachirikuScreens = (function() {
                   <input id="field-12" type="text" name="targetOpenDate" class="form-control" value="2026年12月上旬">
                 </div>
               </div>
+              <!-- 契約種別 (DB: contract_kind) -->
+              <div class="form-group" style="margin-bottom:1rem;">
+                <label style="font-weight:700; display:block; margin-bottom:0.4rem;">希望契約形態 *必須</label>
+                <div style="display:flex; gap:1.25rem;">
+                  <label style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                    <input type="radio" name="contractKind" value="MONTHLY" checked style="accent-color:var(--primary-700);">
+                    <span>通常賃貸契約（月額契約）</span>
+                  </label>
+                  <label style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                    <input type="radio" name="contractKind" value="POPUP" style="accent-color:var(--primary-700);">
+                    <span>ポップアップ短期出店</span>
+                  </label>
+                </div>
+              </div>
+              <!-- 希望利用期間 (DB: requested_start_on / requested_end_on) -->
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+                <div class="form-group">
+                  <label for="field-start-on">利用開始希望日 *必須</label>
+                  <input id="field-start-on" type="date" name="requestedStartOn" class="form-control" required value="${new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]}">
+                </div>
+                <div class="form-group">
+                  <label for="field-end-on">利用終了希望日 *必須</label>
+                  <input id="field-end-on" type="date" name="requestedEndOn" class="form-control" required value="${new Date(Date.now() + 395 * 86400000).toISOString().split('T')[0]}">
+                </div>
+              </div>
+              <!-- 内覧希望日時 (DB: viewing_requested_at) -->
+              <div class="form-group">
+                <label for="field-viewing">現地内覧の希望日時 (任意)</label>
+                <input id="field-viewing" type="datetime-local" name="viewingRequestedAt" class="form-control">
+              </div>
             </div>
 
-            <!-- Step 2: 想い・ストーリー (さかさま不動産風) -->
+            <!-- Step 2: 想い・ストーリー (DB: message) -->
             <div style="margin-bottom:1.5rem;">
               <h3 style="font-size:1rem; font-weight:800; border-bottom:2px solid var(--primary-100); padding-bottom:0.5rem; margin-bottom:1rem;">
                 2. 出店への想い・ストーリー（オーナーへのメッセージ）
               </h3>
               <div class="form-group">
                 <label for="field-13">なぜこの場所で出店したいのか、どんなお店にしたいのかをお書きください *必須</label>
-                <textarea id="field-13" name="concept" class="form-control" rows="4" required placeholder="例: 地元日光の厳選コーヒー豆と宇都宮の食材を使ったカフェを開きたいです。若者とシニアが交差する居心地の良い空間をつくります。">${state.currentUser.story || ''}</textarea>
+                <textarea id="field-13" name="message" class="form-control" rows="4" required placeholder="例: 地元日光の厳選コーヒー豆と宇都宮の食材を使ったカフェを開きたいです。若者とシニアが交差する居心地の良い空間をつくります。">${state.currentUser.story || ''}</textarea>
               </div>
             </div>
 
@@ -1725,13 +1793,35 @@ window.MachirikuScreens = (function() {
                 
                 <div>
                   <h2 style="font-size:1.3rem; font-weight:800; color:var(--text-main);">${app.storeName}</h2>
-                  <div style="font-size:0.875rem; color:var(--text-muted);">応募者: ${app.applicantName} / 業種: ${app.genreName}</div>
+                  <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.75rem;">応募者: ${app.applicantName} / 業種: ${app.genreName}</div>
                 </div>
               </div>
+
+              <!-- 申込条件概要 (DB: applications準拠) -->
+              <table class="specs-table" style="margin-bottom:1.25rem;">
+                <tbody>
+                  <tr>
+                    <th style="width:140px;">希望契約形態</th>
+                    <td><strong>${app.contractKind === 'POPUP' ? 'ポップアップ短期出店' : '通常賃貸契約（月額）'}</strong></td>
+                  </tr>
+                  ${app.requestedStartOn ? `
+                    <tr>
+                      <th>利用希望期間</th>
+                      <td>${escapeHtml(app.requestedStartOn)} 〜 ${escapeHtml(app.requestedEndOn || '相談')}</td>
+                    </tr>
+                  ` : ''}
+                  ${app.viewingRequestedAt ? `
+                    <tr>
+                      <th>現地内覧希望日時</th>
+                      <td>${escapeHtml(app.viewingRequestedAt.replace('T', ' '))}</td>
+                    </tr>
+                  ` : ''}
+                </tbody>
+              </table>
               
-              <div style="font-weight:700; margin-bottom:0.5rem; color:var(--text-main);">■ 出店への想い・コンセプト</div>
+              <div style="font-weight:700; margin-bottom:0.5rem; color:var(--text-main);">■ 出店への想い・メッセージ</div>
               <div class="story-content-body" style="margin-bottom:1.25rem;">
-                ${app.concept}
+                ${escapeHtml(app.message || app.concept || '')}
               </div>
 
               <div style="font-weight:700; margin-bottom:0.5rem; color:var(--text-main);">■ 資格・許認可情報</div>
@@ -2133,6 +2223,15 @@ window.MachirikuScreens = (function() {
               <label for="field-37">店舗正式名称 *必須</label>
               <input id="field-37" type="text" name="storeName" class="form-control" required value="${prop.storePlan?.storeName || ''}">
             </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+              <label for="field-progress-status">現在の進捗状況（DB: progress_status） *必須</label>
+              <select id="field-progress-status" name="progressStatus" class="form-select" required>
+                <option value="PREPARING" ${(!prop.storePlan?.progressStatus || prop.storePlan?.progressStatus === 'PREPARING') ? 'selected' : ''}>開店準備中</option>
+                <option value="CONSTRUCTION" ${prop.storePlan?.progressStatus === 'CONSTRUCTION' ? 'selected' : ''}>内装・設備工事中</option>
+                <option value="DATE_FIXED" ${prop.storePlan?.progressStatus === 'DATE_FIXED' ? 'selected' : ''}>オープン日決定</option>
+                <option value="OPENED" ${prop.storePlan?.progressStatus === 'OPENED' ? 'selected' : ''}>開店・オープン</option>
+              </select>
+            </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
               <div class="form-group">
                 <label for="field-38">グランドオープン予定日 *必須</label>
@@ -2169,9 +2268,8 @@ window.MachirikuScreens = (function() {
 
     return `
       <section class="screen-view s16-view" data-screen="S16">
-        ${renderHeaderBanner("S16", "ログイン", "共通認証", "登録済みアカウントでログインします。デモ確認用に各ロール（地域住民・事業主・オーナー・運営管理者）に1クリックで即時ログインできます。")}
-
         <div class="form-stepper-box" style="max-width:540px;">
+          <h1 style="font-size:1.35rem; font-weight:800; color:var(--text-main); margin:0 0 1.25rem 0; text-align:center;">ログイン</h1>
           ${errorHtml}
           <div style="margin-top:0.5rem; margin-bottom:1.5rem;">
             <button type="button" class="btn-line-login" onclick="MachirikuScreens.handleLineLogin()">
@@ -2212,9 +2310,8 @@ window.MachirikuScreens = (function() {
   function renderS17() {
     return `
       <section class="screen-view s17-view" data-screen="S17">
-        ${renderHeaderBanner("S17", "種別別 会員登録", "共通", "利用者区分（地域住民・出店事業主・物件オーナー）を選択し、LINE公式アカウント連携でスムーズに登録・ログインできます。")}
-
         <div class="form-stepper-box" style="max-width:540px;">
+          <h1 style="font-size:1.35rem; font-weight:800; color:var(--text-main); margin:0 0 1.25rem 0; text-align:center;">種別別 会員登録</h1>
           <div class="form-group" style="margin-bottom:1.5rem;">
             <label style="font-size:0.9rem; font-weight:800;">利用区分を選択してください *必須</label>
             <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem; margin-top:0.5rem;">
@@ -2224,7 +2321,7 @@ window.MachirikuScreens = (function() {
               </label>
               <label style="border:1px solid var(--border-color); padding:0.85rem; border-radius:var(--radius-md); text-align:center; cursor:pointer;">
                 <input type="radio" name="regRole" value="business">
-                <div style="font-weight:700; margin-top:0.3rem;">出店希望事業主</div>
+                <div style="font-weight:700; margin-top:0.3rem;">出店事業主</div>
               </label>
               <label style="border:1px solid var(--border-color); padding:0.85rem; border-radius:var(--radius-md); text-align:center; cursor:pointer;">
                 <input type="radio" name="regRole" value="owner">
@@ -2967,7 +3064,7 @@ window.MachirikuScreens = (function() {
               <label style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.4rem;">
                 年齢 <span style="color:var(--text-muted); font-size:0.8rem;">(任意)</span>
               </label>
-              <div style="display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:0.35rem; width:100%; box-sizing:border-box;">
+              <div class="setup-age-grid" style="display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:0.35rem; width:100%; box-sizing:border-box;">
                 ${ageOptions.map(opt => `
                   <label style="display:flex; align-items:center; justify-content:center; gap:0.25rem; padding:0.45rem 0.15rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-card); cursor:pointer; font-size:0.8125rem; white-space:nowrap; text-align:center; box-sizing:border-box;">
                     <input type="radio" name="ageGroup" value="${opt}" ${(ageGroup === opt || (!ageGroup && opt === '未設定')) ? 'checked' : ''} style="cursor:pointer; margin:0; flex-shrink:0;">
@@ -4550,7 +4647,7 @@ window.MachirikuScreens = (function() {
                 <div class="quote-bubble">
                   <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem;">
                     <span class="response-score">満足度 ${r.rating} / 5</span>
-                    <span style="font-size:0.875rem; color:var(--text-muted);">${r.age} ${r.gender}（${r.area}）- ${r.date}</span>
+                    <span style="font-size:0.875rem; color:var(--text-muted);">${r.age} ${r.gender} - ${r.date}</span>
                   </div>
                   <div style="font-size:0.88rem; color:var(--text-main); font-weight:600; margin-bottom:0.25rem;">
                     注文: ${r.q2}
@@ -4898,7 +4995,6 @@ window.MachirikuScreens = (function() {
   function resetSearch() {
     store.setFilters({
       keyword: '',
-      area: 'all',
       pref: 'all',
       cities: [],
       category: 'all',
@@ -5572,9 +5668,9 @@ window.MachirikuScreens = (function() {
   function handleVoteSubmit(propId, form) {
     const ranks = [form.rank1.value, form.rank2.value, form.rank3.value].filter(Boolean);
     const surveyData = {
-      frequency: form.frequency.value,
-      timing: form.timing.value,
-      comment: form.comment.value
+      frequency: form.frequency ? form.frequency.value : '',
+      timing: form.timing ? form.timing.value : '',
+      comment: form.comment ? form.comment.value : ''
     };
 
     const res = store.submitVote(propId, ranks, surveyData);
@@ -5592,9 +5688,14 @@ window.MachirikuScreens = (function() {
       propTitle: prop.title,
       storeName: form.storeName.value,
       genreId: form.genreId.value,
-      targetRent: form.targetRent.value,
-      targetOpenDate: form.targetOpenDate.value,
-      concept: form.concept.value
+      targetRent: form.targetRent?.value || prop.rent,
+      targetOpenDate: form.targetOpenDate?.value || form.requestedStartOn?.value || '',
+      contractKind: form.contractKind?.value || 'MONTHLY',
+      requestedStartOn: form.requestedStartOn?.value || '',
+      requestedEndOn: form.requestedEndOn?.value || '',
+      viewingRequestedAt: form.viewingRequestedAt?.value || '',
+      message: form.message?.value || form.concept?.value || '',
+      concept: form.message?.value || form.concept?.value || ''
     };
 
     store.submitApplication(appData);
@@ -5609,19 +5710,33 @@ window.MachirikuScreens = (function() {
   }
 
   function handlePropRegisterSubmit(form, editId) {
+    const areaTsubo = Number(form.areaTsubo?.value) || 20;
+    const facs = [];
+    if (form.facGas?.checked) facs.push("都市ガス");
+    if (form.facWater?.checked) facs.push("給排水設備");
+    if (form.facGrease?.checked) facs.push("グリストラップ");
+    if (form.facDuct?.checked) facs.push("換気ダクト");
+    if (form.facPower?.checked) facs.push("動力電力");
+    if (form.facSign?.checked) facs.push("看板スペース");
+    if (form.facPark?.checked) facs.push("駐車場あり");
+    if (form.facToilet?.checked) facs.push("専用トイレ");
+
     const propData = {
       title: form.title.value,
       address: form.address.value,
-      access: form.access.value,
+      access: form.access ? form.access.value : "東武宇都宮駅 徒歩5分",
       rent: Number(form.rent.value),
       managementFee: Number(form.managementFee?.value) || 0,
       deposit: form.deposit?.value || "敷金2ヶ月 / 礼金1ヶ月",
       securityDeposit: form.securityDeposit?.value || "30万円",
-      areaTsubo: Number(form.areaTsubo.value),
+      areaTsubo: areaTsubo,
+      areaSqm: Math.round(areaTsubo * 3.305785 * 10) / 10,
       floor: form.floor?.value || "1階路面",
       structure: form.structure?.value || "鉄骨造",
       builtYear: form.builtYear?.value || "1995年築",
       condition: form.condition?.value || "業種相談可",
+      facilities: facs.length > 0 ? facs : ["都市ガス", "給排水設備"],
+      statusLabel: form.statusLabel?.value || "募集中",
       description: form.description?.value || ""
     };
 
@@ -5663,12 +5778,14 @@ window.MachirikuScreens = (function() {
 
   function handlePublishPlanSubmit(form, propId) {
     const targetPropId = propId || form.propId?.value || store.getProperties()[0]?.id;
+    const progressStatus = form.progressStatus?.value || 'PREPARING';
     store.publishStorePlan({
       propId: targetPropId,
       storeName: form.storeName.value,
+      progressStatus: progressStatus,
       openDate: form.openDate.value,
       message: form.message.value,
-      isOpenNow: false
+      isOpenNow: progressStatus === 'OPENED'
     });
     MachirikuApp.showToast("出店計画を公開しました。 住民の進捗画面に反映されました");
     MachirikuApp.navigate('s05');
@@ -5877,14 +5994,14 @@ window.MachirikuScreens = (function() {
   function selectGalleryImage(index) {
     if (!currentGallery.items || !currentGallery.items[index]) return;
     currentGallery.index = index;
-    updateGalleryView();
+    updateGalleryView(true);
   }
 
   function navGallery(delta) {
     if (!currentGallery.items || !currentGallery.items.length) return;
     const len = currentGallery.items.length;
     currentGallery.index = (currentGallery.index + delta + len) % len;
-    updateGalleryView();
+    updateGalleryView(true);
   }
 
   function scrollThumbs(direction) {
@@ -5894,14 +6011,17 @@ window.MachirikuScreens = (function() {
     }
   }
 
-  function updateGalleryView() {
+  function updateGalleryView(withTransition = true) {
     const item = currentGallery.items[currentGallery.index];
     if (!item) return;
-    const imgEl = document.getElementById('gallery-active-image');
-    if (imgEl) {
-      imgEl.src = item.url;
-      imgEl.alt = item.label;
+
+    // スライダートラックをアニメーション移動
+    const sliderTrack = document.getElementById('gallery-slider-track');
+    if (sliderTrack) {
+      sliderTrack.style.transition = withTransition ? 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)' : 'none';
+      sliderTrack.style.transform = `translateX(-${currentGallery.index * 100}%)`;
     }
+
     const idxEl = document.getElementById('gallery-current-index');
     if (idxEl) idxEl.textContent = String(currentGallery.index + 1);
     const captionEl = document.getElementById('gallery-caption-text');
@@ -5925,35 +6045,110 @@ window.MachirikuScreens = (function() {
     }
   }
 
+  // スライダーのポインタードラッグ＆スワイプ＆キーボード対応
+  function initGallerySlider() {
+    const view = document.getElementById('gallery-main-view');
+    const track = document.getElementById('gallery-slider-track');
+    if (!view || !track) return;
+    if (view.dataset.sliderInit === 'true') return;
+    view.dataset.sliderInit = 'true';
+
+    let isDragging = false;
+    let startX = 0;
+    let currentDeltaX = 0;
+    let viewWidth = 0;
+
+    function onPointerDown(e) {
+      if (e.target.closest('.gallery-nav-btn, .btn-gallery-all-overlay')) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+      isDragging = true;
+      startX = e.clientX;
+      currentDeltaX = 0;
+      viewWidth = view.offsetWidth || 1;
+      track.style.transition = 'none';
+      view.style.cursor = 'grabbing';
+      if (view.setPointerCapture) {
+        try { view.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+      currentDeltaX = e.clientX - startX;
+      const basePercent = -currentGallery.index * 100;
+      const dragPercent = (currentDeltaX / viewWidth) * 100;
+      track.style.transform = `translateX(${basePercent + dragPercent}%)`;
+    }
+
+    function onPointerUp(e) {
+      if (!isDragging) return;
+      isDragging = false;
+      view.style.cursor = '';
+      if (view.releasePointerCapture) {
+        try { view.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+
+      const threshold = Math.min(60, viewWidth * 0.15);
+      if (currentDeltaX < -threshold) {
+        navGallery(1);
+      } else if (currentDeltaX > threshold) {
+        navGallery(-1);
+      } else {
+        updateGalleryView(true);
+      }
+      currentDeltaX = 0;
+    }
+
+    view.addEventListener('pointerdown', onPointerDown);
+    view.addEventListener('pointermove', onPointerMove);
+    view.addEventListener('pointerup', onPointerUp);
+    view.addEventListener('pointercancel', onPointerUp);
+
+    function onKeyDown(e) {
+      if (!document.getElementById('gallery-main-view')) {
+        window.removeEventListener('keydown', onKeyDown);
+        return;
+      }
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+      if (document.getElementById('photos-modal') || document.getElementById('lightbox-modal')) return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navGallery(-1);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navGallery(1);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+  }
+
+  let modalGalleryItems = [];
+  let currentLightboxIdx = 0;
+
   function openAllPhotosModal(propId) {
     const prop = store.getPropertyById(propId);
     if (!prop) return;
     const items = (prop.gallery && prop.gallery.length) ? prop.gallery : currentGallery.items;
+    modalGalleryItems = items;
     closeAllPhotosModal();
-
-    const kinds = ['all', ...new Set(items.map(it => it.kind))];
 
     const modalHtml = `
       <div class="photos-modal-overlay" id="photos-modal" onclick="if(event.target === this) MachirikuScreens.closeAllPhotosModal()">
         <div class="photos-modal-box">
           <div class="photos-modal-header">
-            <h3 class="photos-modal-title">${escapeHtml(prop.title)} の写真一覧 (全${items.length}枚)</h3>
-            <button type="button" class="btn-secondary" onclick="MachirikuScreens.closeAllPhotosModal()" style="padding: 4px 12px;">閉じる</button>
-          </div>
-          <div class="photos-modal-filter">
-            <button type="button" class="filter-chip-btn is-active" data-kind="all" onclick="MachirikuScreens.filterPhotosModal('all')">すべて (${items.length})</button>
-            ${kinds.filter(k => k !== 'all').map(k => {
-              const count = items.filter(it => it.kind === k).length;
-              return `<button type="button" class="filter-chip-btn" data-kind="${k}" onclick="MachirikuScreens.filterPhotosModal('${k}')">${escapeHtml(getKindLabel(k))} (${count})</button>`;
-            }).join('')}
+            <h3 class="photos-modal-title">${escapeHtml(prop.title)} の写真 (${items.length}枚)</h3>
+            <button type="button" class="photos-modal-close-btn" onclick="MachirikuScreens.closeAllPhotosModal()" aria-label="閉じる">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
           </div>
           <div class="photos-modal-grid" id="photos-modal-grid">
             ${items.map((item, idx) => `
-              <div class="photos-grid-card" data-kind="${item.kind}" onclick="MachirikuScreens.selectGalleryFromModal(${idx})">
-                <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label)}" loading="lazy">
-                <div class="photos-grid-meta">
-                  <span class="gallery-kind-badge" style="width: fit-content; font-size: 0.7rem; padding: 1px 6px;">${escapeHtml(getKindLabel(item.kind))}</span>
-                  <span class="photos-grid-label" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>
+              <div class="photo-tile-item" onclick="MachirikuScreens.openLightbox(${idx})" title="クリックして拡大表示">
+                <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label || prop.title)}" loading="lazy">
+                <div class="photo-tile-hover-overlay">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                 </div>
               </div>
             `).join('')}
@@ -5969,20 +6164,90 @@ window.MachirikuScreens = (function() {
   function closeAllPhotosModal() {
     const modal = document.getElementById('photos-modal');
     if (modal) modal.remove();
+    closeLightbox();
   }
 
-  function filterPhotosModal(kind) {
-    const modal = document.getElementById('photos-modal');
-    if (!modal) return;
-    modal.querySelectorAll('.filter-chip-btn').forEach(btn => {
-      btn.classList.toggle('is-active', btn.getAttribute('data-kind') === kind);
-    });
-    modal.querySelectorAll('.photos-grid-card').forEach(card => {
-      const match = (kind === 'all' || card.getAttribute('data-kind') === kind);
-      card.style.display = match ? 'block' : 'none';
-    });
+  let lightboxKeyHandler = null;
+
+  function openLightbox(idx) {
+    if (!modalGalleryItems || !modalGalleryItems[idx]) return;
+    currentLightboxIdx = idx;
+    closeLightbox();
+
+    const item = modalGalleryItems[idx];
+    const total = modalGalleryItems.length;
+
+    const lightboxHtml = `
+      <div class="lightbox-overlay" id="lightbox-modal" onclick="if(event.target === this) MachirikuScreens.closeLightbox()">
+        <button type="button" class="lightbox-close-btn" onclick="MachirikuScreens.closeLightbox()" aria-label="拡大表示を閉じる">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+        ${total > 1 ? `
+          <button type="button" class="lightbox-nav-btn prev" onclick="event.stopPropagation(); MachirikuScreens.navLightbox(-1)" aria-label="前の写真">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button type="button" class="lightbox-nav-btn next" onclick="event.stopPropagation(); MachirikuScreens.navLightbox(1)" aria-label="次の写真">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        ` : ''}
+        <div class="lightbox-content-box" onclick="event.stopPropagation()">
+          <img id="lightbox-img" src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label || '')}" class="lightbox-image">
+          <div class="lightbox-counter">${idx + 1} / ${total}</div>
+        </div>
+      </div>
+    `;
+    if (document.body && document.body.insertAdjacentHTML) {
+      document.body.insertAdjacentHTML('beforeend', lightboxHtml);
+    }
+
+    if (typeof window !== 'undefined') {
+      if (lightboxKeyHandler) window.removeEventListener('keydown', lightboxKeyHandler);
+      lightboxKeyHandler = (e) => {
+        if (e.key === 'Escape') MachirikuScreens.closeLightbox();
+        else if (e.key === 'ArrowLeft') MachirikuScreens.navLightbox(-1);
+        else if (e.key === 'ArrowRight') MachirikuScreens.navLightbox(1);
+      };
+      window.addEventListener('keydown', lightboxKeyHandler);
+    }
   }
 
+  function closeLightbox() {
+    const lb = document.getElementById('lightbox-modal');
+    if (lb) lb.remove();
+    if (typeof window !== 'undefined' && lightboxKeyHandler) {
+      window.removeEventListener('keydown', lightboxKeyHandler);
+      lightboxKeyHandler = null;
+    }
+  }
+
+  function navLightbox(delta) {
+    if (!modalGalleryItems.length) return;
+    const nextIdx = (currentLightboxIdx + delta + modalGalleryItems.length) % modalGalleryItems.length;
+    currentLightboxIdx = nextIdx;
+
+    const item = modalGalleryItems[nextIdx];
+    const total = modalGalleryItems.length;
+
+    const img = document.getElementById('lightbox-img');
+    const counter = document.querySelector('#lightbox-modal .lightbox-counter');
+    if (!img) {
+      openLightbox(nextIdx);
+      return;
+    }
+
+    // DOMを破棄せず、画像とカウンターのみをスムーズにインプレース更新（裏画面の露出を完全防止）
+    img.style.opacity = '0.5';
+    img.src = item.url;
+    img.alt = item.label || '';
+    img.onload = () => { img.style.opacity = '1'; };
+    setTimeout(() => { if (img) img.style.opacity = '1'; }, 80);
+
+    if (counter) {
+      counter.textContent = `${nextIdx + 1} / ${total}`;
+    }
+  }
+
+  function filterPhotosModal(kind) {}
   function selectGalleryFromModal(index) {
     selectGalleryImage(index);
     closeAllPhotosModal();
@@ -6059,6 +6324,7 @@ window.MachirikuScreens = (function() {
     handleLineLogin,
     handleRegisterComplete,
     handleLogout,
+    initS02MiniMap,
     initS18MapPicker,
     handleS18CurrentLocation,
     setS18Coords,
@@ -6082,11 +6348,15 @@ window.MachirikuScreens = (function() {
     handleApplyPr,
     markAllNotifsRead,
     renderQrCode,
+    initGallerySlider,
     selectGalleryImage,
     navGallery,
     scrollThumbs,
     openAllPhotosModal,
     closeAllPhotosModal,
+    openLightbox,
+    closeLightbox,
+    navLightbox,
     filterPhotosModal,
     selectGalleryFromModal,
     switchResidentCatTab,
@@ -6096,3 +6366,53 @@ window.MachirikuScreens = (function() {
     clearAllResidentIndustries
   };
 })();
+
+  let s02GoogleMap = null;
+  function initS02MiniMap() {
+    if (typeof document === 'undefined') return;
+    const container = document.getElementById('s02-location-map');
+    if (!container) return;
+
+    const lat = parseFloat(container.getAttribute('data-lat'));
+    const lng = parseFloat(container.getAttribute('data-lng'));
+    const title = container.getAttribute('data-title') || '対象物件';
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    function renderNativeMap() {
+      const pos = { lat, lng };
+      s02GoogleMap = new google.maps.Map(container, {
+        center: pos,
+        zoom: 16,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        zoomControl: false,
+        gestureHandling: 'greedy',
+        scrollwheel: true
+      });
+      new google.maps.Marker({
+        position: pos,
+        map: s02GoogleMap,
+        title: title
+      });
+    }
+
+    if (typeof google !== 'undefined' && google.maps && google.maps.Map) {
+      renderNativeMap();
+    } else {
+      // Fallback iframe or wait for script load
+      const q = encodeURIComponent(`${lat},${lng}`);
+      container.innerHTML = `<iframe width="100%" height="100%" style="border:0;" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?q=${q}&z=16&output=embed"></iframe>`;
+      
+      let checks = 0;
+      const interval = setInterval(() => {
+        checks++;
+        if (typeof google !== 'undefined' && google.maps && google.maps.Map) {
+          clearInterval(interval);
+          renderNativeMap();
+        } else if (checks > 10) {
+          clearInterval(interval);
+        }
+      }, 500);
+    }
+  }

@@ -621,6 +621,7 @@ window.MachirikuMap = (function() {
   }
 
   function closeGoogleInfoWindow() {
+    closeMobileMapCard();
     if (gInfoWindow) {
       gInfoWindow.close();
       gInfoWindow = null;
@@ -628,8 +629,70 @@ window.MachirikuMap = (function() {
     }
   }
 
+  
+  function isMobileViewport() {
+    return (typeof window !== 'undefined' && (window.innerWidth <= 768 || ('ontouchstart' in window && window.innerWidth <= 1024)));
+  }
+
+  function closeMobileMapCard() {
+    const card = document.getElementById('gmap-mobile-preview-card');
+    if (card) {
+      card.style.display = 'none';
+    }
+  }
+
+  function showMobileMapCard(prop) {
+    if (!containerEl) return;
+
+    let card = document.getElementById('gmap-mobile-preview-card');
+    if (!card) {
+      card = document.createElement('div');
+      card.id = 'gmap-mobile-preview-card';
+      card.className = 'gmap-mobile-preview-card';
+      containerEl.appendChild(card);
+    }
+
+    const rentMan = (prop.rent / 10000).toLocaleString('ja-JP', { maximumFractionDigits: 1 });
+    const mgmt = prop.managementFee == null ? '管理費等なし' : `管 ${Number(prop.managementFee).toLocaleString('ja-JP')}円`;
+    const topDemand = prop.topDemands && prop.topDemands[0];
+    const topDemandLabel = topDemand ? `${topDemand.label} (${topDemand.votes}票 / ${topDemand.score}pt)` : "需要集計中";
+
+    card.innerHTML = `
+      <div class="map-mobile-card-inner">
+        <button type="button" class="map-mobile-card-close" onclick="MachirikuMap.closeMobileMapCard()" aria-label="閉じる">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+        <a href="#s02?id=${prop.id}" class="map-mobile-card-link">
+          <div class="map-mobile-card-thumb">
+            <img src="${prop.coverImage || 'assets/property-placeholder.svg'}" alt="${prop.title}">
+            <span class="map-mobile-card-badge">${prop.statusLabel}</span>
+            ${prop.isPr ? '<span class="map-mobile-card-pr">PR</span>' : ''}
+          </div>
+          <div class="map-mobile-card-info">
+            <h4 class="map-mobile-card-title">${prop.title}</h4>
+            <div class="map-mobile-card-rent"><strong>${rentMan}万円</strong><small>/月</small> <span class="map-mobile-card-mgmt">${mgmt}</span></div>
+            <div class="map-mobile-card-specs">${prop.areaTsubo}坪 (${prop.areaSqm}㎡) ・ ${prop.floor}</div>
+            <div class="map-mobile-card-demand">最多需要: <strong>${topDemandLabel}</strong></div>
+          </div>
+        </a>
+        <a href="#s02?id=${prop.id}" class="map-mobile-card-action">物件詳細を見る</a>
+      </div>
+    `;
+
+    card.style.display = 'block';
+
+    if (gMap) {
+      gMap.panBy(0, -25);
+    }
+  }
+
   function showGoogleInfoWindow(map, prop, anchorOverlay) {
     closeGoogleInfoWindow();
+
+    if (isMobileViewport()) {
+      showMobileMapCard(prop);
+      return;
+    }
 
     const rentMan = (prop.rent / 10000).toLocaleString('ja-JP', { maximumFractionDigits: 1 });
     const mgmt = prop.managementFee == null ? '管理費等なし' : `管理費 ${Number(prop.managementFee).toLocaleString('ja-JP')}円`;
