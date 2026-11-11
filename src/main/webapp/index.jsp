@@ -1,5 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="jp.machiriku.bean.User,jp.machiriku.tool.Html" %>
+<%@ page import="jp.machiriku.bean.User,jp.machiriku.tool.Html,com.fasterxml.jackson.databind.ObjectMapper" %>
 <%
   User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
   String displayName = (String) session.getAttribute("userName");
@@ -16,6 +16,31 @@
   if (userRole == null || userRole.trim().isEmpty()) {
     userRole = "resident";
   }
+  String userEmail = (String) session.getAttribute("userEmail");
+  if (userEmail == null && currentUser != null) {
+    userEmail = currentUser.getEmail();
+  }
+  if (userEmail == null) {
+    userEmail = "";
+  }
+
+  boolean isLoggedOut = "1".equals(request.getParameter("logged_out"))
+      || "true".equalsIgnoreCase(request.getParameter("logged_out"))
+      || "true".equalsIgnoreCase(request.getParameter("logout"));
+
+  String profileActionUrl;
+  if ("business".equalsIgnoreCase(userRole)) {
+    profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/auth/BusinessSetup.action";
+  } else if ("owner".equalsIgnoreCase(userRole)) {
+    profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/auth/OwnerSetup.action";
+  } else {
+    profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/auth/ResidentSetup.action";
+  }
+
+  ObjectMapper mapper = new ObjectMapper();
+  String jsonDisplayName = mapper.writeValueAsString(displayName).replace("</", "<\\/");
+  String jsonUserRole = mapper.writeValueAsString(userRole).replace("</", "<\\/");
+  String jsonUserEmail = mapper.writeValueAsString(userEmail).replace("</", "<\\/");
 %>
 <!DOCTYPE html>
 <html lang="ja">
@@ -41,11 +66,23 @@
       </a>
       <div class="header-nav-right">
         <% if (currentUser == null) { %>
+          <label class="role-picker" id="header-role-picker-wrap" for="preview-role">デモ表示
+            <select id="preview-role" onchange="MachirikuStore.setRole(this.value)">
+              <option value="resident">地域住民</option>
+              <option value="business">出店事業主</option>
+              <option value="owner">物件オーナー</option>
+              <option value="admin">運営管理者</option>
+            </select>
+          </label>
+          <span id="header-role-badge" class="header-role-badge" style="display:none;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span id="header-role-badge-text">地域住民</span>
+          </span>
           <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
             <span>ログイン</span>
           </a>
         <% } else { %>
-          <label class="role-picker" id="header-role-picker-wrap" for="preview-role">利用者
+          <label class="role-picker" id="header-role-picker-wrap" for="preview-role" style="display:none;">利用者
             <select id="preview-role" onchange="MachirikuStore.setRole(this.value)">
               <option value="resident" <%= "resident".equalsIgnoreCase(userRole) ? "selected" : "" %>>地域住民</option>
               <option value="business" <%= "business".equalsIgnoreCase(userRole) ? "selected" : "" %>>出店事業主</option>
@@ -53,9 +90,9 @@
               <option value="admin" <%= "admin".equalsIgnoreCase(userRole) ? "selected" : "" %>>運営管理者</option>
             </select>
           </label>
-          <span id="header-role-badge" class="header-role-badge" style="display:none;">
+          <span id="header-role-badge" class="header-role-badge">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            <span id="header-role-badge-text">地域住民</span>
+            <span id="header-role-badge-text"><%= "business".equalsIgnoreCase(userRole) ? "出店事業主" : ("owner".equalsIgnoreCase(userRole) ? "物件オーナー" : ("admin".equalsIgnoreCase(userRole) ? "運営管理者" : "地域住民")) %></span>
           </span>
           <a href="#s06" class="btn-header-action notification-link" aria-label="通知一覧">
             <svg class="m-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
@@ -65,7 +102,7 @@
             </svg>
             <span id="header-notif-badge" class="badge-counter" hidden>0</span>
           </a>
-          <a href="#s18" class="btn-header-action profile-link"><span id="header-user-name"><%= Html.escape(displayName) %></span></a>
+          <a href="<%= profileActionUrl %>" class="btn-header-action profile-link" aria-label="アカウント設定"><span id="header-user-name"><%= Html.escape(displayName) %></span></a>
         <% } %>
       </div>
     </div>
@@ -118,8 +155,8 @@
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
     document.addEventListener('DOMContentLoaded', function () {
-      <% if (currentUser == null) { %>
-        // 未ログイン時はブラウザ側に残存するキャッシュを破棄し初期状態にリセット
+      <% if (isLoggedOut) { %>
+        // 明示的なログアウト時のみブラウザ側に残存するキャッシュを破棄し初期状態にリセット
         try {
           if (window.sessionStorage) {
             window.sessionStorage.removeItem('machiriku_user_display_name');
@@ -139,22 +176,23 @@
             window.MachirikuStore.resetState();
           }
         } catch (_) {}
-      <% } else { %>
-        <% if (!"resident".equals(userRole)) { %>
-          if (window.MachirikuStore && typeof MachirikuStore.setRole === 'function') {
-            MachirikuStore.setRole("<%= Html.escape(userRole) %>");
+      <% } else if (currentUser != null) { %>
+        if (window.MachirikuStore && typeof MachirikuStore.setRole === 'function') {
+          MachirikuStore.setRole(<%= jsonUserRole %>);
+        }
+        if (window.MachirikuStore && typeof MachirikuStore.updateUserProfile === 'function') {
+          MachirikuStore.updateUserProfile({
+            name: <%= jsonDisplayName %>,
+            role: <%= jsonUserRole %>,
+            email: <%= jsonUserEmail %>,
+            isLoggedIn: true
+          });
+        }
+        try {
+          if (window.sessionStorage) {
+            window.sessionStorage.setItem('machiriku_user_display_name', <%= jsonDisplayName %>);
           }
-        <% } %>
-        <% if (displayName != null && !displayName.trim().isEmpty() && !"LINEユーザー".equals(displayName)) { %>
-          if (window.MachirikuStore && typeof MachirikuStore.updateUserProfile === 'function') {
-            MachirikuStore.updateUserProfile({ name: "<%= Html.escape(displayName) %>" });
-          }
-          try {
-            if (window.sessionStorage) {
-              window.sessionStorage.setItem('machiriku_user_display_name', "<%= Html.escape(displayName) %>");
-            }
-          } catch (_) {}
-        <% } %>
+        } catch (_) {}
       <% } %>
 
       // すでにサーブレット版が実装済みの画面へのアクセスは本番サーブレットへリダイレクト
@@ -167,13 +205,15 @@
         } else if (h === '#s17') {
           window.location.href = ctx + "/jp/machiriku/servlet/auth/Register.action";
           return true;
+        } else if (h === '#s18' || h.startsWith('#s18?') || h.startsWith('#s18&')) {
+          <% if (currentUser == null) { %>
+            window.location.href = ctx + "/jp/machiriku/servlet/auth/Login.action";
+            return true;
+          <% } else { %>
+            window.location.href = "<%= profileActionUrl %>";
+            return true;
+          <% } %>
         }
-        <% if (currentUser == null) { %>
-        else if (h === '#s18' || h.startsWith('#s18?') || h.startsWith('#s18&')) {
-          window.location.href = ctx + "/jp/machiriku/servlet/auth/Login.action";
-          return true;
-        }
-        <% } %>
         return false;
       }
 

@@ -692,10 +692,60 @@ window.MachirikuStore = (function() {
 
   // ユーザープロフィール・基本情報更新 (S18)
   function updateUserProfile(profileData) {
-    if (!state.currentUser) return null;
+    if (!profileData) return null;
+    if (!state.currentUser) {
+      state.currentUser = state.users[state.currentRole] || {};
+    }
+    if (profileData.role || profileData.userRole) {
+      const r = String(profileData.role || profileData.userRole).toLowerCase();
+      if (state.users[r]) {
+        state.currentRole = r;
+        state.currentUser = state.users[r];
+      }
+      profileData.role = r;
+    }
+    if (profileData.displayName && !profileData.name) {
+      profileData.name = profileData.displayName;
+    }
     Object.assign(state.currentUser, profileData);
     if (state.users && state.users[state.currentRole]) {
       Object.assign(state.users[state.currentRole], profileData);
+    }
+    notify('profile', { user: state.currentUser });
+    return state.currentUser;
+  }
+
+  // サーバーセッション情報（index.jsp / User bean）による認証ユーザーの反映
+  function setSessionUser(userData) {
+    if (!userData) {
+      if (state.currentUser) {
+        state.currentUser.isLoggedIn = false;
+      }
+      notify('profile', { user: state.currentUser });
+      return null;
+    }
+    const r = String(userData.role || userData.userRole || state.currentRole || 'resident').toLowerCase();
+    if (state.users[r]) {
+      state.currentRole = r;
+      state.currentUser = state.users[r];
+    }
+    if (!state.currentUser) {
+      state.currentUser = {};
+    }
+    state.currentUser.isLoggedIn = true;
+    if (userData.userId != null) state.currentUser.userId = userData.userId;
+    if (userData.displayName || userData.name) {
+      state.currentUser.name = userData.displayName || userData.name;
+      state.currentUser.displayName = userData.displayName || userData.name;
+    }
+    if (userData.email !== undefined) state.currentUser.email = userData.email;
+    if (userData.accountStatus) state.currentUser.accountStatus = userData.accountStatus;
+    state.currentUser.role = r;
+    const roleNames = { resident: '地域住民', business: '出店事業主', owner: '物件オーナー', admin: '運営管理者' };
+    state.currentUser.roleName = roleNames[r] || r;
+    Object.assign(state.currentUser, userData);
+    if (state.users[r]) {
+      Object.assign(state.users[r], state.currentUser);
     }
     notify('profile', { user: state.currentUser });
     return state.currentUser;
@@ -709,6 +759,7 @@ window.MachirikuStore = (function() {
     resetState,
     setRole,
     updateUserProfile,
+    setSessionUser,
     getProperties,
     getPropertyById,
     getFilteredProperties,

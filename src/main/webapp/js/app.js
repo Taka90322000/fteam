@@ -68,6 +68,115 @@ window.MachirikuApp = (function() {
     };
   }
 
+  function getContextPath() {
+    if (typeof window !== 'undefined' && window.__MACHIRIKU_CONTEXT_PATH__ !== undefined) {
+      return window.__MACHIRIKU_CONTEXT_PATH__;
+    }
+    const fromBody = document.body?.getAttribute?.('data-context-path');
+    if (fromBody != null) return fromBody;
+    if (typeof window !== 'undefined' && window.location && window.location.pathname.startsWith('/machiriku')) {
+      return '/machiriku';
+    }
+    return '';
+  }
+
+  // 画面ごとのアクセス可能ロール定義（未定義の画面は全ユーザー公開）
+  const SCREEN_PERMISSIONS = {
+    // 出店事業主（および管理者）向け機能
+    s08: ['business', 'admin'],
+    s15: ['business', 'admin'],
+    s21: ['business', 'admin'],
+    s22: ['business', 'admin'],
+    s23: ['business', 'admin'],
+    s24: ['business', 'admin'],
+    s25: ['business', 'admin'],
+    s27: ['business', 'admin'],
+    s28: ['business', 'admin'],
+    s29: ['business', 'admin'],
+    // 物件オーナー（および管理者）向け機能
+    s11: ['owner', 'admin'],
+    s12: ['owner', 'admin'],
+    s13: ['owner', 'admin'],
+    s33: ['owner', 'admin'],
+    // オーナー・事業主双方のやり取り画面（契約・申込）
+    s09: ['owner', 'business', 'admin'],
+    s10: ['owner', 'business', 'admin'],
+    s14: ['owner', 'business', 'admin'],
+    // 運営管理者専用
+    s20: ['admin'],
+    // 会員限定設定画面（全会員ロール対象・ログイン必須）
+    s18: ['resident', 'business', 'owner', 'admin'],
+    s19: ['resident', 'business', 'owner', 'admin']
+  };
+
+  const ROLE_NAMES = {
+    resident: '地域住民',
+    business: '出店事業主',
+    owner: '物件オーナー',
+    admin: '運営管理者'
+  };
+
+  function isUserAuthenticated() {
+    const state = store.getState();
+    const user = state.currentUser;
+    if (user && typeof user.isLoggedIn === 'boolean') {
+      return user.isLoggedIn;
+    }
+    if (typeof document !== 'undefined') {
+      // 未ログイン状態のindex.jspにはログインリンク（.header-nav-right a[href*="Login.action"]）が存在する
+      const loginLink = document.querySelector('.header-nav-right a[href*="Login.action"]');
+      if (loginLink) return false;
+      // ログイン済み状態のindex.jspには header-user-name または role picker が存在する
+      const userNameEl = document.getElementById('header-user-name');
+      if (userNameEl && userNameEl.textContent && userNameEl.textContent.trim()) {
+        const t = userNameEl.textContent.trim();
+        if (t !== 'ログイン' && t !== 'LINEユーザー') return true;
+      }
+    }
+    // 初期設定中セッションがあれば認証済みとみなす
+    if (isOnboardingActive()) return true;
+    return false;
+  }
+
+  function checkRouteAuthorization(screenId) {
+    const requiredRoles = SCREEN_PERMISSIONS[screenId];
+    if (!requiredRoles) {
+      // 認可制限のない公開画面 (s01, s02, s03, s04, s05, s06, s07, s16, s17, s26, s30, s31, s32など)
+      return { authorized: true };
+    }
+
+    // 初期設定中オンボーディング時の S18 は特例許可
+    if (screenId === 's18' && isOnboardingActive()) {
+      return { authorized: true };
+    }
+
+    // 1. 認証チェック（ログイン確認）
+    if (!isUserAuthenticated()) {
+      return {
+        authorized: false,
+        reason: 'unauthenticated',
+        message: 'この画面を表示するにはログインが必要です。'
+      };
+    }
+
+    // 2. 認可チェック（ロール確認）
+    const state = store.getState();
+    const currentRole = (state.currentRole || state.currentUser?.role || 'resident').toLowerCase();
+    if (!requiredRoles.includes(currentRole)) {
+      const allowedNames = requiredRoles.map(r => ROLE_NAMES[r] || r).join('・');
+      const curName = ROLE_NAMES[currentRole] || currentRole;
+      return {
+        authorized: false,
+        reason: 'unauthorized',
+        currentRole: curName,
+        allowedRoles: allowedNames,
+        message: `この画面は【${allowedNames}】専用です。現在のロール（${curName}）ではアクセスできません。`
+      };
+    }
+
+    return { authorized: true };
+  }
+
   function isOnboardingActive() {
     if (currentScreenId === 's18') {
       if (currentParams && (currentParams.onboarding === '1' || currentParams.onboarding === 'true' || currentParams.onboarding === true)) {
@@ -94,11 +203,29 @@ window.MachirikuApp = (function() {
     currentParams = parsed.params;
 
     // トップ画面内の認証リンクも、サーバー側のログイン状態と登録状態で振り分ける。
-    const contextPath = document.body?.getAttribute?.('data-context-path');
-    if (contextPath != null && (currentScreenId === 's16' || currentScreenId === 's17')) {
+    const contextPath = getContextPath();
+    if (contextPath && (currentScreenId === 's16' || currentScreenId === 's17')) {
       const action = currentScreenId === 's16' ? 'Login' : 'Register';
       window.location.replace(`${contextPath}/jp/machiriku/servlet/auth/${action}.action`);
       return;
+    }
+
+    // ルーターガード: 未認証ユーザーが認証必須画面にアクセスした場合は安全にリダイレクト
+    const authCheck = checkRouteAuthorization(currentScreenId);
+    if (!authCheck.authorized) {
+      if (authCheck.reason === 'unauthenticated') {
+        if (typeof showToast === 'function') {
+          showToast('ログインが必要です。ログイン画面へ移動します');
+        }
+        if (contextPath) {
+          window.location.replace(`${contextPath}/jp/machiriku/servlet/auth/Login.action`);
+          return;
+        }
+      } else if (authCheck.reason === 'unauthorized') {
+        if (typeof showToast === 'function') {
+          showToast(authCheck.message);
+        }
+      }
     }
 
     // 初期設定中ガード: オンボーディングセッション未完了時に他画面への離脱を防止
@@ -201,15 +328,37 @@ window.MachirikuApp = (function() {
     const mainEl = document.getElementById("main-app-container");
     if (!mainEl) return;
 
-    const renderFnName = `render${currentScreenId.toUpperCase()}`;
-    const renderFn = screens[renderFnName];
-
+    // 画面認可 / ルーターガードの検証
+    const authCheck = checkRouteAuthorization(currentScreenId);
     let html;
-    try {
-      html = typeof renderFn === 'function' ? renderFn(currentParams) : screens.renderEmptyState('not-found', '画面が見つかりません', 'メニューから目的の画面を選んでください。');
-    } catch (error) {
-      console.error('Screen render failed:', currentScreenId, error);
-      html = screens.renderEmptyState(currentScreenId, '画面を表示できません', 'もう一度開くか、物件一覧に戻ってください。');
+    if (!authCheck.authorized) {
+      if (authCheck.reason === 'unauthenticated') {
+        html = screens.renderEmptyState(
+          currentScreenId,
+          'ログインが必要です',
+          'この画面を表示するにはログインが必要です。ログインまたは新規登録を行ってください。',
+          '#s01',
+          'トップページへ戻る'
+        );
+      } else {
+        html = screens.renderEmptyState(
+          currentScreenId,
+          'アクセス権限がありません',
+          authCheck.message,
+          '#s01',
+          'トップページへ戻る'
+        );
+      }
+    } else {
+      const renderFnName = `render${currentScreenId.toUpperCase()}`;
+      const renderFn = screens[renderFnName];
+
+      try {
+        html = typeof renderFn === 'function' ? renderFn(currentParams) : screens.renderEmptyState('not-found', '画面が見つかりません', 'メニューから目的の画面を選んでください。');
+      } catch (error) {
+        console.error('Screen render failed:', currentScreenId, error);
+        html = screens.renderEmptyState(currentScreenId, '画面を表示できません', 'もう一度開くか、物件一覧に戻ってください。');
+      }
     }
     let patched = false;
     if (preserve && renderedScreenId === currentScreenId) {
@@ -345,7 +494,7 @@ window.MachirikuApp = (function() {
     const activeRole = state.currentRole || 'resident';
     const roleText = roleLabels[activeRole] || '地域住民';
 
-    if (isOnboarding || (user && user.isLoggedIn !== false)) {
+    if (isOnboarding || isUserAuthenticated()) {
       if (rolePickerWrap) rolePickerWrap.style.display = 'none';
       if (roleBadge) {
         roleBadge.style.display = 'inline-flex';

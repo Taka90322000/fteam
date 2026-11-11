@@ -90,9 +90,11 @@ public class LineCallbackAction extends Action {
 
             // 確認済みの会員情報でセッションを作り直す。
             LineLoginSupport.signIn(req, member, profile.displayName(), profile.email());
-            // 登録経由なら会員の状態に応じた画面へ、通常ログインならトップへ進む。
+            // 登録経由または未完了(PENDING)なら会員の状態に応じた画面へ、通常ログイン済ならトップへ進む。
             // destinationはアプリのコンテキストパスを除いた遷移先。
-            String destination = registration ? LineLoginSupport.registrationDestination(member) : "/index.jsp";
+            String destination = (registration || "PENDING".equals(member.getAccountStatus()))
+                    ? LineLoginSupport.registrationDestination(member)
+                    : "/index.jsp";
             res.sendRedirect(req.getContextPath() + destination);
         } catch (InterruptedException e) {
             // 通信中断の状態を上位の処理にも伝えられるよう、割り込みフラグを戻す。

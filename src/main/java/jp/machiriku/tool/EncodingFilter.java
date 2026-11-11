@@ -11,7 +11,7 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.annotation.WebFilter;
 
 // 下記URLパターンに一致するリクエストへ適用する文字コード設定フィルター。
-@WebFilter("/scoremanager/main/*")
+@WebFilter("/*")
 public class EncodingFilter implements Filter {
 
     // 初期化処理（今回は特に何もしない）

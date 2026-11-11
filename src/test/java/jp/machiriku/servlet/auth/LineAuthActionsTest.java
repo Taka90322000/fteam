@@ -585,7 +585,7 @@ public class LineAuthActionsTest {
         dao.existing = user("BUSINESS", "PENDING");
         new TestCallback(new FakeClient(), dao).execute(request.request, request.response);
         assertEquals("business", request.session.attributes.get("userRole"));
-        assertEquals("/machiriku/index.jsp", request.redirect);
+        assertEquals("/machiriku/jp/machiriku/servlet/auth/BusinessSetup.action", request.redirect);
     }
 
     @Test

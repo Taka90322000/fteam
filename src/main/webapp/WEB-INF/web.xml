@@ -9,4 +9,11 @@
     <!-- Webアプリケーションの表示名。ServletとFilterのURL設定はJava側のアノテーションで定義する。 -->
     <display-name>マチリク</display-name>
 
+    <session-config>
+        <cookie-config>
+            <http-only>true</http-only>
+        </cookie-config>
+        <tracking-mode>COOKIE</tracking-mode>
+    </session-config>
+
 </web-app>

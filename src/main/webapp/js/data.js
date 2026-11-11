@@ -168,7 +168,7 @@ window.MACHIRIKU_DATA = (function() {
       "isApproximate": false
     },
     "isOutOfMap": false,
-    "coverImage": "assets/prop-orion-01.jpg",
+    "coverImage": "assets/properties/prop-orion-01/01_exterior.jpg",
     "imageCaption": "外観 / オリオン通りアーケード沿い1階路面",
     "gallery": [
       {
@@ -316,7 +316,7 @@ window.MACHIRIKU_DATA = (function() {
       "isApproximate": false
     },
     "isOutOfMap": false,
-    "coverImage": "assets/prop-odori-02.jpg",
+    "coverImage": "assets/properties/prop-odori-02/01_exterior.jpg",
     "imageCaption": "外観 / 宇都宮大通り・本町交差点角地ビル1階",
     "gallery": [
       {
@@ -459,7 +459,7 @@ window.MACHIRIKU_DATA = (function() {
       "isApproximate": false
     },
     "isOutOfMap": false,
-    "coverImage": "assets/prop-tobu-03.jpg",
+    "coverImage": "assets/properties/prop-tobu-03/01_exterior.jpg",
     "imageCaption": "外観 / 東武駅前通り・2階専用バルコニーと直通階段",
     "gallery": [
       {
@@ -610,7 +610,7 @@ window.MACHIRIKU_DATA = (function() {
       "isApproximate": false
     },
     "isOutOfMap": false,
-    "coverImage": "assets/prop-union-04.jpg",
+    "coverImage": "assets/properties/prop-union-04/01_exterior.jpg",
     "imageCaption": "外観 / ユニオン通り・コンクリート打放し路面店",
     "gallery": [
       {
@@ -754,7 +754,7 @@ window.MACHIRIKU_DATA = (function() {
       "isApproximate": false
     },
     "isOutOfMap": false,
-    "coverImage": "assets/prop-lrt-05.jpg",
+    "coverImage": "assets/properties/prop-lrt-05/01_exterior.jpg",
     "imageCaption": "外観 / LRT東宿郷駅前・近代的なガラスカーテンウォールビル",
     "gallery": [
       {
@@ -898,7 +898,7 @@ window.MACHIRIKU_DATA = (function() {
       "isApproximate": false
     },
     "isOutOfMap": false,
-    "coverImage": "assets/prop-kamagawa-06.jpg",
+    "coverImage": "assets/properties/prop-kamagawa-06/01_exterior.jpg",
     "imageCaption": "外観 / 釜川遊歩道直結・親水テラス付き路面店",
     "gallery": [
       {
@@ -1049,7 +1049,7 @@ window.MACHIRIKU_DATA = (function() {
       "isApproximate": false
     },
     "isOutOfMap": false,
-    "coverImage": "assets/prop-bamba-07.jpg",
+    "coverImage": "assets/properties/prop-bamba-07/01_exterior.jpg",
     "imageCaption": "外観 / 二荒山神社前バンバ通り・和モダン木製格子戸",
     "gallery": [
       {
@@ -1193,7 +1193,7 @@ window.MACHIRIKU_DATA = (function() {
       "isApproximate": true
     },
     "isOutOfMap": true,
-    "coverImage": "assets/prop-stone-08.jpg",
+    "coverImage": "assets/properties/prop-stone-08/01_exterior.jpg",
     "imageCaption": "外観 / 南宇都宮・歴史ある大谷石造りの蔵",
     "gallery": [
       {
@@ -1351,7 +1351,7 @@ window.MACHIRIKU_DATA = (function() {
       "isApproximate": true
     },
     "isOutOfMap": true,
-    "coverImage": "assets/prop-tomatsuri-09.jpg",
+    "coverImage": "assets/properties/prop-tomatsuri-09/01_exterior.jpg",
     "imageCaption": "外観 / 競輪場通りロードサイド・白基調店舗と専用駐車場",
     "gallery": [
       {
@@ -1495,7 +1495,7 @@ window.MACHIRIKU_DATA = (function() {
       "isApproximate": true
     },
     "isOutOfMap": true,
-    "coverImage": "assets/prop-miyukigahara-10.jpg",
+    "coverImage": "assets/properties/prop-miyukigahara-10/01_exterior.jpg",
     "imageCaption": "外観 / 御幸ケ原タウンセンター・1階共用駐車場付き",
     "gallery": [
       {
