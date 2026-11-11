@@ -62,7 +62,8 @@ window.MachirikuScreens = (function() {
   };
 
   function renderPropertyImage(prop, attributes = '') {
-    const source = prop.coverImage || IMAGE_PLACEHOLDER;
+    const rawSource = prop.coverImage || (prop.gallery && prop.gallery[0] && (prop.gallery[0].url || prop.gallery[0].localPath)) || IMAGE_PLACEHOLDER;
+    const source = rawSource;
     const unavailable = source === IMAGE_PLACEHOLDER || failedImages.has(source);
     return `<img src="${escapeHtml(unavailable ? IMAGE_PLACEHOLDER : source)}" alt="${unavailable ? '写真未登録' : escapeHtml(prop.title) + 'の外観'}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)" ${attributes}>`;
   }
@@ -72,6 +73,24 @@ window.MachirikuScreens = (function() {
     image.onerror = null;
     image.removeAttribute('onerror');
     if (source === IMAGE_PLACEHOLDER) return;
+
+    // もし assets/prop-xxx.jpg で失敗した場合は assets/properties/prop-xxx/01_exterior.jpg を自動試行
+    if (source.includes('assets/prop-') && source.endsWith('.jpg')) {
+      const fallback = source.replace('assets/prop-', 'assets/properties/prop-').replace('.jpg', '/01_exterior.jpg');
+      if (!failedImages.has(fallback)) {
+        image.src = fallback;
+        return;
+      }
+    }
+    // もし assets/properties/prop-xxx/01_exterior.jpg で失敗した場合は assets/prop-xxx.jpg を自動試行
+    if (source.includes('/01_exterior.jpg')) {
+      const fallback = source.replace('/01_exterior.jpg', '.jpg').replace('assets/properties/prop-', 'assets/prop-');
+      if (!failedImages.has(fallback)) {
+        image.src = fallback;
+        return;
+      }
+    }
+
     failedImages.add(source);
     image.alt = '写真未登録';
     image.src = IMAGE_PLACEHOLDER;

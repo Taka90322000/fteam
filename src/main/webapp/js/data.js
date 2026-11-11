@@ -79,7 +79,7 @@ window.MACHIRIKU_DATA = (function() {
   });
 
   // Virtual property catalog. Galleries: tools/update-generated-galleries.cjs
-  const DATASET_VERSION = "machiriku-ai-v1";
+  const DATASET_VERSION = "machiriku-v20261111";
   const PROPERTIES = [
   {
     "id": "prop-orion-01",

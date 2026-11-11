@@ -147,11 +147,11 @@
   <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNWrNbVnBfZsjuTJ3sHCKDemfkxNsIv7w&libraries=marker"></script>
   <script src="${pageContext.request.contextPath}/js/qrcode.js"></script>
-  <script src="${pageContext.request.contextPath}/js/data.js?v=20261110_db_align_v2"></script>
-  <script src="${pageContext.request.contextPath}/js/map.js?v=20261110_db_align_v2"></script>
-  <script src="${pageContext.request.contextPath}/js/store.js?v=20261110_db_align_v2"></script>
-  <script src="${pageContext.request.contextPath}/js/screens.js?v=20261110_db_align_v2"></script>
-  <script src="${pageContext.request.contextPath}/js/app.js?v=20261110_db_align_v2"></script>
+  <script src="${pageContext.request.contextPath}/js/data.js?v=20261111_image_fix"></script>
+  <script src="${pageContext.request.contextPath}/js/map.js?v=20261111_image_fix"></script>
+  <script src="${pageContext.request.contextPath}/js/store.js?v=20261111_image_fix"></script>
+  <script src="${pageContext.request.contextPath}/js/screens.js?v=20261111_image_fix"></script>
+  <script src="${pageContext.request.contextPath}/js/app.js?v=20261111_image_fix"></script>
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
     document.addEventListener('DOMContentLoaded', function () {
