@@ -126,12 +126,13 @@ window.MachirikuApp = (function() {
       // 未ログイン状態のindex.jspにはログインリンク（.header-nav-right a[href*="Login.action"]）が存在する
       const loginLink = document.querySelector('.header-nav-right a[href*="Login.action"]');
       if (loginLink) return false;
-      // ログイン済み状態のindex.jspには header-user-name または role picker が存在する
+      // ログインリンクが存在しない場合（Tomcatログイン済み、またはプロトタイプ・デモ環境）
       const userNameEl = document.getElementById('header-user-name');
       if (userNameEl && userNameEl.textContent && userNameEl.textContent.trim()) {
         const t = userNameEl.textContent.trim();
-        if (t !== 'ログイン' && t !== 'LINEユーザー') return true;
+        if (t !== 'ログイン') return true;
       }
+      if (document.getElementById('preview-role')) return true;
     }
     // 初期設定中セッションがあれば認証済みとみなす
     if (isOnboardingActive()) return true;

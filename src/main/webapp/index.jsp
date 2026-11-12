@@ -147,11 +147,11 @@
   <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNWrNbVnBfZsjuTJ3sHCKDemfkxNsIv7w&libraries=marker"></script>
   <script src="${pageContext.request.contextPath}/js/qrcode.js"></script>
-  <script src="${pageContext.request.contextPath}/js/data.js?v=20261111_image_fix"></script>
-  <script src="${pageContext.request.contextPath}/js/map.js?v=20261111_image_fix"></script>
-  <script src="${pageContext.request.contextPath}/js/store.js?v=20261111_image_fix"></script>
-  <script src="${pageContext.request.contextPath}/js/screens.js?v=20261111_image_fix"></script>
-  <script src="${pageContext.request.contextPath}/js/app.js?v=20261111_image_fix"></script>
+  <script src="${pageContext.request.contextPath}/js/data.js?v=20261112_s18_jsp"></script>
+  <script src="${pageContext.request.contextPath}/js/map.js?v=20261112_s18_jsp"></script>
+  <script src="${pageContext.request.contextPath}/js/store.js?v=20261112_s18_jsp"></script>
+  <script src="${pageContext.request.contextPath}/js/screens.js?v=20261112_s18_jsp"></script>
+  <script src="${pageContext.request.contextPath}/js/app.js?v=20261112_s18_jsp"></script>
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
     document.addEventListener('DOMContentLoaded', function () {
@@ -190,6 +190,7 @@
         }
         try {
           if (window.sessionStorage) {
+            window.sessionStorage.removeItem('machiriku_onboarding');
             window.sessionStorage.setItem('machiriku_user_display_name', <%= jsonDisplayName %>);
           }
         } catch (_) {}
@@ -220,6 +221,15 @@
       window.addEventListener('hashchange', checkServletRedirect);
       if (!checkServletRedirect()) {
         MachirikuApp.init();
+        <% if ("1".equals(request.getParameter("profile_saved"))) { %>
+          if (typeof MachirikuApp !== 'undefined') {
+            MachirikuApp.showToast('プロフィール設定を保存しました');
+          }
+        <% } else if ("1".equals(request.getParameter("onboarded"))) { %>
+          if (typeof MachirikuApp !== 'undefined') {
+            MachirikuApp.showToast('初期設定が完了しました！マチリクへようこそ');
+          }
+        <% } %>
       }
     });
   </script>

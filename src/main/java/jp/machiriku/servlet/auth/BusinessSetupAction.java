@@ -39,13 +39,14 @@ public class BusinessSetupAction extends Action {
                 var input = RegistrationForms.business(fields, OnboardingSupport.values(req, "preferredIndustry"),
                         OnboardingSupport.values(req, "qualification"));
                 User saved = createProfileDao().saveBusiness(user.getUserId(), input);
+                boolean isEdit = "edit".equalsIgnoreCase(req.getParameter("mode"));
                 OnboardingSupport.completed(req, saved, input.representativeName());
                 req.getSession().setAttribute("businessName", input.businessName());
                 req.getSession().setAttribute("phone", input.phoneE164());
                 req.getSession().setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
                 req.getSession().setAttribute("preferredArea", input.preferredArea());
                 req.getSession().setAttribute("preferredAreaPoints", fields.get("preferredAreaPoints"));
-                res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+                res.sendRedirect(req.getContextPath() + (isEdit ? "/index.jsp?profile_saved=1" : "/index.jsp?onboarded=1"));
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());

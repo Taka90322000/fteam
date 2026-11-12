@@ -49,9 +49,10 @@ public class ResidentSetupAction extends Action {
                 // 選択した欲しい業種・施設ジャンルをセッションにも保存
                 req.getSession().setAttribute("userIndustry", fields.get("industry"));
                 req.getSession().setAttribute("userPreferredIndustries", input.preferredIndustryCodes());
+                boolean isEdit = "edit".equalsIgnoreCase(req.getParameter("mode"));
                 // DBのcommitが成功してから、画面用の会員情報と初期設定完了状態を更新する。
                 OnboardingSupport.completed(req, saved, saved.getDisplayName());
-                res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+                res.sendRedirect(req.getContextPath() + (isEdit ? "/index.jsp?profile_saved=1" : "/index.jsp?onboarded=1"));
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());
@@ -72,6 +73,14 @@ public class ResidentSetupAction extends Action {
             fields.put("industry", "");
             fields.put("preferredIndustries", "[]");
             fields.put("emailNotify", "on");
+            // すでに登録済み会員の場合はDBから保存済みのプロフィール情報を読み込んで復元
+            if ("ACTIVE".equals(user.getAccountStatus())) {
+                try {
+                    fields.putAll(createProfileDao().findResidentFields(user.getUserId()));
+                } catch (SQLException e) {
+                    OnboardingSupport.logDatabaseError(req, e);
+                }
+            }
         }
         req.setAttribute("formValues", fields);
         req.setAttribute("displayName", fields.get("name"));

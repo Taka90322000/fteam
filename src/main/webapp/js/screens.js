@@ -1169,11 +1169,11 @@ window.MachirikuScreens = (function() {
               </nav>` : ''}
             </div>
 
-            <!-- 物件所在地GoogleMapカード -->
-            <div class="detail-card" style="padding:1rem;">
-              <div style="font-weight:700; font-size:0.875rem; margin-bottom:0.5rem;">所在地・周辺情報</div>
+            <!-- 物件所在地GoogleMapカード（独立カード：横幅・左端位置を上位CTAカード内要素と完全同期） -->
+            <div class="detail-card" style="padding:1rem var(--space-6); display:block;">
+              <div style="font-weight:700; font-size:0.875rem; margin-bottom:0.5rem; color:var(--text-main);">所在地・周辺情報</div>
               <div style="font-size:0.875rem; color:var(--text-sub); margin-bottom:0.75rem;">
-                ${prop.address}
+                ${escapeHtml(prop.address)}
               </div>
               <div id="s02-location-map" data-lat="${prop.location?.lat || 36.559312}" data-lng="${prop.location?.lng || 139.882105}" data-title="${escapeHtml(prop.title)}" style="width:100%; height:200px; border-radius:var(--radius-sm); border:1px solid var(--border-color); overflow:hidden; background:var(--bg-subtle);"></div>
             </div>
