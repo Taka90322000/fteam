@@ -17,8 +17,8 @@
       || "1".equals(request.getParameter("onboarding"));
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
-  <jsp:param name="title" value='<%= isOnboarding ? "アカウントの初期設定 | マチリク" : "プロフィール・基本情報設定 | マチリク" %>' />
-  <jsp:param name="isOnboarding" value='<%= String.valueOf(isOnboarding) %>' />
+  <jsp:param name="title" value="アカウントの初期設定 | マチリク" />
+  <jsp:param name="isOnboarding" value="true" />
   <jsp:param name="roleLabel" value="地域住民" />
   <jsp:param name="userName" value="<%= displayName %>" />
 </jsp:include>
@@ -27,8 +27,8 @@
   <div class="screen-header-banner" style="background:var(--primary-50); border:1px solid var(--primary-100); border-radius:var(--radius-lg); padding:1rem 1.25rem; margin-bottom:1.5rem; display:flex; align-items:center; gap:1rem;">
     <span class="screen-header-badge" style="background:var(--primary-700); color:var(--text-inverse); font-weight:800; font-size:0.85rem; padding:0.25rem 0.6rem; border-radius:var(--radius-full);">S18</span>
     <div>
-      <h1 class="screen-header-title" style="font-size:1.25rem; font-weight:800; color:var(--primary-900); margin:0;"><%= isOnboarding ? "アカウントの初期設定" : "プロフィール・基本情報設定" %></h1>
-      <p class="screen-header-desc" style="font-size:0.85rem; color:var(--text-sub); margin:0.25rem 0 0 0;"><%= isOnboarding ? "LINEアカウントから情報を取得しました。お住まいの地域など基本情報を入力してマチリクを始めましょう。" : "登録情報の確認や変更ができます。" %></p>
+      <h1 class="screen-header-title" style="font-size:1.25rem; font-weight:800; color:var(--primary-900); margin:0;">アカウントの初期設定</h1>
+      <p class="screen-header-desc" style="font-size:0.85rem; color:var(--text-sub); margin:0.25rem 0 0 0;">LINEアカウントから情報を取得しました。お住まいの地域など基本情報を入力してマチリクを始めましょう。</p>
     </div>
   </div>
 
@@ -37,7 +37,6 @@
       <div role="alert" style="background:#fee2e2; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-md); margin-bottom:1rem;"><%= Html.escape(request.getAttribute("errorMessage")) %></div>
     <% } %>
     
-    <% if (isOnboarding) { %>
     <!-- LINEログイン完了カード -->
     <div class="onboarding-welcome-card" style="background: var(--bg-subtle); border: 1.5px solid var(--border-color); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4);">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.4rem;">
@@ -53,14 +52,10 @@
         </span>
       </div>
     </div>
-    <% } %>
 
     <%-- 入力内容と居住地・職場などの座標を、初期設定のActionへ送信する。 --%>
     <form id="resident-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/ResidentSetup.action" method="POST" onsubmit="return validateResidentForm();">
       <input type="hidden" name="csrfToken" value="<%= Html.escape(request.getAttribute("csrfToken")) %>">
-      <% if (!isOnboarding) { %>
-      <input type="hidden" name="mode" value="edit">
-      <% } %>
       <!-- ニックネーム (表示名) -->
       <div class="form-group" style="margin-bottom:1.25rem;">
         <label for="s18-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
@@ -230,14 +225,14 @@
       <!-- 送信ボタン -->
       <div style="margin-top:1.5rem;">
         <button type="submit" class="btn-primary" style="width:100%; min-height:48px; font-size:1.05rem; font-weight:800; display:flex; align-items:center; justify-content:center; gap:0.5rem; box-shadow:var(--shadow-floating); cursor:pointer;">
-          <span><%= isOnboarding ? "登録を完了してマチリクを始める" : "設定を保存する" %></span>
+          <span>登録を完了してマチリクを始める</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
       </div>
     </form>
     <div style="margin-top:1.5rem; text-align:center;">
-      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" <%= isOnboarding ? "onclick=\"return confirm('登録を中断してログアウトしますか？');\"" : "onclick=\"return confirm('ログアウトしますか？');\"" %> style="color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer;">
-        <%= isOnboarding ? "登録を中断してログアウト" : "ログアウト" %>
+      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('登録を中断してログアウトしますか？');" style="color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer;">
+        登録を中断してログアウト
       </a>
     </div>
     <%-- 本登録前の本人に、利用者区分の選択画面への導線を表示する。 --%>

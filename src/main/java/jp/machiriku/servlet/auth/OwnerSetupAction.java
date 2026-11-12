@@ -35,7 +35,6 @@ public class OwnerSetupAction extends Action {
             try {
                 var input = RegistrationForms.owner(fields, OnboardingSupport.values(req, "preferredIndustry"));
                 User saved = createProfileDao().saveOwner(user.getUserId(), input);
-                boolean isEdit = "edit".equalsIgnoreCase(req.getParameter("mode"));
                 // DBのcommit後にだけ、画面用の名前と初期設定完了状態を更新する。
                 OnboardingSupport.completed(req, saved, input.representativeName());
                 req.getSession().setAttribute("company", input.company() == null ? "" : input.company());
@@ -43,7 +42,7 @@ public class OwnerSetupAction extends Action {
                 req.getSession().setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
                 req.getSession().setAttribute("preferredIndustries", input.industryTypeIds());
                 req.getSession().setAttribute("emailNotify", input.emailNotify() && saved.getEmail() != null);
-                res.sendRedirect(req.getContextPath() + (isEdit ? "/index.jsp?profile_saved=1" : "/index.jsp?onboarded=1"));
+                res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());

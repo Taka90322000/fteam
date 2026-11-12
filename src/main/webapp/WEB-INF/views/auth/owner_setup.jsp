@@ -20,8 +20,8 @@
       || "1".equals(request.getParameter("onboarding"));
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
-  <jsp:param name="title" value='<%= isOnboarding ? "物件オーナー 初期設定 | マチリク" : "物件オーナー プロフィール設定 | マチリク" %>' />
-  <jsp:param name="isOnboarding" value='<%= String.valueOf(isOnboarding) %>' />
+  <jsp:param name="title" value="物件オーナー 初期設定 | マチリク" />
+  <jsp:param name="isOnboarding" value="true" />
   <jsp:param name="roleLabel" value="物件オーナー" />
   <jsp:param name="userName" value="<%= displayName %>" />
 </jsp:include>
@@ -30,8 +30,8 @@
   <div class="screen-header-banner" style="background:var(--primary-50); border:1px solid var(--primary-100); border-radius:var(--radius-lg); padding:1rem 1.25rem; margin-bottom:1.5rem; display:flex; align-items:center; gap:1rem;">
     <span class="screen-header-badge" style="background:var(--primary-700); color:var(--text-inverse); font-weight:800; font-size:0.85rem; padding:0.25rem 0.6rem; border-radius:var(--radius-full);">S18</span>
     <div>
-      <h1 class="screen-header-title" style="font-size:1.25rem; font-weight:800; color:var(--primary-900); margin:0;"><%= isOnboarding ? "アカウントの初期設定" : "プロフィール・オーナー設定" %></h1>
-      <p class="screen-header-desc" style="font-size:0.85rem; color:var(--text-sub); margin:0.25rem 0 0 0;"><%= isOnboarding ? "LINEアカウントから情報を取得しました。オーナー情報や誘致したい希望業種を入力してマチリクを始めましょう。" : "登録情報の確認や変更ができます。" %></p>
+      <h1 class="screen-header-title" style="font-size:1.25rem; font-weight:800; color:var(--primary-900); margin:0;">アカウントの初期設定</h1>
+      <p class="screen-header-desc" style="font-size:0.85rem; color:var(--text-sub); margin:0.25rem 0 0 0;">LINEアカウントから情報を取得しました。オーナー情報や誘致したい希望業種を入力してマチリクを始めましょう。</p>
     </div>
   </div>
 
@@ -40,7 +40,6 @@
       <div role="alert" style="background:#fee2e2; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-md); margin-bottom:1rem;"><%= Html.escape(request.getAttribute("errorMessage")) %></div>
     <% } %>
     
-    <% if (isOnboarding) { %>
     <!-- LINEログイン完了カード -->
     <div class="onboarding-welcome-card" style="background: var(--bg-subtle); border: 1.5px solid var(--border-color); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4);">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.4rem;">
@@ -56,13 +55,9 @@
         </span>
       </div>
     </div>
-    <% } %>
 
     <form id="owner-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/OwnerSetup.action" method="POST" onsubmit="return validateOwnerForm();">
       <input type="hidden" name="csrfToken" value="<%= Html.escape(request.getAttribute("csrfToken")) %>">
-      <% if (!isOnboarding) { %>
-      <input type="hidden" name="mode" value="edit">
-      <% } %>
       <!-- オーナー氏名 / 代表者名 -->
       <div class="form-group" style="margin-bottom:1.25rem;">
         <label for="s18-owner-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
@@ -94,7 +89,8 @@
         <label for="s18-owner-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-<input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("phone", "")) %>" required placeholder="例: 09012345678 (ハイフンなし)">
+        <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("phone", "")) %>" required placeholder="例: 09012345678 (ハイフンなし)">
+        <div id="s18-owner-phone-error" style="display:none; color:var(--danger-text); font-size:0.8rem; margin-top:0.35rem; font-weight:600;"></div>
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店希望者との連絡、物件問い合わせや運営確認用に使用されます。</span>
       </div>
 
@@ -133,14 +129,14 @@
       <!-- 送信ボタン -->
       <div style="margin-top:1.5rem;">
         <button type="submit" class="btn-primary" style="width:100%; min-height:48px; font-size:1.05rem; font-weight:800; display:flex; align-items:center; justify-content:center; gap:0.5rem; box-shadow:var(--shadow-floating); cursor:pointer;">
-          <span><%= isOnboarding ? "登録を完了してマチリクを始める" : "設定を保存する" %></span>
+          <span>登録を完了してマチリクを始める</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
       </div>
     </form>
     <div style="margin-top:1.5rem; text-align:center;">
-      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" <%= isOnboarding ? "onclick=\"return confirm('登録を中断してログアウトしますか？');\"" : "onclick=\"return confirm('ログアウトしますか？');\"" %> style="color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer;">
-        <%= isOnboarding ? "登録を中断してログアウト" : "ログアウト" %>
+      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('登録を中断してログアウトしますか？');" style="color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer;">
+        登録を中断してログアウト
       </a>
     </div>
     <%-- 本登録前は、利用者区分の選択画面へ戻って登録を続けられる。 --%>
@@ -155,6 +151,30 @@
 </section>
 
 <script>
+  function showOwnerPhoneError(msg) {
+    const errorEl = document.getElementById('s18-owner-phone-error');
+    const phoneInput = document.getElementById('s18-owner-phone');
+    if (errorEl) {
+      errorEl.textContent = msg;
+      errorEl.style.display = 'block';
+    }
+    if (phoneInput) {
+      phoneInput.style.borderColor = 'var(--danger-border, #ef4444)';
+    }
+  }
+
+  function clearOwnerPhoneError() {
+    const errorEl = document.getElementById('s18-owner-phone-error');
+    const phoneInput = document.getElementById('s18-owner-phone');
+    if (errorEl) {
+      errorEl.textContent = '';
+      errorEl.style.display = 'none';
+    }
+    if (phoneInput) {
+      phoneInput.style.borderColor = '';
+    }
+  }
+
   function validateOwnerForm() {
     const repName = document.getElementById('s18-owner-name');
     const phone = document.getElementById('s18-owner-phone');
@@ -165,10 +185,26 @@
       return false;
     }
     if (!phone || !phone.value.trim()) {
+      showOwnerPhoneError('連絡先電話番号を入力してください');
       alert('連絡先電話番号を入力してください');
       if (phone) phone.focus();
       return false;
     }
+    const rawOwnerPhone = phone.value.trim();
+    const ownerDigitsOnly = rawOwnerPhone.replace(/[\s()（）ー−‐-]/g, '');
+    if (!/^\d+$/.test(ownerDigitsOnly)) {
+      showOwnerPhoneError('電話番号は半角数字で入力してください（英字や記号は使用できません）');
+      alert('電話番号は半角数字で入力してください（英字や記号は使用できません）');
+      if (phone) phone.focus();
+      return false;
+    }
+    if (ownerDigitsOnly.length < 9 || ownerDigitsOnly.length > 11) {
+      showOwnerPhoneError('電話番号の桁数を確認してください（例: 09012345678）');
+      alert('電話番号の桁数を確認してください（例: 09012345678）');
+      if (phone) phone.focus();
+      return false;
+    }
+    clearOwnerPhoneError();
 
     const industries = document.querySelectorAll('input[name="preferredIndustry"]:checked');
     if (industries.length === 0) {
@@ -178,6 +214,22 @@
 
     return true;
   }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const ownerPhoneInput = document.getElementById('s18-owner-phone');
+    if (ownerPhoneInput) {
+      ownerPhoneInput.addEventListener('input', function() {
+        const val = this.value.trim();
+        if (!val) { clearOwnerPhoneError(); return; }
+        const digits = val.replace(/[\s()（）ー−‐-]/g, '');
+        if (!/^\d*$/.test(digits)) {
+          showOwnerPhoneError('※電話番号は半角数字で入力してください（英字や記号は使用できません）');
+        } else {
+          clearOwnerPhoneError();
+        }
+      });
+    }
+  });
 </script>
 
 <jsp:include page="/WEB-INF/views/common/footer.jsp" />

@@ -535,12 +535,13 @@ window.MachirikuScreens = (function() {
     }
 
     return `
-      <div class="filter-popover-card rent-popover-card" onclick="event.stopPropagation()">
-        <div class="popover-header">
-          <h3 class="popover-title">賃料</h3>
-          <button type="button" class="popover-close-btn" onclick="MachirikuScreens.closeRentPopover()" aria-label="閉じる">✕</button>
-        </div>
-        <div class="rent-popover-content">
+      <div class="popover-modal-backdrop" onclick="if(event.target === this) MachirikuScreens.closeRentPopover()">
+        <div class="filter-popover-card rent-popover-card" onclick="event.stopPropagation()">
+          <div class="popover-header">
+            <h3 class="popover-title">賃料</h3>
+            <button type="button" class="popover-close-btn" onclick="MachirikuScreens.closeRentPopover()" aria-label="閉じる">✕</button>
+          </div>
+          <div class="rent-popover-content">
           <div class="rent-selects-row">
             <div class="rent-select-wrap">
               <label for="rent-sel-min">下限</label>
@@ -605,6 +606,7 @@ window.MachirikuScreens = (function() {
           <button type="button" class="btn-primary btn-apply-rent" id="btn-rent-apply" onclick="MachirikuScreens.applyRentFilters()">適用する (${prospectiveCount}件)</button>
         </div>
       </div>
+    </div>
     `;
   }
 
@@ -630,11 +632,12 @@ window.MachirikuScreens = (function() {
     }).join('');
 
     return `
-      <div class="filter-popover-card cat-popover-card" onclick="event.stopPropagation()">
-        <div class="popover-header">
-          <h3 class="popover-title">希望業種（カテゴリ）</h3>
-          <button type="button" class="popover-close-btn" onclick="MachirikuScreens.closeCatPopover()" aria-label="閉じる">✕</button>
-        </div>
+      <div class="popover-modal-backdrop" onclick="if(event.target === this) MachirikuScreens.closeCatPopover()">
+        <div class="filter-popover-card cat-popover-card" onclick="event.stopPropagation()">
+          <div class="popover-header">
+            <h3 class="popover-title">希望業種（カテゴリ）</h3>
+            <button type="button" class="popover-close-btn" onclick="MachirikuScreens.closeCatPopover()" aria-label="閉じる">✕</button>
+          </div>
         <div class="cat-popover-grid">
           ${itemsHtml}
         </div>
@@ -643,6 +646,7 @@ window.MachirikuScreens = (function() {
           <button type="button" class="btn-primary" style="min-height: 38px; padding: 0.35rem 1.15rem; font-size: 0.875rem;" onclick="MachirikuScreens.applyCatFilters()">業種を絞り込む (${prospectiveCount}件)</button>
         </div>
       </div>
+    </div>
     `;
   }
 
@@ -2328,17 +2332,17 @@ window.MachirikuScreens = (function() {
           <div class="form-group" style="margin-bottom:1.5rem;">
             <label style="font-size:0.9rem; font-weight:800;">利用区分を選択してください *必須</label>
             <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem; margin-top:0.5rem;">
-              <label style="border:1px solid var(--border-color); padding:0.85rem; border-radius:var(--radius-md); text-align:center; cursor:pointer;">
-                <input type="radio" name="regRole" value="resident" checked>
-                <div style="font-weight:700; margin-top:0.3rem;">地域住民</div>
+              <label class="role-select-card is-selected">
+                <input type="radio" name="regRole" value="resident" checked onchange="this.closest('.form-group').querySelectorAll('.role-select-card').forEach(function(c){c.classList.toggle('is-selected', c.querySelector('input').checked)})">
+                <div class="role-card-title" style="font-weight:700; margin-top:0.3rem;">地域住民</div>
               </label>
-              <label style="border:1px solid var(--border-color); padding:0.85rem; border-radius:var(--radius-md); text-align:center; cursor:pointer;">
-                <input type="radio" name="regRole" value="business">
-                <div style="font-weight:700; margin-top:0.3rem;">出店事業主</div>
+              <label class="role-select-card">
+                <input type="radio" name="regRole" value="business" onchange="this.closest('.form-group').querySelectorAll('.role-select-card').forEach(function(c){c.classList.toggle('is-selected', c.querySelector('input').checked)})">
+                <div class="role-card-title" style="font-weight:700; margin-top:0.3rem;">出店事業主</div>
               </label>
-              <label style="border:1px solid var(--border-color); padding:0.85rem; border-radius:var(--radius-md); text-align:center; cursor:pointer;">
-                <input type="radio" name="regRole" value="owner">
-                <div style="font-weight:700; margin-top:0.3rem;">物件オーナー</div>
+              <label class="role-select-card">
+                <input type="radio" name="regRole" value="owner" onchange="this.closest('.form-group').querySelectorAll('.role-select-card').forEach(function(c){c.classList.toggle('is-selected', c.querySelector('input').checked)})">
+                <div class="role-card-title" style="font-weight:700; margin-top:0.3rem;">物件オーナー</div>
               </label>
             </div>
           </div>
@@ -2449,7 +2453,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-rep-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 代表者名 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-rep-name" name="representativeName" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 佐藤 健一" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) h.textContent = this.value.trim();">
+              <input id="s18-rep-name" name="representativeName" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 佐藤 健一" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) { h.textContent = this.value.trim(); if(window.MachirikuHeaderTicker) window.MachirikuHeaderTicker.update(); }">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINEの表示名が初期設定されています。自由に編集できます。</span>
             </div>
 
@@ -2648,7 +2652,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-owner-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 オーナー氏名 / 代表者名 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-owner-name" name="representativeName" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 佐藤 武雄" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) h.textContent = this.value.trim();">
+              <input id="s18-owner-name" name="representativeName" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 佐藤 武雄" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) { h.textContent = this.value.trim(); if(window.MachirikuHeaderTicker) window.MachirikuHeaderTicker.update(); }">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINEの表示名が初期設定されています。本名や代表者名にご変更いただけます。</span>
             </div>
 
@@ -3057,7 +3061,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 ニックネーム (表示名) <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-name" name="name" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 山田 太郎" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) h.textContent = this.value.trim();">
+              <input id="s18-name" name="name" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 山田 太郎" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) { h.textContent = this.value.trim(); if(window.MachirikuHeaderTicker) window.MachirikuHeaderTicker.update(); }">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINEの表示名が初期設定されています。自由に編集できます。</span>
             </div>
 
@@ -3897,6 +3901,8 @@ window.MachirikuScreens = (function() {
     s18BizPoints = [];
     const pointsInput = document.getElementById('s18-biz-area-points');
     if (pointsInput) pointsInput.value = '';
+    const areaInput = document.getElementById('s18-biz-area') || document.getElementById('s18-biz-area-name');
+    if (areaInput) areaInput.value = '';
     const statusEl = document.getElementById('s18-biz-map-status');
     if (statusEl) statusEl.textContent = '範囲指定がリセットされました。地図をなぞるか主要エリアから選択してください。';
     const canvas = document.getElementById('s18-biz-draw-canvas');
@@ -4104,6 +4110,21 @@ window.MachirikuScreens = (function() {
       if (phoneInput && phoneInput.focus) phoneInput.focus();
       return;
     }
+    const bizDigitsOnly = phone.replace(/[\s()（）ー−‐-]/g, '');
+    if (!/^\d+$/.test(bizDigitsOnly)) {
+      if (typeof MachirikuApp !== 'undefined') {
+        MachirikuApp.showToast('電話番号は半角数字で入力してください（英字や記号は使用できません）');
+      }
+      if (phoneInput && phoneInput.focus) phoneInput.focus();
+      return;
+    }
+    if (bizDigitsOnly.length < 9 || bizDigitsOnly.length > 11) {
+      if (typeof MachirikuApp !== 'undefined') {
+        MachirikuApp.showToast('電話番号の桁数を確認してください（例: 09012345678）');
+      }
+      if (phoneInput && phoneInput.focus) phoneInput.focus();
+      return;
+    }
 
     const industries = [];
     if (typeof document !== 'undefined') {
@@ -4177,6 +4198,21 @@ window.MachirikuScreens = (function() {
     if (!phone) {
       if (typeof MachirikuApp !== 'undefined') {
         MachirikuApp.showToast('連絡先電話番号を入力してください');
+      }
+      if (phoneInput && phoneInput.focus) phoneInput.focus();
+      return;
+    }
+    const bizDigitsOnly = phone.replace(/[\s()（）ー−‐-]/g, '');
+    if (!/^\d+$/.test(bizDigitsOnly)) {
+      if (typeof MachirikuApp !== 'undefined') {
+        MachirikuApp.showToast('電話番号は半角数字で入力してください（英字や記号は使用できません）');
+      }
+      if (phoneInput && phoneInput.focus) phoneInput.focus();
+      return;
+    }
+    if (bizDigitsOnly.length < 9 || bizDigitsOnly.length > 11) {
+      if (typeof MachirikuApp !== 'undefined') {
+        MachirikuApp.showToast('電話番号の桁数を確認してください（例: 09012345678）');
       }
       if (phoneInput && phoneInput.focus) phoneInput.focus();
       return;

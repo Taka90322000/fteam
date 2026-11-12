@@ -28,14 +28,7 @@
       || "true".equalsIgnoreCase(request.getParameter("logged_out"))
       || "true".equalsIgnoreCase(request.getParameter("logout"));
 
-  String profileActionUrl;
-  if ("business".equalsIgnoreCase(userRole)) {
-    profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/auth/BusinessSetup.action";
-  } else if ("owner".equalsIgnoreCase(userRole)) {
-    profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/auth/OwnerSetup.action";
-  } else {
-    profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/auth/ResidentSetup.action";
-  }
+  String profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/user/Profile.action";
 
   ObjectMapper mapper = new ObjectMapper();
   String jsonDisplayName = mapper.writeValueAsString(displayName).replace("</", "<\\/");
@@ -147,11 +140,11 @@
   <script
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNWrNbVnBfZsjuTJ3sHCKDemfkxNsIv7w&libraries=marker"></script>
   <script src="${pageContext.request.contextPath}/js/qrcode.js"></script>
-  <script src="${pageContext.request.contextPath}/js/data.js?v=20261112_s18_jsp"></script>
-  <script src="${pageContext.request.contextPath}/js/map.js?v=20261112_s18_jsp"></script>
-  <script src="${pageContext.request.contextPath}/js/store.js?v=20261112_s18_jsp"></script>
-  <script src="${pageContext.request.contextPath}/js/screens.js?v=20261112_s18_jsp"></script>
-  <script src="${pageContext.request.contextPath}/js/app.js?v=20261112_s18_jsp"></script>
+  <script src="${pageContext.request.contextPath}/js/data.js?v=20261112_profile_action"></script>
+  <script src="${pageContext.request.contextPath}/js/map.js?v=20261112_profile_action"></script>
+  <script src="${pageContext.request.contextPath}/js/store.js?v=20261112_profile_action"></script>
+  <script src="${pageContext.request.contextPath}/js/screens.js?v=20261112_profile_action"></script>
+  <script src="${pageContext.request.contextPath}/js/app.js?v=20261112_profile_action"></script>
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
     document.addEventListener('DOMContentLoaded', function () {

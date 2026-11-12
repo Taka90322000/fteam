@@ -38,18 +38,18 @@
         <label style="font-size:0.9rem; font-weight:800; display:block; margin-bottom:0.5rem; color:var(--text-main);">
           利用区分を選択してください <span style="color:#ef4444; font-size:0.8rem;">*必須</span>
         </label>
-        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem;">
-          <label style="border:1px solid var(--border-color); padding:0.85rem 0.5rem; border-radius:var(--radius-md); text-align:center; cursor:pointer; background:var(--bg-card); display:block;">
-            <input type="radio" name="regRole" value="resident" <%= "resident".equals(registrationRole) ? "checked" : "" %> style="accent-color:var(--primary-700);">
-            <div style="font-weight:700; margin-top:0.35rem; font-size:0.875rem;">地域住民</div>
+        <div class="role-select-grid" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem;">
+          <label class="role-select-card <%= "resident".equals(registrationRole) ? "is-selected" : "" %>">
+            <input type="radio" name="regRole" value="resident" <%= "resident".equals(registrationRole) ? "checked" : "" %> style="accent-color:var(--primary-700);" onchange="updateRoleCards()">
+            <div class="role-card-title" style="font-weight:700; margin-top:0.35rem; font-size:0.875rem;">地域住民</div>
           </label>
-          <label style="border:1px solid var(--border-color); padding:0.85rem 0.5rem; border-radius:var(--radius-md); text-align:center; cursor:pointer; background:var(--bg-card); display:block;">
-            <input type="radio" name="regRole" value="business" <%= "business".equals(registrationRole) ? "checked" : "" %> style="accent-color:var(--primary-700);">
-            <div style="font-weight:700; margin-top:0.35rem; font-size:0.875rem;">出店希望事業主</div>
+          <label class="role-select-card <%= "business".equals(registrationRole) ? "is-selected" : "" %>">
+            <input type="radio" name="regRole" value="business" <%= "business".equals(registrationRole) ? "checked" : "" %> style="accent-color:var(--primary-700);" onchange="updateRoleCards()">
+            <div class="role-card-title" style="font-weight:700; margin-top:0.35rem; font-size:0.875rem;">出店希望事業主</div>
           </label>
-          <label style="border:1px solid var(--border-color); padding:0.85rem 0.5rem; border-radius:var(--radius-md); text-align:center; cursor:pointer; background:var(--bg-card); display:block;">
-            <input type="radio" name="regRole" value="owner" <%= "owner".equals(registrationRole) ? "checked" : "" %> style="accent-color:var(--primary-700);">
-            <div style="font-weight:700; margin-top:0.35rem; font-size:0.875rem;">物件オーナー</div>
+          <label class="role-select-card <%= "owner".equals(registrationRole) ? "is-selected" : "" %>">
+            <input type="radio" name="regRole" value="owner" <%= "owner".equals(registrationRole) ? "checked" : "" %> style="accent-color:var(--primary-700);" onchange="updateRoleCards()">
+            <div class="role-card-title" style="font-weight:700; margin-top:0.35rem; font-size:0.875rem;">物件オーナー</div>
           </label>
         </div>
       </div>
@@ -72,6 +72,18 @@
     </div>
 
   </div>
+  <script>
+    function updateRoleCards() {
+      document.querySelectorAll('.role-select-card').forEach(function(card) {
+        var radio = card.querySelector('input[type="radio"]');
+        if (radio && radio.checked) {
+          card.classList.add('is-selected');
+        } else {
+          card.classList.remove('is-selected');
+        }
+      });
+    }
+  </script>
 </section>
 
 <jsp:include page="/WEB-INF/views/common/footer.jsp" />

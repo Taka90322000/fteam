@@ -25,6 +25,12 @@ window.MachirikuApp = (function() {
     // ハッシュ変更監視
     window.addEventListener("hashchange", handleHashChange);
 
+    // 画面幅変更時のヘッダー名前ティッカー再計算
+    window.addEventListener("resize", () => {
+      clearTimeout(window._headerTickerTimer);
+      window._headerTickerTimer = setTimeout(updateHeaderTicker, 150);
+    });
+
     // ストア変更監視
     store.subscribe((state, change = {}) => {
       updateHeader();
@@ -576,6 +582,7 @@ window.MachirikuApp = (function() {
         displayName = (user && user.name && user.name !== '田中 一郎') ? user.name : (isOnboarding ? 'LINEユーザー' : (user.name || 'LINEユーザー'));
       }
       userNameEl.textContent = displayName;
+      setTimeout(updateHeaderTicker, 50);
     }
 
     // 未読通知バッジ
@@ -625,6 +632,31 @@ window.MachirikuApp = (function() {
     });
   }
 
+  // ヘッダー名前の自動横スクロール（文字数が表示幅を超えた場合のティッカープレビュー）
+  function updateHeaderTicker() {
+    const nameEl = document.getElementById("header-user-name");
+    if (!nameEl) return;
+    const link = nameEl.closest(".profile-link");
+    if (!link) return;
+
+    link.classList.remove("has-overflow");
+    nameEl.style.removeProperty("--header-name-scroll-dist");
+    nameEl.style.removeProperty("--header-name-scroll-duration");
+
+    // レイアウト確定後のサイズを取得
+    const textWidth = nameEl.scrollWidth;
+    const containerWidth = link.clientWidth;
+    const overflow = textWidth - containerWidth;
+
+    if (overflow > 3) {
+      const scrollDist = overflow + 8;
+      const duration = Math.max(3.5, Math.min(10, Math.round(scrollDist / 18 * 10) / 10));
+      nameEl.style.setProperty("--header-name-scroll-dist", `-${scrollDist}px`);
+      nameEl.style.setProperty("--header-name-scroll-duration", `${duration}s`);
+      link.classList.add("has-overflow");
+    }
+  }
+
   // トースト通知
   function showToast(message) {
     let container = document.getElementById("global-toast-container");
@@ -649,11 +681,14 @@ window.MachirikuApp = (function() {
     }, 2800);
   }
 
+  window.MachirikuHeaderTicker = { update: updateHeaderTicker };
+
   return {
     init,
     navigate,
     getCurrentScreen: () => currentScreenId,
     showToast,
+    updateHeaderTicker,
     logout: (isOnboarding) => MachirikuScreens.handleLogout(isOnboarding)
   };
 })();
