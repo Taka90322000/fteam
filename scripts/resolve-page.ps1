@@ -1,10 +1,11 @@
-# Resolve the saved active editor file to a URL within the /machiriku context.
-# Keep this separate from deployment so resolving a page never starts Tomcat.
+# VS Codeで開いていた保存済みファイルから、/machiriku配下の表示先URLを求める。
+# URL判定をデプロイ処理から分離し、このファイルだけではTomcatを起動しない。
 
 function Get-ServletPagePath {
     param([string]$JavaFile, [string]$ProjectRoot)
 
     $source = Get-Content -LiteralPath $JavaFile -Raw -Encoding UTF8
+    # @WebServletの指定から、ブラウザーで直接開けるURLパターンを探す。
     $annotation = [regex]::Match($source, '(?s)@(?:jakarta\.servlet\.annotation\.)?WebServlet\s*\((.*?)\)')
     if ($annotation.Success) {
         $arguments = $annotation.Groups[1].Value.Trim()
@@ -15,7 +16,7 @@ function Get-ServletPagePath {
         }
     }
 
-    # Also support servlet mappings declared in web.xml (with its XML namespace).
+    # アノテーションで判定できない場合は、名前空間付きのweb.xmlに定義された対応も確認する。
     $webXml = Join-Path $ProjectRoot 'src\main\webapp\WEB-INF\web.xml'
     if (Test-Path -LiteralPath $webXml) {
         [xml]$descriptor = Get-Content -LiteralPath $webXml -Raw -Encoding UTF8
@@ -42,6 +43,7 @@ function Get-ActivePagePath {
     )
 
     if ([string]::IsNullOrWhiteSpace($ActiveFile)) { return $FallbackPath }
+    # プロジェクト外のファイルや未保存ファイルからURLを組み立てないようにする。
     $root = [System.IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\', '/')
     $file = [System.IO.Path]::GetFullPath($ActiveFile)
     if (-not $file.StartsWith($root + '\', [System.StringComparison]::OrdinalIgnoreCase) -or
@@ -59,7 +61,7 @@ function Get-ActivePagePath {
             $route = $relative
         }
         elseif ($relative -match '^/WEB-INF/.*\.jspx?$') {
-            # Protected JSPs must be opened through the servlet that forwards to them.
+            # WEB-INF内のJSPは直接公開されないため、そのJSPへ転送するServletのURLを使う。
             $dispatcher = 'getRequestDispatcher\s*\(\s*"' + [regex]::Escape($relative) + '"\s*\)'
             $routes = @(Get-ChildItem -LiteralPath $javaRoot -Filter '*.java' -Recurse | ForEach-Object {
                 $source = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
@@ -75,10 +77,12 @@ function Get-ActivePagePath {
         $route = Get-ServletPagePath -JavaFile $file -ProjectRoot $root
     }
 
+    # BeanやDAOなど表示先を特定できないファイルは、従来の既定ページへ戻す。
     if ($null -eq $route) {
         Write-Warning "No page URL could be determined for the active file. Opening $FallbackPath"
         return $FallbackPath
     }
+    # 空白や日本語を含むパスもURLとして扱えるよう、各階層を個別にエンコードする。
     $escaped = ($route.Split('/') | ForEach-Object { [System.Uri]::EscapeDataString($_) }) -join '/'
     return '/machiriku' + $escaped
 }

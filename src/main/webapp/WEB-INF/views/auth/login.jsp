@@ -1,0 +1,56 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="jp.machiriku.config.AppConfig" %>
+<%-- ログイン画面。認証処理そのものはLineLoginActionとコールバック側で実行する。 --%>
+<jsp:include page="/WEB-INF/views/common/header.jsp">
+  <jsp:param name="title" value="ログイン | マチリク" />
+  <jsp:param name="activeNav" value="login" />
+</jsp:include>
+
+<section class="screen-view s16-view" data-screen="S16">
+
+  <div class="form-stepper-box" style="max-width:540px; margin:0 auto; background:var(--bg-card); padding:2rem; border-radius:var(--radius-lg); border:1px solid var(--border-color); box-shadow:var(--shadow-sm);">
+    <h1 style="font-size:1.35rem; font-weight:800; color:var(--text-main); margin:0 0 1.25rem 0; text-align:center;">ログイン</h1>
+    
+    <%-- Actionが再表示時に設定した案内文がある場合に、フォームの上部へ表示する。 --%>
+    <% if (request.getAttribute("errorMessage") != null) { %>
+      <div style="background:#fee2e2; border:1px solid #f87171; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-md); font-size:0.875rem; margin-bottom:1.25rem;">
+        <%= request.getAttribute("errorMessage") %>
+      </div>
+    <% } %>
+
+    <%-- LINE認証の開始先へ移動する。チャネルシークレットなどの設定値はこの画面へ埋め込まない。 --%>
+    <div style="margin-top:0.5rem; margin-bottom:1.5rem;">
+      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/LineLogin.action" class="btn-line-login" style="display:flex; align-items:center; justify-content:center; gap:0.6rem; background:#06C755; color:#ffffff; font-weight:700; font-size:1rem; padding:0.85rem 1.25rem; border-radius:var(--radius-md); text-decoration:none; border:none; width:100%; box-sizing:border-box;">
+        <img src="${pageContext.request.contextPath}/assets/line_icon.svg" alt="LINE" style="width:24px; height:24px; flex-shrink:0;">
+        <span>LINEでログイン</span>
+      </a>
+      <p style="font-size:0.8125rem; color:var(--text-sub); text-align:center; margin-top:0.75rem; line-height:1.5;">
+        LINEの表示名・ユーザーIDと、取得できる場合はメールアドレスを取得し、会員情報の確認に利用します。
+      </p>
+    </div>
+
+    <div style="text-align:center; margin-top:1.5rem; font-size:0.875rem;">
+      アカウントをお持ちでない方は <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action" style="color:var(--primary-700); font-weight:700; text-decoration:underline;">新規会員登録</a>
+    </div>
+
+    <%-- .envなどの共通設定で明示的に許可した場合だけ、審査用のデモログインを表示する。 --%>
+    <% if ("true".equalsIgnoreCase(AppConfig.get("MACHIRIKU_DEMO_LOGIN_ENABLED"))) { %>
+    <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px dashed var(--border-color); text-align:center;">
+      <div style="font-size:0.8125rem; color:var(--text-sub); margin-bottom:0.75rem; font-weight:700;">
+        【デモ・審査確認用】ロール別 1クリックログイン
+      </div>
+      <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" method="POST">
+        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.5rem;">
+          <button type="submit" name="demoRole" value="resident" class="btn-outline" style="font-size:0.8125rem; padding:0.5rem 0.75rem; border:1px solid var(--border-color); background:transparent; border-radius:var(--radius-md); cursor:pointer;">地域住民でログイン</button>
+          <button type="submit" name="demoRole" value="business" class="btn-outline" style="font-size:0.8125rem; padding:0.5rem 0.75rem; border:1px solid var(--border-color); background:transparent; border-radius:var(--radius-md); cursor:pointer;">事業主でログイン</button>
+          <button type="submit" name="demoRole" value="owner" class="btn-outline" style="font-size:0.8125rem; padding:0.5rem 0.75rem; border:1px solid var(--border-color); background:transparent; border-radius:var(--radius-md); cursor:pointer;">オーナーでログイン</button>
+          <button type="submit" name="demoRole" value="admin" class="btn-outline" style="font-size:0.8125rem; padding:0.5rem 0.75rem; border:1px solid var(--border-color); background:transparent; border-radius:var(--radius-md); cursor:pointer;">管理者でログイン</button>
+        </div>
+      </form>
+    </div>
+
+    <% } %>
+  </div>
+</section>
+
+<jsp:include page="/WEB-INF/views/common/footer.jsp" />
