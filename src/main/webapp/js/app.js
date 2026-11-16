@@ -56,6 +56,35 @@ window.MachirikuApp = (function() {
     // 初期ルート読み込み
     handleHashChange();
     updateHeader();
+    initBackToTopButton();
+  }
+
+  function initBackToTopButton() {
+    if (typeof document === 'undefined') return;
+    const btn = document.getElementById('mobile-back-to-top');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    });
+
+    const sentinel = document.getElementById('page-top-sentinel');
+    if (sentinel && typeof IntersectionObserver !== 'undefined') {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          btn.classList.toggle('is-visible', !entry.isIntersecting);
+        });
+      }, { threshold: 0 });
+      observer.observe(sentinel);
+    } else if (typeof window !== 'undefined') {
+      const onScroll = () => {
+        const y = window.scrollY || window.pageYOffset || 0;
+        btn.classList.toggle('is-visible', y > 220);
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    }
   }
 
   function parseHash() {
@@ -403,6 +432,25 @@ window.MachirikuApp = (function() {
     }
 
     updateSubnavActive();
+    updateDocumentTitle();
+  }
+
+  function updateDocumentTitle() {
+    if (typeof document === 'undefined') return;
+    if (currentScreenId === 's01') {
+      document.title = 'マチリク | 宇都宮の空き店舗と、欲しいお店';
+      return;
+    }
+    if (currentScreenId === 's02') {
+      const propId = currentParams?.id || store.getProperties()[0]?.id;
+      const prop = propId ? store.getPropertyById(propId) : null;
+      if (prop && prop.title) {
+        document.title = `${prop.title} | マチリク`;
+        return;
+      }
+    }
+    const spec = (window.MACHIRIKU_DATA?.SCREENS_SPEC || []).find(s => s.id === currentScreenId);
+    document.title = spec ? `${spec.name} | マチリク` : 'マチリク | 宇都宮の空き店舗と、欲しいお店';
   }
 
   function initS01Map() {

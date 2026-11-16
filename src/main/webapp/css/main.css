@@ -1,6 +1,7 @@
 /** マチリク: 空き店舗と地域の声を読みやすく伝える。設計ルールは DESIGN.md を参照。 */
 
 :root {
+  interpolate-size: allow-keywords;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -83,6 +84,9 @@
   --demand-pill-border: #fcd34d;
   --demand-seg-2: #10b981;
   --demand-seg-3: #2563eb;
+  --demand-rank-1: #1B4D3E;
+  --demand-rank-2: #468B74;
+  --demand-rank-3: #A3D2C1;
 
   /* カードや浮いた要素の影。強いぼかしを避けて境界を見やすくする。 */
 
@@ -2703,6 +2707,25 @@ body {
 }
 
 /* 全写真一覧モーダル（上部から美しくレイアウト、下ズレ完全解消） */
+dialog.photos-modal-dialog,
+dialog.lightbox-dialog {
+  margin: 0;
+  border: none;
+  max-width: none;
+  max-height: none;
+  color: inherit;
+}
+
+dialog.photos-modal-dialog:not([open]),
+dialog.lightbox-dialog:not([open]) {
+  display: none;
+}
+
+dialog.photos-modal-dialog::backdrop,
+dialog.lightbox-dialog::backdrop {
+  background: transparent;
+}
+
 .photos-modal-overlay {
   position: fixed;
   top: 0;
@@ -2797,9 +2820,18 @@ body {
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-subtle);
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: inherit;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.photo-tile-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .photo-tile-item:hover {
@@ -4058,11 +4090,14 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
   .portal-map-pane { order: -1; position: relative; top: 0; height: 340px; min-height: 0; margin-bottom: var(--space-6); }
   .detail-layout-grid { display: flex; flex-direction: column; gap: var(--space-5); }
   .detail-main-pane { display: contents; }
-  .detail-gallery-box { order: 1; }
-  .detail-side-pane { order: 2; position: static; width: 100%; }
-  .detail-side-pane > .detail-card { display: none; }
-  .detail-main-pane > .detail-card { order: 3; }
-  .demand-civic-box { order: 4; }
+  .detail-gallery-box { order: 1; min-width: 0; }
+  .detail-side-pane { order: 2; position: static; width: 100%; min-width: 0; }
+  .s02-view .detail-side-pane { display: contents; }
+  .s02-view .cta-box-card { order: 2; width: 100%; }
+  .s02-view .side-location-card { order: 3; padding: var(--space-4) 0 0; }
+  .s02-view .side-location-map { aspect-ratio: auto; height: 220px; }
+  .detail-main-pane > .detail-card { order: 4; min-width: 0; }
+  .demand-civic-box { order: 5; min-width: 0; }
   .cta-price-banner { margin-bottom: var(--space-4); padding-bottom: var(--space-4); }
   .cta-demand-summary-banner { margin-bottom: var(--space-4); padding-bottom: var(--space-4); }
 }
@@ -4081,7 +4116,8 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
   .results-sort-select { max-width: 180px; }
   .civic-kpi-bar { grid-template-columns: 1fr; gap: 0; }
   .civic-kpi-item { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-4); }
-  .civic-kpi-val { font-size: 1.5rem; }
+  .civic-kpi-val { font-size: 1.5rem; margin-top: 0 !important; }
+  .civic-kpi-sub { display: none; }
   .metrics-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
   .metric-card-val { font-size: 1.65rem; }
   .metrics-three { grid-template-columns: minmax(0, 1fr); }
@@ -4555,15 +4591,23 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
     text-overflow: clip !important;
   }
   .header-nav-right .role-picker {
-    font-size: 0.75rem !important;
-    padding: 0.15rem 0.35rem !important;
+    font-size: 0.72rem !important;
+    padding: 0.15rem 0.25rem !important;
+    gap: 0.25rem !important;
     white-space: nowrap !important;
-    flex-shrink: 0 !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
     margin: 0 !important;
   }
   .header-nav-right .role-picker select {
     font-size: 0.75rem !important;
     padding: 0.15rem 0.25rem !important;
+    min-height: 36px !important;
+    max-width: 104px !important;
+  }
+  .header-nav-right a.profile-link[href*="Login.action"] {
+    flex-shrink: 0 !important;
+    max-width: none !important;
   }
 
   /* 2. サブナビゲーションの横スクロール感向上 */
@@ -4708,4 +4752,493 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
 
 .btn-gallery-all-overlay:hover {
   background: rgba(0, 0, 0, 0.9);
+}
+
+/* S02: 物件募集概要（見出し直下の紹介文・開閉式詳細条件・2分類設備UI） */
+.property-overview-description {
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.95rem;
+  line-height: 1.75;
+  color: var(--text-sub);
+}
+
+.disclosure-footer-action {
+  margin-top: var(--space-4);
+}
+
+.detail-specs-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-subtle);
+  color: var(--primary-700);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.detail-specs-toggle::before {
+  content: "";
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  flex-shrink: 0;
+  border-inline-end: 2px solid currentColor;
+  border-block-end: 2px solid currentColor;
+  rotate: 45deg;
+  translate: 0 -2px;
+}
+
+.detail-specs-toggle[aria-expanded="true"]::before {
+  rotate: -135deg;
+  translate: 0 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .detail-specs-toggle::before {
+    transition: rotate 0.2s ease, translate 0.2s ease;
+  }
+}
+
+.detail-specs-toggle:hover {
+  background-color: var(--primary-50);
+  border-color: var(--primary-600);
+}
+
+.detail-specs-toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.detail-specs-toggle[aria-expanded="true"] .toggle-label-closed,
+.detail-specs-toggle[aria-expanded="false"] .toggle-label-open {
+  display: none;
+}
+
+.demand-ranking-list-top {
+  margin-bottom: 0;
+}
+
+.s02-view .specs-table {
+  table-layout: fixed;
+}
+
+.s02-collapse-panel {
+  block-size: 0;
+  overflow: hidden;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .s02-collapse-panel {
+    transition: block-size 0.3s ease-out, opacity 0.25s ease-out;
+  }
+}
+
+.s02-collapse-panel.is-expanded {
+  block-size: auto;
+  opacity: 1;
+}
+
+.demand-extra-inner {
+  padding-top: 0.85rem;
+  margin-bottom: 0;
+}
+
+.infra-facility-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+}
+
+.infra-facility-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.infra-facility-chip.is-available {
+  background-color: var(--primary-50);
+  border-color: var(--primary-600);
+  color: var(--primary-700);
+  font-weight: 700;
+}
+
+.infra-facility-chip.is-unavailable {
+  background-color: var(--bg-subtle);
+  border-color: var(--border-color);
+  color: var(--text-muted);
+  opacity: 0.62;
+}
+
+.infra-chip-mark {
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.feature-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.badge-feature {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-strong);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.badge-check-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--status-voting-bg);
+  border: 1px solid var(--status-voting-border);
+  color: var(--status-voting-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.side-location-card {
+  padding: var(--space-4) 0 0;
+  display: block;
+  width: 100%;
+}
+
+.side-location-title {
+  margin: 0 0 var(--space-2);
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--text-main);
+}
+
+.visually-hidden:where(:not(:focus-within, :active)) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
+.gallery-nav-btn,
+.carousel-arrow-btn,
+.gallery-thumb-btn,
+.lightbox-nav-btn {
+  touch-action: manipulation;
+}
+
+.side-location-address {
+  font-size: 0.875rem;
+  color: var(--text-sub);
+  margin-bottom: var(--space-3);
+}
+
+.side-location-map {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+
+/* S02: 需要データ KPI補足 & 第1〜第3希望 積み上げバーグラフ */
+.civic-kpi-sub {
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text-sub);
+}
+
+.demand-scoring-note {
+  margin-top: var(--space-4);
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--primary-800);
+}
+
+.demand-ranking-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.demand-legend-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--text-sub);
+}
+
+.demand-legend-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.demand-legend-swatch {
+  display: inline-block;
+  inline-size: 0.85rem;
+  block-size: 0.85rem;
+  border-radius: 2px;
+  border: 1px solid var(--border-color);
+}
+
+.demand-legend-swatch.rank-1,
+.demand-stacked-seg.rank-1 {
+  background-color: var(--demand-rank-1);
+}
+
+.demand-legend-swatch.rank-2,
+.demand-stacked-seg.rank-2 {
+  background-color: var(--demand-rank-2);
+}
+
+.demand-legend-swatch.rank-3,
+.demand-stacked-seg.rank-3 {
+  background-color: var(--demand-rank-3);
+}
+
+.demand-stacked-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+
+.demand-stacked-title {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.demand-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  color: var(--text-sub);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.demand-stacked-metrics {
+  color: var(--primary-700);
+  font-size: 0.875rem;
+}
+
+.demand-votes-breakdown {
+  color: var(--text-sub);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.demand-stacked-track {
+  width: 100%;
+  height: 12px;
+  background-color: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.demand-stacked-fill {
+  display: flex;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.demand-stacked-seg {
+  display: block;
+  height: 100%;
+}
+
+.demand-stacked-seg + .demand-stacked-seg {
+  border-inline-start: 1px solid var(--bg-card);
+}
+
+/* S02: スマホ専用レイアウト調整（PC版 > 640px には影響しない） */
+@media (max-width: 640px) {
+  .s02-view .gallery-main-container {
+    height: 260px;
+  }
+
+  .s02-view .specs-table,
+  .s02-view .specs-table tbody,
+  .s02-view .specs-table tr,
+  .s02-view .specs-table th,
+  .s02-view .specs-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .s02-view .specs-table th {
+    padding: var(--space-2) var(--space-3);
+    border-bottom: none;
+    font-size: 0.85rem;
+  }
+
+  .s02-view .specs-table td {
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    font-size: 0.9375rem;
+    overflow-wrap: anywhere;
+  }
+
+  .s02-view .infra-facility-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+
+  .s02-view .demand-stacked-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .s02-view .detail-specs-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .s02-view .listing-source,
+  .s02-view .demand-scoring-note {
+    display: none;
+  }
+
+  .s02-view .detail-main-pane > .detail-card {
+    padding: var(--space-4) 0;
+  }
+
+  .s02-view .demand-civic-box {
+    padding: var(--space-4) 0 var(--space-2);
+  }
+
+  .s02-view .demand-bar-list {
+    margin-bottom: 0;
+  }
+
+  .s02-view .disclosure-footer-action {
+    margin-top: var(--space-3);
+  }
+}
+
+/* モバイル専用 ページトップへ戻るボタン（PC版 > 640px では常に非表示） */
+.scroll-sentinel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 220px;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.mobile-back-to-top {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .site-footer {
+    padding-bottom: calc(var(--space-12) + var(--space-8));
+  }
+
+  .mobile-back-to-top {
+    position: fixed;
+    right: var(--space-4);
+    bottom: max(20px, env(safe-area-inset-bottom, 20px));
+    z-index: 250;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    padding: 0;
+    border-radius: var(--radius-full);
+    border: 1.5px solid var(--primary-700);
+    background-color: var(--bg-card);
+    color: var(--primary-700);
+    box-shadow: var(--shadow-floating);
+    cursor: pointer;
+    visibility: hidden;
+    opacity: 0;
+    translate: 0 12px;
+    pointer-events: none;
+  }
+
+  .mobile-back-to-top.is-visible {
+    visibility: visible;
+    opacity: 1;
+    translate: 0 0;
+    pointer-events: auto;
+  }
+
+  .mobile-back-to-top:active {
+    background-color: var(--primary-50);
+  }
+
+  .mobile-back-to-top:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  .mobile-back-to-top-label {
+    font-size: 0.625rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.04em;
+  }
+}
+
+@media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+  .mobile-back-to-top {
+    transition: visibility 0.25s, opacity 0.25s ease, translate 0.25s ease, background-color 0.15s ease;
+  }
 }

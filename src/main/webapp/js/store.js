@@ -273,6 +273,8 @@ window.MachirikuStore = (function() {
     const curVote = state.currentUser.votedProps?.[propId];
     const isUpdate = Boolean(curVote);
 
+    const rankKeys = ["rank1Votes", "rank2Votes", "rank3Votes"];
+
     // 既存投票がある場合は過去の加算スコア・票数を減算して再集計
     if (isUpdate && curVote.prevRanks && curVote.prevScoreAdded !== undefined) {
       prop.demandScore = Math.max(0, Math.round((prop.demandScore - curVote.prevScoreAdded) * 10) / 10);
@@ -283,6 +285,10 @@ window.MachirikuStore = (function() {
         const dem = prop.topDemands.find(d => d.subcatId === prevSubcat);
         if (dem) {
           dem.votes = Math.max(0, dem.votes - 1);
+          const rk = rankKeys[idx];
+          if (rk) {
+            dem[rk] = Math.max(0, (dem[rk] || 0) - 1);
+          }
           dem.score = Math.max(0, Math.round((dem.score - prevSubScore) * 10) / 10);
         }
       });
@@ -303,12 +309,19 @@ window.MachirikuStore = (function() {
         targetDemand = {
           subcatId: subcatId,
           votes: 0,
+          rank1Votes: 0,
+          rank2Votes: 0,
+          rank3Votes: 0,
           score: 0,
           label: sub ? sub.name : subcatId
         };
         prop.topDemands.push(targetDemand);
       }
       targetDemand.votes += 1;
+      const rk = rankKeys[idx];
+      if (rk) {
+        targetDemand[rk] = (targetDemand[rk] || 0) + 1;
+      }
       targetDemand.score = Math.round((targetDemand.score + scoreAdded) * 10) / 10;
     });
 

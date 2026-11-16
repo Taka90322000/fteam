@@ -44,10 +44,11 @@
   <meta name="theme-color" content="#1b4332">
   <title>マチリク | 宇都宮の空き店舗と、欲しいお店</title>
   <meta name="description" content="宇都宮市の空き店舗を探し、欲しいお店に投票。地域の声を出店につなげるマチリク。">
-  <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css?v=20261110_db_align_v2">
+  <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css?v=20261116_mwg">
 </head>
 
 <body data-context-path="${pageContext.request.contextPath}">
+  <div id="page-top-sentinel" class="scroll-sentinel" aria-hidden="true"></div>
   <a class="skip-link" href="#main-app-container">本文へ移動</a>
   <header class="site-header">
     <div class="header-top">
@@ -68,7 +69,7 @@
             </select>
           </label>
           <span id="header-role-badge" class="header-role-badge" style="display:none;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span id="header-role-badge-text">地域住民</span>
           </span>
           <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
@@ -84,7 +85,7 @@
             </select>
           </label>
           <span id="header-role-badge" class="header-role-badge">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span id="header-role-badge-text"><%= "business".equalsIgnoreCase(userRole) ? "出店事業主" : ("owner".equalsIgnoreCase(userRole) ? "物件オーナー" : ("admin".equalsIgnoreCase(userRole) ? "運営管理者" : "地域住民")) %></span>
           </span>
           <a href="#s06" class="btn-header-action notification-link" aria-label="通知一覧">
@@ -137,14 +138,20 @@
     </details>
     <small>© 2026 マチリク / Fチーム</small>
   </footer>
-  <script
+  <button type="button" id="mobile-back-to-top" class="mobile-back-to-top btn-print-hide" aria-label="ページトップへ戻る">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polyline points="18 15 12 9 6 15"></polyline>
+    </svg>
+    <span class="mobile-back-to-top-label" aria-hidden="true">TOP</span>
+  </button>
+  <script async
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNWrNbVnBfZsjuTJ3sHCKDemfkxNsIv7w&libraries=marker"></script>
-  <script src="${pageContext.request.contextPath}/js/qrcode.js"></script>
-  <script src="${pageContext.request.contextPath}/js/data.js?v=20261112_profile_action"></script>
-  <script src="${pageContext.request.contextPath}/js/map.js?v=20261112_profile_action"></script>
-  <script src="${pageContext.request.contextPath}/js/store.js?v=20261112_profile_action"></script>
-  <script src="${pageContext.request.contextPath}/js/screens.js?v=20261112_profile_action"></script>
-  <script src="${pageContext.request.contextPath}/js/app.js?v=20261112_profile_action"></script>
+  <script defer src="${pageContext.request.contextPath}/js/qrcode.js"></script>
+  <script defer src="${pageContext.request.contextPath}/js/data.js?v=20261116_s02_demand"></script>
+  <script defer src="${pageContext.request.contextPath}/js/map.js?v=20261112_profile_action"></script>
+  <script defer src="${pageContext.request.contextPath}/js/store.js?v=20261116_s02_demand"></script>
+  <script defer src="${pageContext.request.contextPath}/js/screens.js?v=20261116_mwg"></script>
+  <script defer src="${pageContext.request.contextPath}/js/app.js?v=20261116_mwg"></script>
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
     document.addEventListener('DOMContentLoaded', function () {

@@ -881,13 +881,20 @@ window.MachirikuScreens = (function() {
     const rentMan = formatRent(prop.rent);
     const mgmt = prop.managementFee == null ? '掲載なし（要確認）' : `${formatMoney(prop.managementFee)}円`;
 
-    const top3DemandsHtml = prop.topDemands.slice(0, 3).map((d, idx) => {
+    const activeDemands = (prop.topDemands || [])
+      .filter(d => (d.votes || 0) > 0)
+      .slice()
+      .sort((a, b) => (b.score - a.score) || ((b.rank1Votes || 0) - (a.rank1Votes || 0)));
+
+    const maxDemandScore = Math.max(...activeDemands.map(d => d.score || 0), 1);
+
+    const top3DemandsHtml = activeDemands.slice(0, 3).map((d, idx) => {
       const sub = data.SUBCATS[d.subcatId] || { name: d.label, color: "var(--primary-600)", icon: "" };
-      const percent = Math.min(Math.round((d.score / (prop.demandScore || 1)) * 100), 100);
+      const percent = Math.min(Math.round((d.votes / (prop.votesCount || 1)) * 100), 100);
       return `
         <div class="demand-bar-item">
           <div class="demand-bar-header" style="font-size:0.85rem;">
-            <span>第${idx + 1}位: ${sub.icon} ${sub.name}</span>
+            <span>第${idx + 1}位: ${escapeHtml(sub.name)}</span>
             <span style="color:var(--primary-700); font-weight:700;">${d.votes}票 (${percent}%)</span>
           </div>
           <div class="demand-progress-track" style="height:8px; background:rgba(0,0,0,0.06);">
@@ -897,31 +904,99 @@ window.MachirikuScreens = (function() {
       `;
     }).join("");
 
-    const topDemandsHtml = prop.topDemands.map((d, idx) => {
-      const sub = data.SUBCATS[d.subcatId] || { name: d.label, color: "var(--primary-600)", icon: "" };
-      const percent = Math.min(Math.round((d.score / (prop.demandScore || 1)) * 100), 100);
+    const renderStackedDemandItem = (d, idx) => {
+      const sub = data.SUBCATS[d.subcatId] || { name: d.label, categoryName: "", color: "var(--primary-600)" };
+      const hasBreakdown = typeof d.rank1Votes === "number" || typeof d.rank2Votes === "number" || typeof d.rank3Votes === "number";
+      const r1 = hasBreakdown ? (d.rank1Votes || 0) : (d.votes || 0);
+      const r2 = hasBreakdown ? (d.rank2Votes || 0) : 0;
+      const r3 = hasBreakdown ? (d.rank3Votes || 0) : 0;
+      const totalVotes = (r1 + r2 + r3) || d.votes || 0;
+      const w1 = r1;
+      const w2 = Math.round(r2 * 6) / 10;
+      const w3 = Math.round(r3 * 3) / 10;
+      const barWidthPct = Math.max(4, Math.round(((d.score || 0) / maxDemandScore) * 1000) / 10);
       return `
         <div class="demand-bar-item">
-          <div class="demand-bar-header">
-            <span>第${idx + 1}位: ${sub.icon} ${sub.name}</span>
-            <span style="color:var(--primary-700);">${d.votes}票 / <strong>${d.score} pt</strong> (${percent}%)</span>
+          <div class="demand-bar-header demand-stacked-header">
+            <span class="demand-stacked-title">
+              <span>第${idx + 1}位: ${escapeHtml(sub.name)}</span>
+              ${sub.categoryName ? `<span class="demand-cat-badge">${escapeHtml(sub.categoryName)}</span>` : ''}
+            </span>
+            <span class="demand-stacked-metrics">
+              <strong>${d.score} pt</strong>
+              <span class="demand-votes-breakdown">/ 計${totalVotes}票（1位:${r1}・2位:${r2}・3位:${r3}）</span>
+            </span>
           </div>
-          <div class="demand-progress-track">
-            <div class="demand-progress-fill" style="width: ${percent}%; background-color: ${sub.color};"></div>
+          <div class="demand-stacked-track" aria-hidden="true">
+            <div class="demand-stacked-fill" style="width: ${barWidthPct}%;">
+              ${w1 > 0 ? `<span class="demand-stacked-seg rank-1" style="flex: ${w1} 0 0%;" title="第1希望: ${r1}票 (×1.0)"></span>` : ''}
+              ${w2 > 0 ? `<span class="demand-stacked-seg rank-2" style="flex: ${w2} 0 0%;" title="第2希望: ${r2}票 (×0.6)"></span>` : ''}
+              ${w3 > 0 ? `<span class="demand-stacked-seg rank-3" style="flex: ${w3} 0 0%;" title="第3希望: ${r3}票 (×0.3)"></span>` : ''}
+            </div>
           </div>
         </div>
       `;
-    }).join("");
+    };
 
-    const residentVoicesHtml = (prop.residentVoices || []).map(v => `
-      <div class="quote-bubble">
-        <p class="quote-text">“${escapeHtml(v.text)}”</p>
-        <div class="quote-meta">
-          <span>${escapeHtml(v.author)}</span>
-          <span>${escapeHtml(v.date)}</span>
-        </div>
-      </div>
-    `).join("");
+    const top5DemandsHtml = activeDemands.slice(0, 5).map((d, idx) => renderStackedDemandItem(d, idx)).join("");
+    const restDemands = activeDemands.slice(5);
+    const restDemandsHtml = restDemands.map((d, idx) => renderStackedDemandItem(d, idx + 5)).join("");
+
+    const formatFloorStructure = (p) => {
+      const floorPart = (p.floorNumber && p.totalFloors)
+        ? `${p.floorNumber} / ${p.totalFloors}`
+        : (p.floor || '掲載なし');
+      return p.structure ? `${floorPart} ・ ${p.structure}` : floorPart;
+    };
+
+    const infraItems = data.INFRASTRUCTURE_FACILITIES || [
+      { key: 'hasInuki', label: '居抜き' },
+      { key: 'hasParking', label: '駐車場あり' },
+      { key: 'hasBarrierFree', label: 'バリアフリー' },
+      { key: 'hasPrivateToilet', label: '専用トイレ' },
+      { key: 'hasIndividualAc', label: '個別空調' },
+      { key: 'hasPower', label: '動力あり' },
+      { key: 'hasCityGas', label: '都市ガス' },
+      { key: 'hasWaterDrainage', label: '給排水' },
+      { key: 'hasGreaseTrap', label: 'グリストラップ' },
+      { key: 'hasExhaustDuct', label: '排気ダクト' }
+    ];
+
+    const resolveInfraAvailable = (p, key) => {
+      if (p.infrastructure && typeof p.infrastructure[key] === 'boolean') {
+        return p.infrastructure[key];
+      }
+      const joined = `${(p.facilities || []).join(' ')} ${p.listingStatusRaw || ''} ${p.condition || ''}`;
+      switch (key) {
+        case 'hasInuki': return joined.includes('居抜き');
+        case 'hasParking': return joined.includes('駐車場');
+        case 'hasBarrierFree': return joined.includes('バリアフリー');
+        case 'hasPrivateToilet': return joined.includes('専用トイレ') || joined.includes('専用水洗トイレ');
+        case 'hasIndividualAc': return joined.includes('個別空調') || joined.includes('個別エアコン');
+        case 'hasPower': return joined.includes('動力');
+        case 'hasCityGas': return joined.includes('都市ガス');
+        case 'hasWaterDrainage': return joined.includes('給排水');
+        case 'hasGreaseTrap': return joined.includes('グリストラップ');
+        case 'hasExhaustDuct': return joined.includes('排気ダクト') || joined.includes('換気ダクト');
+        default: return false;
+      }
+    };
+
+    const infraBadgesHtml = infraItems.map(item => {
+      const available = resolveInfraAvailable(prop, item.key);
+      return `
+        <li class="infra-facility-chip ${available ? 'is-available' : 'is-unavailable'}" aria-label="${escapeHtml(item.label)}: ${available ? 'あり' : 'なし'}">
+          <span class="infra-chip-mark" aria-hidden="true">${available ? '✓' : 'ー'}</span>
+          <span>${escapeHtml(item.label)}</span>
+        </li>
+      `;
+    }).join('');
+
+    const featureTags = Array.isArray(prop.featureTags)
+      ? prop.featureTags
+      : (prop.facilities || []).filter(f => !['都市ガス', '給排水設備', '給排水', 'グリストラップ', '換気ダクト', '動力電力', '駐車場あり', '専用トイレ'].includes(f));
+
+    const isDetailsDefaultOpen = state.currentRole === 'business' || state.currentRole === 'owner';
 
     const defaultExterior = {
       index: 0,
@@ -972,53 +1047,54 @@ window.MachirikuScreens = (function() {
           <!-- 左メインコンテンツ -->
           <div class="detail-main-pane">
             <!-- 写真ギャラリー (アットホーム × HOME'S仕様 カルーセル) -->
-            <div class="detail-gallery-box" id="s02-gallery-box" data-prop="${prop.id}">
+            <div class="detail-gallery-box" id="s02-gallery-box" data-prop="${prop.id}" role="region" aria-roledescription="carousel" aria-label="物件写真ギャラリー">
               <!-- メイン写真プレビュー -->
               <div class="gallery-main-container">
                 ${galleryItems.length > 1 ? `
                   <button type="button" class="gallery-nav-btn prev" onclick="MachirikuScreens.navGallery(-1)" aria-label="前の写真">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
                   </button>
                 ` : ''}
                 <div class="gallery-main-view" id="gallery-main-view">
                   <div class="gallery-slider-track" id="gallery-slider-track" style="transform: translateX(-${initialIdx * 100}%);">
                     ${galleryItems.map((item, idx) => `
-                      <div class="gallery-slide-item" data-index="${idx}">
-                        <img src="${escapeHtml(item.url)}" alt="${escapeHtml(prop.title)} - ${escapeHtml(item.label || '')}" loading="${idx === initialIdx ? 'eager' : 'lazy'}" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
+                      <div class="gallery-slide-item" data-index="${idx}" role="group" aria-roledescription="slide" aria-label="${idx + 1} / ${galleryItems.length}">
+                        <img src="${escapeHtml(item.url)}" alt="${escapeHtml(prop.title)} - ${escapeHtml(item.label || '')}" loading="${idx === initialIdx ? 'eager' : 'lazy'}" fetchpriority="${idx === initialIdx ? 'high' : 'low'}" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
                       </div>
                     `).join('')}
                   </div>
                 </div>
                 ${galleryItems.length > 1 ? `
                   <button type="button" class="gallery-nav-btn next" onclick="MachirikuScreens.navGallery(1)" aria-label="次の写真">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
                   </button>
                 ` : ''}
                 <!-- 右上: すべての写真ボタン -->
                 <button type="button" class="btn-gallery-all-overlay" onclick="MachirikuScreens.openAllPhotosModal('${prop.id}')" title="すべての写真を一覧表示">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:4px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>すべての写真 (${galleryItems.length}枚)
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px; margin-right:4px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>すべての写真 (${galleryItems.length}枚)
                 </button>
                 <!-- 右下: 枚数カウンター -->
                 <div class="gallery-counter-badge">
                   <span id="gallery-current-index">${initialIdx + 1}</span> / <span id="gallery-total-count">${galleryItems.length}</span>
                 </div>
               </div>
+              <p id="s02-gallery-status" class="visually-hidden" role="status" aria-live="polite"></p>
 
               <!-- サムネイルカルーセル（添付画像完全準拠） -->
               ${galleryItems.length > 1 ? `
                 <div class="gallery-carousel-wrapper">
                   <button type="button" class="carousel-arrow-btn prev" onclick="MachirikuScreens.scrollThumbs(-1)" aria-label="前のサムネイル">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
                   </button>
                   <div class="gallery-thumbs-track" id="gallery-thumbs-track">
                     ${galleryItems.map((img, i) => `
-                      <button type="button" class="gallery-thumb-btn ${i === initialIdx ? 'is-selected' : ''}" data-index="${i}" onclick="MachirikuScreens.selectGalleryImage(${i})" title="${escapeHtml(img.label)}">
-                        <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.label)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
+                      <button type="button" class="gallery-thumb-btn ${i === initialIdx ? 'is-selected' : ''}" data-index="${i}" aria-label="${escapeHtml(img.label || `写真 ${i + 1}`)}" aria-current="${i === initialIdx ? 'true' : 'false'}" onclick="MachirikuScreens.selectGalleryImage(${i})" title="${escapeHtml(img.label)}">
+                        <img src="${escapeHtml(img.url)}" alt="" loading="lazy" fetchpriority="low" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
                       </button>
                     `).join('')}
                   </div>
                   <button type="button" class="carousel-arrow-btn next" onclick="MachirikuScreens.scrollThumbs(1)" aria-label="次のサムネイル">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
                   </button>
                 </div>
               ` : ''}
@@ -1027,56 +1103,98 @@ window.MachirikuScreens = (function() {
             <!-- 物件概要カード (アットホーム仕様) -->
             <div class="detail-card">
               <h2 class="detail-card-title">物件募集概要</h2>
-              <table class="specs-table">
+              ${prop.description ? `
+                <div class="property-overview-description">
+                  ${escapeHtml(prop.description).replace(/\n/g, '<br>')}
+                </div>
+              ` : ''}
+
+              <!-- 常時表示の基本5項目 + 展開式の詳細項目（列幅固定でシームレス連結＋アニメーション対応） -->
+              <table class="specs-table specs-table-core" aria-label="物件の基本情報">
                 <tbody>
                   <tr>
-                    <th>賃料 / 管理費等</th>
+                    <th scope="row">賃料 / 管理費等</th>
                     <td><strong style="font-size:1.3rem; color:var(--accent-price);">${rentMan}万円</strong> /月 （管理費等: ${mgmt}）${prop.source && prop.rentTaxStatus === 'unknown' ? '<br><small>税区分は掲載元に確認</small>' : ''}</td>
                   </tr>
                   <tr>
-                    <th>敷金 / 礼金 / 保証金</th>
-                    <td>敷金: ${escapeHtml(prop.deposit ?? '掲載なし（要確認）')} / 礼金: ${escapeHtml(prop.keyMoney ?? '掲載なし（要確認）')} / 保証金: ${escapeHtml(prop.securityDeposit ?? '掲載なし（要確認）')}</td>
+                    <th scope="row">居抜き・設備状態</th>
+                    <td>${escapeHtml(prop.condition || prop.listingStatusRaw || '掲載なし（要確認）')}</td>
                   </tr>
                   <tr>
-                    <th>所在地</th>
+                    <th scope="row">所在地</th>
                     <td>${escapeHtml(prop.address)}</td>
                   </tr>
-                  ${prop.otherFees?.length ? `<tr><th>その他の掲載費用</th><td><ul class="listing-fees">${prop.otherFees.map(f => `<li>${escapeHtml(f.name)}: ${escapeHtml(f.amountRaw)}</li>`).join('')}</ul></td></tr>` : ''}
                   <tr>
-                    <th>交通・最寄駅</th>
+                    <th scope="row">交通・最寄駅</th>
                     <td>${escapeHtml(prop.access)}</td>
                   </tr>
                   <tr>
-                    <th>使用部分面積</th>
+                    <th scope="row">使用部分面積</th>
                     <td><strong>${prop.areaTsubo}坪</strong> （${prop.areaSqm}㎡）</td>
                   </tr>
-                  <tr>
-                    <th>階数・構造</th>
-                    <td>${escapeHtml(prop.floor)} / ${escapeHtml(prop.structure)}（${escapeHtml(prop.builtYear)}）</td>
-                  </tr>
-                  <tr>
-                    <th>現況 / 引渡し</th>
-                    <td>${escapeHtml(prop.listingStatusRaw || '掲載なし')} / ${escapeHtml(prop.handover)}</td>
-                  </tr>
-                  <tr>
-                    <th>業種条件</th>
-                    <td>${escapeHtml(prop.condition)}</td>
-                  </tr>
-                  <tr>
-                    <th>主要設備</th>
-                    <td>
-                      <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
-                        ${(prop.facilities || ['電気','上水道','下水道']).map(fac => `<span class="badge-feature">${escapeHtml(fac)}</span>`).join('')}
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <th>飲食店営業許可</th>
-                    <td><span class="badge-check-ok">✔ ${escapeHtml(prop.permitStatus || "取得相談可")}</span></td>
-                  </tr>
-                  ${prop.sourceNotes?.length ? `<tr><th>掲載情報の備考</th><td><ul class="listing-fees">${prop.sourceNotes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul></td></tr>` : ''}
                 </tbody>
               </table>
+
+              <div id="s02-specs-extra" class="s02-collapse-panel${isDetailsDefaultOpen ? ' is-expanded' : ''}" ${isDetailsDefaultOpen ? '' : 'hidden'}>
+                <table class="specs-table specs-table-extra" aria-label="詳細な契約・設備条件">
+                  <tbody>
+                    <tr>
+                      <th scope="row">敷金 / 礼金 / 保証金</th>
+                      <td>敷金: ${escapeHtml(prop.deposit ?? '掲載なし（要確認）')} / 礼金: ${escapeHtml(prop.keyMoney ?? '掲載なし（要確認）')} / 保証金: ${escapeHtml(prop.securityDeposit ?? '掲載なし（要確認）')}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">その他の掲載費用</th>
+                      <td>
+                        ${prop.otherFees?.length
+                          ? `<ul class="listing-fees">${prop.otherFees.map(f => `<li>${escapeHtml(f.name)}: ${escapeHtml(f.amountRaw)}</li>`).join('')}</ul>`
+                          : '掲載なし'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th scope="row">階数・構造</th>
+                      <td>${escapeHtml(formatFloorStructure(prop))}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">築年月</th>
+                      <td>${escapeHtml(prop.builtYear || '掲載なし（要確認）')}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">現況・引渡し</th>
+                      <td>${escapeHtml(prop.listingStatusRaw || '掲載なし')} / ${escapeHtml(prop.handover || '相談')}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">基本インフラ設備</th>
+                      <td>
+                        <ul class="infra-facility-grid" role="list" aria-label="基本インフラ設備">
+                          ${infraBadgesHtml}
+                        </ul>
+                      </td>
+                    </tr>
+                    ${featureTags.length ? `
+                      <tr>
+                        <th scope="row">立地・空間の特徴</th>
+                        <td>
+                          <div class="feature-tag-list">
+                            ${featureTags.map(tag => `<span class="badge-feature">${escapeHtml(tag)}</span>`).join('')}
+                          </div>
+                        </td>
+                      </tr>
+                    ` : ''}
+                    <tr>
+                      <th scope="row">飲食店営業許可</th>
+                      <td><span class="badge-check-ok">✓ ${escapeHtml(prop.permitStatus || "取得相談可")}</span></td>
+                    </tr>
+                    ${prop.sourceNotes?.length ? `<tr><th scope="row">掲載情報の備考</th><td><ul class="listing-fees">${prop.sourceNotes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul></td></tr>` : ''}
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="disclosure-footer-action">
+                <button type="button" class="detail-specs-toggle" aria-expanded="${isDetailsDefaultOpen}" aria-controls="s02-specs-extra" onclick="MachirikuScreens.toggleS02Section('s02-specs-extra', this)">
+                  <span class="toggle-label-closed">詳細な契約・設備条件を表示する</span>
+                  <span class="toggle-label-open">詳細な契約・設備条件を閉じる</span>
+                </button>
+              </div>
 
               ${prop.source ? renderSourceInformation(prop) : `
                 <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px dashed var(--border-color); display:flex; justify-content:space-between; align-items:center; font-size:0.875rem; color:var(--text-sub);">
@@ -1089,10 +1207,6 @@ window.MachirikuScreens = (function() {
                   </div>
                 </div>
               `}
-
-              <div style="margin-top:1.25rem; font-size:0.9rem; line-height:1.7; color:var(--text-sub);">
-                ${escapeHtml(prop.description).replace(/\n/g, '<br>')}
-              </div>
             </div>
 
             <!-- Decidim風 住民需要分析セクション -->
@@ -1100,31 +1214,56 @@ window.MachirikuScreens = (function() {
               <h2 class="detail-card-title" style="color:var(--primary-700); border-bottom-color:var(--border-color);">
                 住民の需要データ・リクエスト状況
               </h2>
-              <p style="font-size:0.875rem; color:var(--primary-800); margin-bottom:1.25rem;">
-                マチリクでは、近隣住民が『この空き店舗に欲しい業種』を1位〜3位の順位投票で集計しています。
-              </p>
               
               <div class="civic-kpi-bar">
                 <div class="civic-kpi-item">
                   <div class="civic-kpi-label">需要総合スコア</div>
                   <div class="civic-kpi-val">${prop.demandScore} <span style="font-size:1rem;">pt</span></div>
+                  <div class="civic-kpi-sub">順位重み × 近隣距離係数の合算</div>
                 </div>
                 <div class="civic-kpi-item">
                   <div class="civic-kpi-label">住民投票総数</div>
                   <div class="civic-kpi-val">${prop.votesCount} <span style="font-size:1rem;">人</span></div>
+                  <div class="civic-kpi-sub">投票した実人数（1人最大3業種）</div>
                 </div>
                 <div class="civic-kpi-item">
                   <div class="civic-kpi-label">最多リクエスト</div>
                   <div class="civic-kpi-val" style="font-size:1.15rem; margin-top:0.6rem;">
-                    ${prop.topDemands[0]?.label || '未集計'}
+                    ${escapeHtml(activeDemands[0]?.label || '未集計')}
                   </div>
+                  <div class="civic-kpi-sub">${activeDemands[0] ? `${activeDemands[0].score} pt / 計${activeDemands[0].votes}票` : '集計中'}</div>
                 </div>
               </div>
 
-              <h3 style="font-size:0.95rem; font-weight:800; color:var(--primary-700); margin-bottom:0.75rem;">希望業種ランキング Top 4</h3>
-              <div class="demand-bar-list">
-                ${topDemandsHtml || '<p class="sample-note">まだ投票がありません。</p>'}
+              <div class="demand-ranking-header-row">
+                <h3 style="font-size:0.95rem; font-weight:800; color:var(--primary-700); margin:0;">希望業種ランキング Top 5</h3>
+                <ul class="demand-legend-list" role="list" aria-label="グラフ凡例">
+                  <li><span class="demand-legend-swatch rank-1" aria-hidden="true"></span>第1希望（×1.0）</li>
+                  <li><span class="demand-legend-swatch rank-2" aria-hidden="true"></span>第2希望（×0.6）</li>
+                  <li><span class="demand-legend-swatch rank-3" aria-hidden="true"></span>第3希望（×0.3）</li>
+                </ul>
               </div>
+              <div class="demand-bar-list ${restDemands.length > 0 ? 'demand-ranking-list-top' : ''}">
+                ${top5DemandsHtml || '<p class="sample-note">まだ投票がありません。</p>'}
+              </div>
+
+              ${restDemands.length > 0 ? `
+                <div id="s02-demand-extra" class="s02-collapse-panel" data-until-found="true" hidden="until-found">
+                  <div class="demand-bar-list demand-extra-inner">
+                    ${restDemandsHtml}
+                  </div>
+                </div>
+                <div class="disclosure-footer-action">
+                  <button type="button" class="detail-specs-toggle" aria-expanded="false" aria-controls="s02-demand-extra" onclick="MachirikuScreens.toggleS02Section('s02-demand-extra', this)">
+                    <span class="toggle-label-closed">6位以下の希望業種を見る（${restDemands.length}業種）</span>
+                    <span class="toggle-label-open">6位以下の希望業種を閉じる（${restDemands.length}業種）</span>
+                  </button>
+                </div>
+              ` : ''}
+
+              <p class="demand-scoring-note">
+                マチリクでは、近隣住民が『この空き店舗に欲しい業種』を第1〜第3希望（各 1.0 / 0.6 / 0.3 × 店舗からの近隣距離係数）で集計し、熱量と商圏の近さをスコア化しています。
+              </p>
 
             </div>
           </div>
@@ -1173,13 +1312,13 @@ window.MachirikuScreens = (function() {
               </nav>` : ''}
             </div>
 
-            <!-- 物件所在地GoogleMapカード（独立カード：横幅・左端位置を上位CTAカード内要素と完全同期） -->
-            <div class="detail-card" style="padding:1rem var(--space-6); display:block;">
-              <div style="font-weight:700; font-size:0.875rem; margin-bottom:0.5rem; color:var(--text-main);">所在地・周辺情報</div>
-              <div style="font-size:0.875rem; color:var(--text-sub); margin-bottom:0.75rem;">
+            <!-- 物件所在地GoogleMapカード（上位CTAカードと横幅を一致） -->
+            <div class="detail-card side-location-card">
+              <h3 class="side-location-title">所在地・周辺情報</h3>
+              <div class="side-location-address">
                 ${escapeHtml(prop.address)}
               </div>
-              <div id="s02-location-map" data-lat="${prop.location?.lat || 36.559312}" data-lng="${prop.location?.lng || 139.882105}" data-title="${escapeHtml(prop.title)}" style="width:100%; height:200px; border-radius:var(--radius-sm); border:1px solid var(--border-color); overflow:hidden; background:var(--bg-subtle);"></div>
+              <div id="s02-location-map" class="side-location-map" data-lat="${prop.location?.lat || 36.559312}" data-lng="${prop.location?.lng || 139.882105}" data-title="${escapeHtml(prop.title)}"></div>
             </div>
           </div>
         </div>
@@ -5452,6 +5591,60 @@ window.MachirikuScreens = (function() {
     }
   }
 
+  function toggleS02Section(targetId, btn) {
+    if (typeof document === 'undefined') return;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    const isExpanded = target.classList.contains('is-expanded');
+    const nextOpen = !isExpanded;
+
+    if (btn) {
+      btn.setAttribute('aria-expanded', String(nextOpen));
+    }
+
+    if (nextOpen) {
+      target.removeAttribute('hidden');
+      void target.offsetHeight;
+      target.classList.add('is-expanded');
+    } else {
+      target.classList.remove('is-expanded');
+      const transitions = typeof target.getAnimations === 'function'
+        ? target.getAnimations().filter((a) => (typeof CSSTransition !== 'undefined' ? a instanceof CSSTransition : true))
+        : [];
+      const finalizeClose = () => {
+        if (!target.classList.contains('is-expanded')) {
+          if (target.dataset.untilFound === 'true') {
+            target.setAttribute('hidden', 'until-found');
+          } else {
+            target.setAttribute('hidden', '');
+          }
+          if (btn && typeof btn.scrollIntoView === 'function') {
+            btn.scrollIntoView({ block: 'nearest' });
+          }
+        }
+      };
+      if (transitions.length > 0) {
+        Promise.allSettled(transitions.map((t) => t.finished)).then(finalizeClose);
+      } else {
+        finalizeClose();
+      }
+    }
+  }
+
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('beforematch', (event) => {
+      const target = event.target;
+      if (!target || !target.id) return;
+      if (target.classList && target.classList.contains('s02-collapse-panel')) {
+        target.classList.add('is-expanded');
+      }
+      const trigger = document.querySelector(`button[aria-controls="${CSS.escape(target.id)}"]`);
+      if (trigger) {
+        trigger.setAttribute('aria-expanded', 'true');
+      }
+    });
+  }
+
   function handleCatCheckboxChange(catId, isChecked) {
     if (isChecked) {
       if (!catPopoverState.pendingCategories.includes(catId)) {
@@ -6023,6 +6216,11 @@ window.MachirikuScreens = (function() {
 
     const idxEl = document.getElementById('gallery-current-index');
     if (idxEl) idxEl.textContent = String(currentGallery.index + 1);
+    const statusEl = document.getElementById('s02-gallery-status');
+    if (statusEl) {
+      const labelText = item.label ? `：${item.label}` : '';
+      statusEl.textContent = `${currentGallery.index + 1}枚目 / ${currentGallery.items.length}枚${labelText}`;
+    }
     const captionEl = document.getElementById('gallery-caption-text');
     if (captionEl) captionEl.textContent = item.label;
     const kindEl = document.getElementById('gallery-kind-label');
@@ -6030,15 +6228,18 @@ window.MachirikuScreens = (function() {
 
     const track = document.getElementById('gallery-thumbs-track');
     if (track) {
+      const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       const btns = track.querySelectorAll('.gallery-thumb-btn');
       btns.forEach((btn, idx) => {
         if (idx === currentGallery.index) {
           btn.classList.add('is-selected');
+          btn.setAttribute('aria-current', 'true');
           if (btn.scrollIntoView) {
-            btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            btn.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest', inline: 'center' });
           }
         } else {
           btn.classList.remove('is-selected');
+          btn.setAttribute('aria-current', 'false');
         }
       });
     }
@@ -6134,36 +6335,53 @@ window.MachirikuScreens = (function() {
     closeAllPhotosModal();
 
     const modalHtml = `
-      <div class="photos-modal-overlay" id="photos-modal" onclick="if(event.target === this) MachirikuScreens.closeAllPhotosModal()">
+      <dialog class="photos-modal-overlay photos-modal-dialog" id="photos-modal" aria-labelledby="photos-modal-title" onclick="if(event.target === this) MachirikuScreens.closeAllPhotosModal()">
         <div class="photos-modal-box">
           <div class="photos-modal-header">
-            <h3 class="photos-modal-title">${escapeHtml(prop.title)} の写真 (${items.length}枚)</h3>
+            <h2 id="photos-modal-title" class="photos-modal-title">${escapeHtml(prop.title)} の写真 (${items.length}枚)</h2>
             <button type="button" class="photos-modal-close-btn" onclick="MachirikuScreens.closeAllPhotosModal()" aria-label="閉じる">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
           <div class="photos-modal-grid" id="photos-modal-grid">
             ${items.map((item, idx) => `
-              <div class="photo-tile-item" onclick="MachirikuScreens.openLightbox(${idx})" title="クリックして拡大表示">
-                <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label || prop.title)}" loading="lazy">
-                <div class="photo-tile-hover-overlay">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              <button type="button" class="photo-tile-item" onclick="MachirikuScreens.openLightbox(${idx})" aria-label="${escapeHtml(item.label || `${prop.title} の写真 ${idx + 1}`)}を拡大表示" title="クリックして拡大表示">
+                <img src="${escapeHtml(item.url)}" alt="" loading="lazy" fetchpriority="low">
+                <div class="photo-tile-hover-overlay" aria-hidden="true">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                 </div>
-              </div>
+              </button>
             `).join('')}
           </div>
         </div>
-      </div>
+      </dialog>
     `;
     if (document.body && document.body.insertAdjacentHTML) {
       document.body.insertAdjacentHTML('beforeend', modalHtml);
+      const modalEl = document.getElementById('photos-modal');
+      if (modalEl) {
+        modalEl.addEventListener('close', () => {
+          closeLightbox();
+          if (modalEl.isConnected) modalEl.remove();
+        }, { once: true });
+        if (typeof modalEl.showModal === 'function') {
+          modalEl.showModal();
+        } else {
+          modalEl.setAttribute('open', '');
+        }
+      }
     }
   }
 
   function closeAllPhotosModal() {
-    const modal = document.getElementById('photos-modal');
-    if (modal) modal.remove();
     closeLightbox();
+    const modal = document.getElementById('photos-modal');
+    if (modal) {
+      if (typeof modal.close === 'function' && modal.open) {
+        modal.close();
+      }
+      if (modal.isConnected) modal.remove();
+    }
   }
 
   let lightboxKeyHandler = null;
@@ -6177,26 +6395,41 @@ window.MachirikuScreens = (function() {
     const total = modalGalleryItems.length;
 
     const lightboxHtml = `
-      <div class="lightbox-overlay" id="lightbox-modal" onclick="if(event.target === this) MachirikuScreens.closeLightbox()">
+      <dialog class="lightbox-overlay lightbox-dialog" id="lightbox-modal" aria-label="写真の拡大表示" onclick="if(event.target === this) MachirikuScreens.closeLightbox()">
         <button type="button" class="lightbox-close-btn" onclick="MachirikuScreens.closeLightbox()" aria-label="拡大表示を閉じる">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
         ${total > 1 ? `
           <button type="button" class="lightbox-nav-btn prev" onclick="event.stopPropagation(); MachirikuScreens.navLightbox(-1)" aria-label="前の写真">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
           </button>
           <button type="button" class="lightbox-nav-btn next" onclick="event.stopPropagation(); MachirikuScreens.navLightbox(1)" aria-label="次の写真">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
           </button>
         ` : ''}
         <div class="lightbox-content-box" onclick="event.stopPropagation()">
           <img id="lightbox-img" src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label || '')}" class="lightbox-image">
           <div class="lightbox-counter">${idx + 1} / ${total}</div>
         </div>
-      </div>
+      </dialog>
     `;
     if (document.body && document.body.insertAdjacentHTML) {
       document.body.insertAdjacentHTML('beforeend', lightboxHtml);
+      const lbEl = document.getElementById('lightbox-modal');
+      if (lbEl) {
+        lbEl.addEventListener('close', () => {
+          if (typeof window !== 'undefined' && lightboxKeyHandler) {
+            window.removeEventListener('keydown', lightboxKeyHandler);
+            lightboxKeyHandler = null;
+          }
+          if (lbEl.isConnected) lbEl.remove();
+        }, { once: true });
+        if (typeof lbEl.showModal === 'function') {
+          lbEl.showModal();
+        } else {
+          lbEl.setAttribute('open', '');
+        }
+      }
     }
 
     if (typeof window !== 'undefined') {
@@ -6211,11 +6444,16 @@ window.MachirikuScreens = (function() {
   }
 
   function closeLightbox() {
-    const lb = document.getElementById('lightbox-modal');
-    if (lb) lb.remove();
     if (typeof window !== 'undefined' && lightboxKeyHandler) {
       window.removeEventListener('keydown', lightboxKeyHandler);
       lightboxKeyHandler = null;
+    }
+    const lb = document.getElementById('lightbox-modal');
+    if (lb) {
+      if (typeof lb.close === 'function' && lb.open) {
+        lb.close();
+      }
+      if (lb.isConnected) lb.remove();
     }
   }
 
@@ -6348,6 +6586,7 @@ window.MachirikuScreens = (function() {
     applyRentFilters,
     toggleCatPopover,
     toggleDemandAccordion,
+    toggleS02Section,
     closeCatPopover,
     handleCatCheckboxChange,
     toggleAllCategories,
