@@ -15,6 +15,9 @@
   List<RegistrationChoice> industryChoices = request.getAttribute("industryChoices") instanceof List
       ? (List<RegistrationChoice>) request.getAttribute("industryChoices") : java.util.Collections.emptyList();
   boolean formSubmitted = "POST".equals(request.getMethod());
+  User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
+  boolean isOnboarding = currentUser == null || "PENDING".equals(currentUser.getAccountStatus())
+      || "1".equals(request.getParameter("onboarding"));
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="物件オーナー 初期設定 | マチリク" />
@@ -86,7 +89,8 @@
         <label for="s18-owner-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
           連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-<input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("phone", "")) %>" required placeholder="例: 09012345678 (ハイフンなし)">
+        <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("phone", "")) %>" required placeholder="例: 09012345678 (ハイフンなし)">
+        <div id="s18-owner-phone-error" style="display:none; color:var(--danger-text); font-size:0.8rem; margin-top:0.35rem; font-weight:600;"></div>
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店希望者との連絡、物件問い合わせや運営確認用に使用されます。</span>
       </div>
 
@@ -147,6 +151,30 @@
 </section>
 
 <script>
+  function showOwnerPhoneError(msg) {
+    const errorEl = document.getElementById('s18-owner-phone-error');
+    const phoneInput = document.getElementById('s18-owner-phone');
+    if (errorEl) {
+      errorEl.textContent = msg;
+      errorEl.style.display = 'block';
+    }
+    if (phoneInput) {
+      phoneInput.style.borderColor = 'var(--danger-border, #ef4444)';
+    }
+  }
+
+  function clearOwnerPhoneError() {
+    const errorEl = document.getElementById('s18-owner-phone-error');
+    const phoneInput = document.getElementById('s18-owner-phone');
+    if (errorEl) {
+      errorEl.textContent = '';
+      errorEl.style.display = 'none';
+    }
+    if (phoneInput) {
+      phoneInput.style.borderColor = '';
+    }
+  }
+
   function validateOwnerForm() {
     const repName = document.getElementById('s18-owner-name');
     const phone = document.getElementById('s18-owner-phone');
@@ -157,10 +185,26 @@
       return false;
     }
     if (!phone || !phone.value.trim()) {
+      showOwnerPhoneError('連絡先電話番号を入力してください');
       alert('連絡先電話番号を入力してください');
       if (phone) phone.focus();
       return false;
     }
+    const rawOwnerPhone = phone.value.trim();
+    const ownerDigitsOnly = rawOwnerPhone.replace(/[\s()（）ー−‐-]/g, '');
+    if (!/^\d+$/.test(ownerDigitsOnly)) {
+      showOwnerPhoneError('電話番号は半角数字で入力してください（英字や記号は使用できません）');
+      alert('電話番号は半角数字で入力してください（英字や記号は使用できません）');
+      if (phone) phone.focus();
+      return false;
+    }
+    if (ownerDigitsOnly.length < 9 || ownerDigitsOnly.length > 11) {
+      showOwnerPhoneError('電話番号の桁数を確認してください（例: 09012345678）');
+      alert('電話番号の桁数を確認してください（例: 09012345678）');
+      if (phone) phone.focus();
+      return false;
+    }
+    clearOwnerPhoneError();
 
     const industries = document.querySelectorAll('input[name="preferredIndustry"]:checked');
     if (industries.length === 0) {
@@ -170,6 +214,22 @@
 
     return true;
   }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const ownerPhoneInput = document.getElementById('s18-owner-phone');
+    if (ownerPhoneInput) {
+      ownerPhoneInput.addEventListener('input', function() {
+        const val = this.value.trim();
+        if (!val) { clearOwnerPhoneError(); return; }
+        const digits = val.replace(/[\s()（）ー−‐-]/g, '');
+        if (!/^\d*$/.test(digits)) {
+          showOwnerPhoneError('※電話番号は半角数字で入力してください（英字や記号は使用できません）');
+        } else {
+          clearOwnerPhoneError();
+        }
+      });
+    }
+  });
 </script>
 
 <jsp:include page="/WEB-INF/views/common/footer.jsp" />

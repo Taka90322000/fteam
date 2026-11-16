@@ -22,6 +22,3 @@ target/
 .env.*
 !.env.example
 *.local
-
-# テスト用ディレクトリ
-test/

@@ -659,7 +659,7 @@ window.MachirikuMap = (function() {
 
     card.innerHTML = `
       <div class="map-mobile-card-inner">
-        <button type="button" class="map-mobile-card-close" onclick="MachirikuMap.closeMobileMapCard()" aria-label="閉じる">
+        <button type="button" class="map-mobile-card-close" onclick="event.stopPropagation(); MachirikuMap.closeMobileMapCard(); return false;" aria-label="閉じる">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
         <a href="#s02?id=${prop.id}" class="map-mobile-card-link">
@@ -680,6 +680,19 @@ window.MachirikuMap = (function() {
     `;
 
     card.style.display = 'block';
+
+    const closeBtn = card.querySelector('.map-mobile-card-close');
+    if (closeBtn) {
+      const handleClose = (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        closeMobileMapCard();
+      };
+      closeBtn.onclick = handleClose;
+      closeBtn.addEventListener('touchend', handleClose, { passive: false });
+    }
 
     if (gMap) {
       gMap.panBy(0, -25);
@@ -1275,6 +1288,7 @@ window.MachirikuMap = (function() {
     computeScreenClusters,
     getClusterAreaName,
     panToLocation,
-    closeGoogleInfoWindow
+    closeGoogleInfoWindow,
+    closeMobileMapCard
   };
 })();

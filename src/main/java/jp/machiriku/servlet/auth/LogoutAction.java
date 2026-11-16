@@ -16,6 +16,6 @@ public class LogoutAction extends Action {
         if (session != null) {
             session.invalidate();
         }
-        res.sendRedirect(req.getContextPath() + "/index.jsp");
+        res.sendRedirect(req.getContextPath() + "/index.jsp?logged_out=1");
     }
 }

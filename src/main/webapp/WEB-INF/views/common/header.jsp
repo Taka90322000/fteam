@@ -47,7 +47,7 @@
           <span class="btn-header-action profile-link" style="cursor:default;"><span id="header-user-name"><%= escapeHtml(userName) %></span></span>
         <% } else if (currentUser != null) { %>
           <a href="${pageContext.request.contextPath}/index.jsp#s18" class="btn-header-action profile-link">
-            <span><%= escapeHtml(currentUser.getDisplayName()) %> でログイン中</span>
+            <span id="header-user-name"><%= escapeHtml(currentUser.getDisplayName()) %></span>
           </a>
         <% } else { %>
           <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
@@ -57,6 +57,47 @@
       </div>
     </div>
   </header>
+  <script>
+    (function() {
+      function updateHeaderTicker() {
+        var nameEl = document.getElementById('header-user-name');
+        if (!nameEl) return;
+        var link = nameEl.closest('.profile-link');
+        if (!link) return;
+        link.classList.remove('has-overflow');
+        nameEl.style.removeProperty('--header-name-scroll-dist');
+        nameEl.style.removeProperty('--header-name-scroll-duration');
+        var textWidth = nameEl.scrollWidth;
+        var containerWidth = link.clientWidth;
+        var overflow = textWidth - containerWidth;
+        if (overflow > 3) {
+          var scrollDist = overflow + 8;
+          var duration = Math.max(3.5, Math.min(10, Math.round(scrollDist / 18 * 10) / 10));
+          nameEl.style.setProperty('--header-name-scroll-dist', '-' + scrollDist + 'px');
+          nameEl.style.setProperty('--header-name-scroll-duration', duration + 's');
+          link.classList.add('has-overflow');
+        }
+      }
+      window.MachirikuHeaderTicker = { update: updateHeaderTicker };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          updateHeaderTicker();
+          setTimeout(updateHeaderTicker, 300);
+        });
+      } else {
+        updateHeaderTicker();
+        setTimeout(updateHeaderTicker, 300);
+      }
+      window.addEventListener('resize', function() {
+        clearTimeout(window._headerTickerTimer);
+        window._headerTickerTimer = setTimeout(updateHeaderTicker, 150);
+      });
+      var nameEl = document.getElementById('header-user-name');
+      if (nameEl && window.MutationObserver) {
+        new MutationObserver(updateHeaderTicker).observe(nameEl, { childList: true, characterData: true, subtree: true });
+      }
+    })();
+  </script>
   <%-- 初期設定を進めている間は、通常ページ用の下段ナビゲーションを表示しない。 --%>
   <% if (!isOnboarding) { %>
   <nav class="header-subnav" aria-label="メインメニュー">

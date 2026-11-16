@@ -72,6 +72,14 @@ public class ResidentSetupAction extends Action {
             fields.put("industry", "");
             fields.put("preferredIndustries", "[]");
             fields.put("emailNotify", "on");
+            // すでに登録済み会員の場合はDBから保存済みのプロフィール情報を読み込んで復元
+            if ("ACTIVE".equals(user.getAccountStatus())) {
+                try {
+                    fields.putAll(createProfileDao().findResidentFields(user.getUserId()));
+                } catch (SQLException e) {
+                    OnboardingSupport.logDatabaseError(req, e);
+                }
+            }
         }
         req.setAttribute("formValues", fields);
         req.setAttribute("displayName", fields.get("name"));

@@ -114,6 +114,6 @@ $constraints$;
 -- CASCADEを付けず、外部のビュー等が依存している場合はDB全体を変更せず中止する。
 ALTER TABLE public.users DROP COLUMN IF EXISTS phone_e164;
 
-GRANT SELECT, INSERT, UPDATE ON public.owner_profiles, public.business_profiles TO machiriku_app;
+GRANT SELECT, INSERT, UPDATE ON public.owner_profiles, public.business_profiles TO :"app_user";
 
 COMMIT;

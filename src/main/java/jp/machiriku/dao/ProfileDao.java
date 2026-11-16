@@ -1,10 +1,12 @@
 package jp.machiriku.dao;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +42,76 @@ public class ProfileDao extends Dao {
                 return Map.of("phone", phone == null ? "" : phone, "iconImageUrl", icon == null ? "" : icon);
             }
         }
+    }
+
+    /** 登録済み住民のプロフィール・居住地・職場・通知・希望業種を再表示用に取得する。 */
+    public Map<String, String> findResidentFields(int userId) throws SQLException {
+        Map<String, String> result = new LinkedHashMap<>();
+        try (Connection connection = openConnection()) {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT age_group, gender FROM resident_profiles WHERE user_id=?")) {
+                statement.setInt(1, userId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    if (rows.next()) {
+                        String age = rows.getString("age_group");
+                        String gender = rows.getString("gender");
+                        if (age != null && !age.isBlank()) result.put("ageGroup", age);
+                        if (gender != null && !gender.isBlank()) result.put("gender", gender);
+                    }
+                }
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT location_kind, address_line, latitude, longitude FROM user_locations WHERE user_id=?")) {
+                statement.setInt(1, userId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        String kind = rows.getString("location_kind");
+                        String addr = rows.getString("address_line");
+                        BigDecimal lat = rows.getBigDecimal("latitude");
+                        BigDecimal lng = rows.getBigDecimal("longitude");
+                        if ("LIVING".equals(kind)) {
+                            if (addr != null) result.put("livingAddress", addr);
+                            if (lat != null) result.put("livingLat", lat.toPlainString());
+                            if (lng != null) result.put("livingLng", lng.toPlainString());
+                        } else if ("WORK".equals(kind)) {
+                            if (addr != null) result.put("workAddress", addr);
+                            if (lat != null) result.put("workLat", lat.toPlainString());
+                            if (lng != null) result.put("workLng", lng.toPlainString());
+                        }
+                    }
+                }
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT email_enabled FROM notification_settings WHERE user_id=?")) {
+                statement.setInt(1, userId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    if (rows.next()) {
+                        result.put("emailNotify", rows.getBoolean("email_enabled") ? "on" : "");
+                    }
+                }
+            }
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT i.industry_code FROM user_industry_preferences u JOIN industry_types i ON i.industry_type_id=u.industry_type_id WHERE u.user_id=?")) {
+                statement.setInt(1, userId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    List<String> codes = new ArrayList<>();
+                    while (rows.next()) {
+                        String code = rows.getString("industry_code");
+                        if (code != null) codes.add(code);
+                    }
+                    if (!codes.isEmpty()) {
+                        StringBuilder sb = new StringBuilder("[");
+                        for (int i = 0; i < codes.size(); i++) {
+                            if (i > 0) sb.append(",");
+                            sb.append("\"").append(codes.get(i)).append("\"");
+                        }
+                        sb.append("]");
+                        result.put("preferredIndustries", sb.toString());
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     /** 有効な業種だけを、DBのマスターID付きで画面へ渡す。 */
@@ -144,9 +216,10 @@ public class ProfileDao extends Dao {
             List<Integer> qualifications = uniqueIds(input.qualificationIds());
             validateMasterIds(connection, industries, true);
             validateMasterIds(connection, qualifications, false);
-            if (input.areaGeoJson() != null && !input.areaGeoJson().isBlank()) {
+            String areaGeoJson = nullable(input.areaGeoJson());
+            if (areaGeoJson != null) {
                 // 自己交差など、数値の範囲だけでは検出できない不正なポリゴンもPostGISで確認する。
-                validatePolygon(connection, input.areaGeoJson());
+                validatePolygon(connection, areaGeoJson);
             }
             try (PreparedStatement statement = connection.prepareStatement(
                     "UPDATE users SET email=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
@@ -156,12 +229,12 @@ public class ProfileDao extends Dao {
             }
             // LINEの表示名は保持し、本人が入力した代表者名や電話番号は事業主プロフィールへ保存する。
             try (PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,phone_e164,icon_image_url) "
-                    + "VALUES (?,?,?,?,?,?,?,?,?) "
+                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,phone_e164,icon_image_url,area) "
+                    + "VALUES (?,?,?,?,?,?,?,?,?,ST_SetSRID(ST_GeomFromGeoJSON(?),4326)) "
                     + "ON CONFLICT (user_id) DO UPDATE SET business_name=EXCLUDED.business_name,representative_name=EXCLUDED.representative_name,"
                     + "employee_count=EXCLUDED.employee_count,preferred_area=EXCLUDED.preferred_area,industry_experience=EXCLUDED.industry_experience,"
                     + "management_experience=EXCLUDED.management_experience,phone_e164=EXCLUDED.phone_e164,"
-                    + "icon_image_url=EXCLUDED.icon_image_url,updated_at=CURRENT_TIMESTAMP")) {
+                    + "icon_image_url=EXCLUDED.icon_image_url,area=EXCLUDED.area,updated_at=CURRENT_TIMESTAMP")) {
                 statement.setInt(1, userId);
                 statement.setString(2, input.businessName());
                 statement.setString(3, input.representativeName());
@@ -171,6 +244,7 @@ public class ProfileDao extends Dao {
                 statement.setString(7, input.managementExperience());
                 statement.setString(8, input.phoneE164());
                 statement.setString(9, nullable(input.iconImageUrl()));
+                statement.setString(10, areaGeoJson);
                 statement.executeUpdate();
             }
             try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_industry_preferences WHERE user_id=?")) {

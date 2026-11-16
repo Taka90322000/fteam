@@ -12,6 +12,9 @@
   displayName = formValues.getOrDefault("name", displayName);
   email = formValues.getOrDefault("email", email);
   boolean formSubmitted = "POST".equals(request.getMethod());
+  User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
+  boolean isOnboarding = currentUser == null || "PENDING".equals(currentUser.getAccountStatus())
+      || "1".equals(request.getParameter("onboarding"));
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="アカウントの初期設定 | マチリク" />

@@ -30,14 +30,14 @@ window.MachirikuScreens = (function() {
     S33: ["物件の広告掲載", "検索結果にPR枠で掲載します。"]
   };
 
-  function renderEmptyState(screen, title, description, hash = '#s01', label = '物件を探す') {
-    return `<section class="screen-view empty-state" data-screen="${screen}">
-      <h1 class="page-title">${title}</h1><p>${description}</p>
-      <a class="btn-primary" href="${hash}">${label}</a></section>`;
-  }
-
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+
+  function renderEmptyState(screen, title, description, hash = '#s01', label = '物件を探す') {
+    return `<section class="screen-view empty-state" data-screen="${escapeHtml(screen)}">
+      <h1 class="page-title">${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p>
+      <a class="btn-primary" href="${escapeHtml(hash)}">${escapeHtml(label)}</a></section>`;
   }
 
   const IMAGE_PLACEHOLDER = 'assets/property-placeholder.svg';
@@ -62,7 +62,8 @@ window.MachirikuScreens = (function() {
   };
 
   function renderPropertyImage(prop, attributes = '') {
-    const source = prop.coverImage || IMAGE_PLACEHOLDER;
+    const rawSource = prop.coverImage || (prop.gallery && prop.gallery[0] && (prop.gallery[0].url || prop.gallery[0].localPath)) || IMAGE_PLACEHOLDER;
+    const source = rawSource;
     const unavailable = source === IMAGE_PLACEHOLDER || failedImages.has(source);
     return `<img src="${escapeHtml(unavailable ? IMAGE_PLACEHOLDER : source)}" alt="${unavailable ? '写真未登録' : escapeHtml(prop.title) + 'の外観'}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)" ${attributes}>`;
   }
@@ -72,6 +73,24 @@ window.MachirikuScreens = (function() {
     image.onerror = null;
     image.removeAttribute('onerror');
     if (source === IMAGE_PLACEHOLDER) return;
+
+    // もし assets/prop-xxx.jpg で失敗した場合は assets/properties/prop-xxx/01_exterior.jpg を自動試行
+    if (source.includes('assets/prop-') && source.endsWith('.jpg')) {
+      const fallback = source.replace('assets/prop-', 'assets/properties/prop-').replace('.jpg', '/01_exterior.jpg');
+      if (!failedImages.has(fallback)) {
+        image.src = fallback;
+        return;
+      }
+    }
+    // もし assets/properties/prop-xxx/01_exterior.jpg で失敗した場合は assets/prop-xxx.jpg を自動試行
+    if (source.includes('/01_exterior.jpg')) {
+      const fallback = source.replace('/01_exterior.jpg', '.jpg').replace('assets/properties/prop-', 'assets/prop-');
+      if (!failedImages.has(fallback)) {
+        image.src = fallback;
+        return;
+      }
+    }
+
     failedImages.add(source);
     image.alt = '写真未登録';
     image.src = IMAGE_PLACEHOLDER;
@@ -119,11 +138,11 @@ window.MachirikuScreens = (function() {
         ${breadcrumbs.length ? `<nav class="breadcrumb-trail" aria-label="現在の位置"><a href="#s01">ホーム</a><span aria-hidden="true">/</span>${bcHtml}</nav>` : ''}
         <div class="page-title-row">
           <h1 class="page-title">
-            ${title}
+            ${escapeHtml(title)}
           </h1>
-          ${screenNum === 'S02' && tag ? `<span class="badge-status status-voting">${tag}</span>` : ''}
+          ${screenNum === 'S02' && tag ? `<span class="badge-status status-voting">${escapeHtml(tag)}</span>` : ''}
         </div>
-        ${desc ? `<p class="page-description">${desc}</p>` : ''}
+        ${desc ? `<p class="page-description">${escapeHtml(desc)}</p>` : ''}
       </div>
     `;
   }
@@ -516,12 +535,13 @@ window.MachirikuScreens = (function() {
     }
 
     return `
-      <div class="filter-popover-card rent-popover-card" onclick="event.stopPropagation()">
-        <div class="popover-header">
-          <h3 class="popover-title">賃料</h3>
-          <button type="button" class="popover-close-btn" onclick="MachirikuScreens.closeRentPopover()" aria-label="閉じる">✕</button>
-        </div>
-        <div class="rent-popover-content">
+      <div class="popover-modal-backdrop" onclick="if(event.target === this) MachirikuScreens.closeRentPopover()">
+        <div class="filter-popover-card rent-popover-card" onclick="event.stopPropagation()">
+          <div class="popover-header">
+            <h3 class="popover-title">賃料</h3>
+            <button type="button" class="popover-close-btn" onclick="MachirikuScreens.closeRentPopover()" aria-label="閉じる">✕</button>
+          </div>
+          <div class="rent-popover-content">
           <div class="rent-selects-row">
             <div class="rent-select-wrap">
               <label for="rent-sel-min">下限</label>
@@ -586,6 +606,7 @@ window.MachirikuScreens = (function() {
           <button type="button" class="btn-primary btn-apply-rent" id="btn-rent-apply" onclick="MachirikuScreens.applyRentFilters()">適用する (${prospectiveCount}件)</button>
         </div>
       </div>
+    </div>
     `;
   }
 
@@ -611,11 +632,12 @@ window.MachirikuScreens = (function() {
     }).join('');
 
     return `
-      <div class="filter-popover-card cat-popover-card" onclick="event.stopPropagation()">
-        <div class="popover-header">
-          <h3 class="popover-title">希望業種（カテゴリ）</h3>
-          <button type="button" class="popover-close-btn" onclick="MachirikuScreens.closeCatPopover()" aria-label="閉じる">✕</button>
-        </div>
+      <div class="popover-modal-backdrop" onclick="if(event.target === this) MachirikuScreens.closeCatPopover()">
+        <div class="filter-popover-card cat-popover-card" onclick="event.stopPropagation()">
+          <div class="popover-header">
+            <h3 class="popover-title">希望業種（カテゴリ）</h3>
+            <button type="button" class="popover-close-btn" onclick="MachirikuScreens.closeCatPopover()" aria-label="閉じる">✕</button>
+          </div>
         <div class="cat-popover-grid">
           ${itemsHtml}
         </div>
@@ -624,6 +646,7 @@ window.MachirikuScreens = (function() {
           <button type="button" class="btn-primary" style="min-height: 38px; padding: 0.35rem 1.15rem; font-size: 0.875rem;" onclick="MachirikuScreens.applyCatFilters()">業種を絞り込む (${prospectiveCount}件)</button>
         </div>
       </div>
+    </div>
     `;
   }
 
@@ -704,16 +727,16 @@ window.MachirikuScreens = (function() {
             </div>
             <div class="card-info-pane">
               <div>
-                <h2 class="card-prop-title"><a class="property-title-link" href="#s02?id=${p.id}">${p.title}</a></h2>
-                <div class="card-prop-address">${p.address}（${p.access}）</div>
+                <h2 class="card-prop-title"><a class="property-title-link" href="#s02?id=${encodeURIComponent(p.id)}">${escapeHtml(p.title)}</a></h2>
+                <div class="card-prop-address">${escapeHtml(p.address)}（${escapeHtml(p.access)}）</div>
                 <div class="card-rent-row">
                   <div class="rent-main">${rentMan}万円<small>/月</small></div>
                   <div class="rent-sub">${mgmt}</div>
                 </div>
                 <div class="card-specs-row">
                   <span><strong>${p.areaTsubo}</strong> 坪 (${p.areaSqm}㎡)</span>
-                  <span><strong>${p.floor}</strong></span>
-                  <span>${p.condition}</span>
+                  <span><strong>${escapeHtml(p.floor)}</strong></span>
+                  <span>${escapeHtml(p.condition)}</span>
                 </div>
               </div>
 
@@ -892,10 +915,10 @@ window.MachirikuScreens = (function() {
 
     const residentVoicesHtml = (prop.residentVoices || []).map(v => `
       <div class="quote-bubble">
-        <p class="quote-text">“${v.text}”</p>
+        <p class="quote-text">“${escapeHtml(v.text)}”</p>
         <div class="quote-meta">
-          <span>${v.author}</span>
-          <span>${v.date}</span>
+          <span>${escapeHtml(v.author)}</span>
+          <span>${escapeHtml(v.date)}</span>
         </div>
       </div>
     `).join("");
@@ -1012,16 +1035,16 @@ window.MachirikuScreens = (function() {
                   </tr>
                   <tr>
                     <th>敷金 / 礼金 / 保証金</th>
-                    <td>敷金: ${prop.deposit ?? '掲載なし（要確認）'} / 礼金: ${prop.keyMoney ?? '掲載なし（要確認）'} / 保証金: ${prop.securityDeposit ?? '掲載なし（要確認）'}</td>
+                    <td>敷金: ${escapeHtml(prop.deposit ?? '掲載なし（要確認）')} / 礼金: ${escapeHtml(prop.keyMoney ?? '掲載なし（要確認）')} / 保証金: ${escapeHtml(prop.securityDeposit ?? '掲載なし（要確認）')}</td>
                   </tr>
                   <tr>
                     <th>所在地</th>
-                    <td>${prop.address}</td>
+                    <td>${escapeHtml(prop.address)}</td>
                   </tr>
                   ${prop.otherFees?.length ? `<tr><th>その他の掲載費用</th><td><ul class="listing-fees">${prop.otherFees.map(f => `<li>${escapeHtml(f.name)}: ${escapeHtml(f.amountRaw)}</li>`).join('')}</ul></td></tr>` : ''}
                   <tr>
                     <th>交通・最寄駅</th>
-                    <td>${prop.access}</td>
+                    <td>${escapeHtml(prop.access)}</td>
                   </tr>
                   <tr>
                     <th>使用部分面積</th>
@@ -1029,27 +1052,27 @@ window.MachirikuScreens = (function() {
                   </tr>
                   <tr>
                     <th>階数・構造</th>
-                    <td>${prop.floor} / ${prop.structure}（${prop.builtYear}）</td>
+                    <td>${escapeHtml(prop.floor)} / ${escapeHtml(prop.structure)}（${escapeHtml(prop.builtYear)}）</td>
                   </tr>
                   <tr>
                     <th>現況 / 引渡し</th>
-                    <td>${prop.listingStatusRaw || '掲載なし'} / ${prop.handover}</td>
+                    <td>${escapeHtml(prop.listingStatusRaw || '掲載なし')} / ${escapeHtml(prop.handover)}</td>
                   </tr>
                   <tr>
                     <th>業種条件</th>
-                    <td>${prop.condition}</td>
+                    <td>${escapeHtml(prop.condition)}</td>
                   </tr>
                   <tr>
                     <th>主要設備</th>
                     <td>
                       <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
-                        ${(prop.facilities || ['電気','上水道','下水道']).map(fac => `<span class="badge-feature">${fac}</span>`).join('')}
+                        ${(prop.facilities || ['電気','上水道','下水道']).map(fac => `<span class="badge-feature">${escapeHtml(fac)}</span>`).join('')}
                       </div>
                     </td>
                   </tr>
                   <tr>
                     <th>飲食店営業許可</th>
-                    <td><span class="badge-check-ok">✔ ${prop.permitStatus || "取得相談可"}</span></td>
+                    <td><span class="badge-check-ok">✔ ${escapeHtml(prop.permitStatus || "取得相談可")}</span></td>
                   </tr>
                   ${prop.sourceNotes?.length ? `<tr><th>掲載情報の備考</th><td><ul class="listing-fees">${prop.sourceNotes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul></td></tr>` : ''}
                 </tbody>
@@ -1058,17 +1081,17 @@ window.MachirikuScreens = (function() {
               ${prop.source ? renderSourceInformation(prop) : `
                 <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px dashed var(--border-color); display:flex; justify-content:space-between; align-items:center; font-size:0.875rem; color:var(--text-sub);">
                   <div>
-                    <strong>取扱不動産会社:</strong> ${prop.agent ? prop.agent.name : (prop.broker ? prop.broker.name : "株式会社宇都宮不動産 本店")}<br>
-                    <span style="font-size:0.8rem; color:var(--text-muted);">${prop.agent ? prop.agent.license : "栃木県知事 (4) 第12345号"} / 免許番号・取引態様: 専任媒介</span>
+                    <strong>取扱不動産会社:</strong> ${escapeHtml(prop.agent ? prop.agent.name : (prop.broker ? prop.broker.name : "株式会社宇都宮不動産 本店"))}<br>
+                    <span style="font-size:0.8rem; color:var(--text-muted);">${escapeHtml(prop.agent ? prop.agent.license : "栃木県知事 (4) 第12345号")} / 免許番号・取引態様: 専任媒介</span>
                   </div>
                   <div style="text-align:right;">
-                    <span style="font-size:0.75rem; color:var(--text-muted);">物件番号: ${prop.id}</span>
+                    <span style="font-size:0.75rem; color:var(--text-muted);">物件番号: ${encodeURIComponent(prop.id)}</span>
                   </div>
                 </div>
               `}
 
               <div style="margin-top:1.25rem; font-size:0.9rem; line-height:1.7; color:var(--text-sub);">
-                ${prop.description}
+                ${escapeHtml(prop.description).replace(/\n/g, '<br>')}
               </div>
             </div>
 
@@ -1150,11 +1173,11 @@ window.MachirikuScreens = (function() {
               </nav>` : ''}
             </div>
 
-            <!-- 物件所在地GoogleMapカード -->
-            <div class="detail-card" style="padding:1rem;">
-              <div style="font-weight:700; font-size:0.875rem; margin-bottom:0.5rem;">所在地・周辺情報</div>
+            <!-- 物件所在地GoogleMapカード（独立カード：横幅・左端位置を上位CTAカード内要素と完全同期） -->
+            <div class="detail-card" style="padding:1rem var(--space-6); display:block;">
+              <div style="font-weight:700; font-size:0.875rem; margin-bottom:0.5rem; color:var(--text-main);">所在地・周辺情報</div>
               <div style="font-size:0.875rem; color:var(--text-sub); margin-bottom:0.75rem;">
-                ${prop.address}
+                ${escapeHtml(prop.address)}
               </div>
               <div id="s02-location-map" data-lat="${prop.location?.lat || 36.559312}" data-lng="${prop.location?.lng || 139.882105}" data-title="${escapeHtml(prop.title)}" style="width:100%; height:200px; border-radius:var(--radius-sm); border:1px solid var(--border-color); overflow:hidden; background:var(--bg-subtle);"></div>
             </div>
@@ -1181,10 +1204,10 @@ window.MachirikuScreens = (function() {
         <div class="form-stepper-box">
           <div class="stepper-header">
             <h2 style="font-size:1.3rem; font-weight:800; color:var(--text-main); margin-bottom:0.35rem;">
-              【対象物件】${prop.title}
+              【対象物件】${escapeHtml(prop.title)}
             </h2>
             <div style="font-size:0.875rem; color:var(--text-muted);">
-              ${prop.address}（現在 ${prop.votesCount}人の住民が投票中）
+              ${escapeHtml(prop.address)}（現在 ${prop.votesCount}人の住民が投票中）
             </div>
           </div>
 
@@ -1270,7 +1293,7 @@ window.MachirikuScreens = (function() {
               </div>
               <div class="form-group">
                 <label for="field-7">出店する事業主・店舗への要望や応援メッセージ（自由記述）</label>
-                <textarea id="field-7" name="comment" class="form-control" rows="3" placeholder="例: オリオン通りでゆっくり本が読める静かなカフェがあると嬉しいです。テイクアウトもできると助かります。">${curVote?.comment || ''}</textarea>
+                <textarea id="field-7" name="comment" class="form-control" rows="3" placeholder="例: オリオン通りでゆっくり本が読める静かなカフェがあると嬉しいです。テイクアウトもできると助かります。">${escapeHtml(curVote?.comment || '')}</textarea>
               </div>
             </div>
 
@@ -1316,8 +1339,8 @@ window.MachirikuScreens = (function() {
                   ${renderPropertyImage(p, 'style="width:100%; height:100%; object-fit:cover;"')}
                 </div>
                 <div style="padding:1rem;">
-                  <h3 style="font-size:1.05rem; font-weight:800; margin-bottom:0.35rem;">${p.title}</h3>
-                  <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.75rem;">${p.address}</div>
+                  <h3 style="font-size:1.05rem; font-weight:800; margin-bottom:0.35rem;">${escapeHtml(p.title)}</h3>
+                  <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.75rem;">${escapeHtml(p.address)}</div>
                   <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="font-size:0.875rem; font-weight:700; color:var(--primary-700);"> 需要スコア: ${p.demandScore}pt</span>
                     <span class="btn-header-action" style="font-size:0.875rem;">詳細へ </span>
@@ -1339,7 +1362,7 @@ window.MachirikuScreens = (function() {
     const preparingProp = params.id ? store.getPropertyById(params.id) : state.properties.find(p => p.storePlan || p.status === 'preparing' || p.status === 'opened');
     if (!preparingProp) return renderEmptyState('S05', '開店のお知らせはまだありません', '気になる物件をフォローして、開店までの動きを確認しましょう。');
     const application = state.applications.find(a => a.propId === preparingProp.id && a.status !== 'rejected');
-    if (preparingProp.source && !preparingProp.storePlan && !application) return renderEmptyState('S05', '開店計画はまだありません', `${preparingProp.title}の出店・開店情報はまだ登録されていません。`, `#s02?id=${preparingProp.id}`, '物件の詳細を見る');
+    if (preparingProp.source && !preparingProp.storePlan && !application) return renderEmptyState('S05', '開店計画はまだありません', `${escapeHtml(preparingProp.title)}の出店・開店情報はまだ登録されていません。`, `#s02?id=${encodeURIComponent(preparingProp.id)}`, '物件の詳細を見る');
     const plan = preparingProp.storePlan || {};
     const stages = ['希望を集める', '出店者を選ぶ', '契約・引き渡し', '開店の準備', '開店'];
     const stage = Math.max(0, ['voting','reviewing','agreed','preparing','opened'].indexOf(preparingProp.status));
@@ -1406,10 +1429,10 @@ window.MachirikuScreens = (function() {
                 </div>
                 <div style="flex:1;">
                   <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:0.25rem;">
-                    <h4 style="font-size:0.95rem; font-weight:800; color:var(--text-main);">${n.title}</h4>
-                    <span style="font-size:0.875rem; color:var(--text-muted);">${n.date}</span>
+                    <h4 style="font-size:0.95rem; font-weight:800; color:var(--text-main);">${escapeHtml(n.title)}</h4>
+                    <span style="font-size:0.875rem; color:var(--text-muted);">${escapeHtml(n.date)}</span>
                   </div>
-                  <p style="font-size:0.875rem; color:var(--text-sub); line-height:1.5; margin-bottom:0.4rem;">${n.body}</p>
+                  <p style="font-size:0.875rem; color:var(--text-sub); line-height:1.5; margin-bottom:0.4rem;">${escapeHtml(n.body)}</p>
                   ${n.linkScreen ? `
                     <button type="button" class="btn-header-action" style="font-size:0.875rem; padding:0.2rem 0.5rem;" onclick="MachirikuApp.navigate('${n.linkScreen}')">
                       該当画面へ移動 
@@ -1486,8 +1509,8 @@ window.MachirikuScreens = (function() {
             <select id="field-8" class="form-select" style="min-width:320px;" onchange="MachirikuApp.navigate('s07', { id: this.value })">
               <option value="all" ${selectedPropId === 'all' ? 'selected' : ''}>宇都宮市中心街 全5物件総合需要</option>
               ${props.map(p => `
-                <option value="${p.id}" ${selectedPropId === p.id ? 'selected' : ''}>
-                  ${p.title} （${p.votesCount}票 / ${p.demandScore}pt）
+                <option value="${encodeURIComponent(p.id)}" ${selectedPropId === p.id ? 'selected' : ''}>
+                  ${escapeHtml(p.title)} （${p.votesCount}票 / ${p.demandScore}pt）
                 </option>
               `).join("")}
             </select>
@@ -1580,10 +1603,10 @@ window.MachirikuScreens = (function() {
                   <div style="color:var(--text-muted); font-size:0.875rem; padding:1rem 0;">まだ住民の声が寄せられていません。物件の詳細から投票・コメントを投稿できます。</div>
                 ` : voicesList.map(v => `
                   <div class="quote-bubble" style="margin-bottom:0.25rem;">
-                    <p class="quote-text">“${v.text}”</p>
+                    <p class="quote-text">“${escapeHtml(v.text)}”</p>
                     <div class="quote-meta">
-                      <span>${v.author}</span>
-                      <span>${v.date}</span>
+                      <span>${escapeHtml(v.author)}</span>
+                      <span>${escapeHtml(v.date)}</span>
                     </div>
                   </div>
                 `).join("")}
@@ -1610,7 +1633,7 @@ window.MachirikuScreens = (function() {
 
         <div class="form-stepper-box">
           <div class="stepper-header">
-            <h2 style="font-size:1.25rem; font-weight:800;">【申込対象】${prop.title}</h2>
+            <h2 style="font-size:1.25rem; font-weight:800;">【申込対象】${escapeHtml(prop.title)}</h2>
             <div style="font-size:0.875rem; color:var(--text-muted);">賃料: ${formatRent(prop.rent)}万円 / 面積: ${prop.areaTsubo}坪</div>
           </div>
 
@@ -1622,7 +1645,7 @@ window.MachirikuScreens = (function() {
               </h3>
               <div class="form-group" style="margin-bottom:1rem;">
                 <label for="field-9">店舗屋号・ブランド名 *必須</label>
-                <input id="field-9" type="text" name="storeName" class="form-control" required placeholder="例: 日光焙煎珈琲スタンド オリオン通り店" value="${state.currentUser.brand || ''}">
+                <input id="field-9" type="text" name="storeName" class="form-control" required placeholder="例: 日光焙煎珈琲スタンド オリオン通り店" value="${escapeHtml(state.currentUser.brand || '')}">
               </div>
               <div class="form-group" style="margin-bottom:1rem;">
                 <label for="field-10">出店予定業種（27小分類） *必須</label>
@@ -1792,8 +1815,8 @@ window.MachirikuScreens = (function() {
               <div class="story-header">
                 
                 <div>
-                  <h2 style="font-size:1.3rem; font-weight:800; color:var(--text-main);">${app.storeName}</h2>
-                  <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.75rem;">応募者: ${app.applicantName} / 業種: ${app.genreName}</div>
+                  <h2 style="font-size:1.3rem; font-weight:800; color:var(--text-main);">${escapeHtml(app.storeName)}</h2>
+                  <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.75rem;">応募者: ${escapeHtml(app.applicantName)} / 業種: ${escapeHtml(app.genreName)}</div>
                 </div>
               </div>
 
@@ -1938,12 +1961,12 @@ window.MachirikuScreens = (function() {
                 <div style="display:flex; gap:0.5rem; margin-bottom:0.25rem; align-items:center;">
                   <span class="badge-status status-${p.status}">${p.statusLabel}</span>
                   ${p.isPr ? '<span class="badge-pr">PR注目枠掲載中</span>' : ''}
-                  <span style="font-size:0.875rem; color:var(--text-muted);">管理コード: ${p.code}</span>
+                  <span style="font-size:0.875rem; color:var(--text-muted);">管理コード: ${escapeHtml(p.code)}</span>
                 </div>
-                <h3 style="font-size:1.1rem; font-weight:800; cursor:pointer;" onclick="MachirikuApp.navigate('s02', { id: '${p.id}' })">${p.title}</h3>
-                <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.4rem;">${p.address} / 賃料 ${formatRent(p.rent)}万円 / ${p.areaTsubo}坪</div>
+                <h3 style="font-size:1.1rem; font-weight:800; cursor:pointer;" onclick="MachirikuApp.navigate('s02', { id: '${encodeURIComponent(p.id)}' })">${escapeHtml(p.title)}</h3>
+                <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.4rem;">${escapeHtml(p.address)} / 賃料 ${formatRent(p.rent)}万円 / ${p.areaTsubo}坪</div>
                 <div style="font-size:0.875rem; color:var(--primary-700); font-weight:700;">
-                  投票総数: ${p.votesCount}票 / 需要スコア: ${p.demandScore}pt （1位: ${p.topDemands[0]?.label || '集計中'}）
+                  投票総数: ${p.votesCount}票 / 需要スコア: ${p.demandScore}pt （1位: ${escapeHtml(p.topDemands[0]?.label || '集計中')}）
                 </div>
               </div>
               <div style="display:flex; flex-direction:column; gap:0.45rem;">
@@ -2091,7 +2114,7 @@ window.MachirikuScreens = (function() {
               <label for="field-28">オファー提案物件</label>
               <select id="field-28" name="propSelect" class="form-select">
                 ${myProps.map(p => `
-                  <option value="${p.id}">${p.title} （賃料 ${formatRent(p.rent)}万円 / ${p.areaTsubo}坪）</option>
+                  <option value="${encodeURIComponent(p.id)}">${escapeHtml(p.title)} （賃料 ${formatRent(p.rent)}万円 / ${p.areaTsubo}坪）</option>
                 `).join("")}
               </select>
             </div>
@@ -2100,7 +2123,7 @@ window.MachirikuScreens = (function() {
               <label for="field-29">オファー対象事業主</label>
               <select id="field-29" name="bizSelect" class="form-select">
                 ${bizUsers.map(b => `
-                  <option value="${b.id}">${b.name} - ${b.genre}</option>
+                  <option value="${encodeURIComponent(b.id)}">${escapeHtml(b.name)} - ${escapeHtml(b.genre)}</option>
                 `).join("")}
               </select>
             </div>
@@ -2148,9 +2171,9 @@ window.MachirikuScreens = (function() {
         <div class="form-stepper-box">
           <div style="background-color:var(--bg-subtle); padding:1rem 1.25rem;  margin-bottom:1.5rem;">
             <div style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.25rem;">対象物件・出店者</div>
-            <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-main); margin-bottom:0.35rem;">${prop.title}</h3>
+            <h3 style="font-size:1.15rem; font-weight:800; color:var(--text-main); margin-bottom:0.35rem;">${escapeHtml(prop.title)}</h3>
             <div style="font-size:0.88rem; color:var(--primary-800); font-weight:700;">
-              出店屋号: ${app.storeName} （応募者: ${app.applicantName}）
+              出店屋号: ${escapeHtml(app.storeName)} （応募者: ${escapeHtml(app.applicantName)}）
             </div>
           </div>
 
@@ -2215,13 +2238,13 @@ window.MachirikuScreens = (function() {
               <label for="field-36">出店対象物件</label>
               <select id="field-36" name="propId" class="form-select" onchange="MachirikuApp.navigate('s15', { propId: this.value })">
                 ${activePropsList.map(p => `
-                  <option value="${p.id}" ${p.id === prop.id ? 'selected' : ''}>${p.title} （${p.address}）</option>
+                  <option value="${encodeURIComponent(p.id)}" ${p.id === prop.id ? 'selected' : ''}>${escapeHtml(p.title)} （${escapeHtml(p.address)}）</option>
                 `).join("")}
               </select>
             </div>
             <div class="form-group" style="margin-bottom:1rem;">
               <label for="field-37">店舗正式名称 *必須</label>
-              <input id="field-37" type="text" name="storeName" class="form-control" required value="${prop.storePlan?.storeName || ''}">
+              <input id="field-37" type="text" name="storeName" class="form-control" required value="${escapeHtml(prop.storePlan?.storeName || '')}">
             </div>
             <div class="form-group" style="margin-bottom:1rem;">
               <label for="field-progress-status">現在の進捗状況（DB: progress_status） *必須</label>
@@ -2265,6 +2288,10 @@ window.MachirikuScreens = (function() {
         ${escapeHtml(params.errorMessage)}
       </div>
     ` : '';
+    const ctx = (typeof window !== 'undefined' && window.__MACHIRIKU_CONTEXT_PATH__ !== undefined)
+      ? window.__MACHIRIKU_CONTEXT_PATH__
+      : (typeof window !== 'undefined' && window.location && window.location.pathname.startsWith('/machiriku') ? '/machiriku' : '');
+    const loginActionUrl = (ctx || '') + '/jp/machiriku/servlet/auth/Login.action';
 
     return `
       <section class="screen-view s16-view" data-screen="S16">
@@ -2272,10 +2299,10 @@ window.MachirikuScreens = (function() {
           <h1 style="font-size:1.35rem; font-weight:800; color:var(--text-main); margin:0 0 1.25rem 0; text-align:center;">ログイン</h1>
           ${errorHtml}
           <div style="margin-top:0.5rem; margin-bottom:1.5rem;">
-            <button type="button" class="btn-line-login" onclick="MachirikuScreens.handleLineLogin()">
+            <a href="${loginActionUrl}" class="btn-line-login" style="text-decoration:none; display:flex; align-items:center; justify-content:center; gap:0.75rem;">
               <img src="assets/line_icon.svg" alt="LINE" class="line-icon-svg" style="width:24px; height:24px; flex-shrink:0;">
               <span>LINEでログイン</span>
-            </button>
+            </a>
             <p style="font-size:0.8125rem; color:var(--text-sub); text-align:center; margin-top:0.75rem; line-height:1.5;">
               LINEの表示名・ユーザーIDと、取得できる場合はメールアドレスを取得し、会員情報の確認に利用します。
             </p>
@@ -2283,21 +2310,6 @@ window.MachirikuScreens = (function() {
 
           <div style="text-align:center; margin-top:1.25rem; font-size:0.875rem;">
             アカウントをお持ちでない方は <a href="#s17" style="color:var(--primary-700); font-weight:700;">新規会員登録</a>
-          </div>
-
-          <div style="margin-top:2rem; padding-top:1.5rem; border-top:1px dashed var(--border-color); text-align:center;">
-            <div style="font-size:0.8125rem; color:var(--text-sub); margin-bottom:0.75rem; font-weight:700;">
-              【デモ・審査確認用】ロール別 1クリックログイン
-            </div>
-            <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:0.5rem;">
-              <button type="button" class="btn-outline" style="font-size:0.8125rem; padding:0.5rem;" onclick="MachirikuScreens.quickLogin('resident')">地域住民でログイン</button>
-              <button type="button" class="btn-outline" style="font-size:0.8125rem; padding:0.5rem;" onclick="MachirikuScreens.quickLogin('business')">事業主でログイン</button>
-              <button type="button" class="btn-outline" style="font-size:0.8125rem; padding:0.5rem;" onclick="MachirikuScreens.quickLogin('owner')">オーナーでログイン</button>
-              <button type="button" class="btn-outline" style="font-size:0.8125rem; padding:0.5rem;" onclick="MachirikuScreens.quickLogin('admin')">管理者でログイン</button>
-            </div>
-            <div style="margin-top:0.75rem;">
-              <a href="callback.html" style="font-size:0.75rem; color:var(--text-muted); text-decoration:underline;">[開発用] LINE認証コールバック画面</a>
-            </div>
           </div>
         </div>
       </section>
@@ -2308,6 +2320,11 @@ window.MachirikuScreens = (function() {
   // S17: 会員登録 (LINEログイン仕様)
   // =========================================================================
   function renderS17() {
+    const ctx = (typeof window !== 'undefined' && window.__MACHIRIKU_CONTEXT_PATH__ !== undefined)
+      ? window.__MACHIRIKU_CONTEXT_PATH__
+      : (typeof window !== 'undefined' && window.location && window.location.pathname.startsWith('/machiriku') ? '/machiriku' : '');
+    const registerActionUrl = (ctx || '') + '/jp/machiriku/servlet/auth/Register.action';
+
     return `
       <section class="screen-view s17-view" data-screen="S17">
         <div class="form-stepper-box" style="max-width:540px;">
@@ -2315,33 +2332,30 @@ window.MachirikuScreens = (function() {
           <div class="form-group" style="margin-bottom:1.5rem;">
             <label style="font-size:0.9rem; font-weight:800;">利用区分を選択してください *必須</label>
             <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem; margin-top:0.5rem;">
-              <label style="border:1px solid var(--border-color); padding:0.85rem; border-radius:var(--radius-md); text-align:center; cursor:pointer;">
-                <input type="radio" name="regRole" value="resident" checked>
-                <div style="font-weight:700; margin-top:0.3rem;">地域住民</div>
+              <label class="role-select-card is-selected">
+                <input type="radio" name="regRole" value="resident" checked onchange="this.closest('.form-group').querySelectorAll('.role-select-card').forEach(function(c){c.classList.toggle('is-selected', c.querySelector('input').checked)})">
+                <div class="role-card-title" style="font-weight:700; margin-top:0.3rem;">地域住民</div>
               </label>
-              <label style="border:1px solid var(--border-color); padding:0.85rem; border-radius:var(--radius-md); text-align:center; cursor:pointer;">
-                <input type="radio" name="regRole" value="business">
-                <div style="font-weight:700; margin-top:0.3rem;">出店事業主</div>
+              <label class="role-select-card">
+                <input type="radio" name="regRole" value="business" onchange="this.closest('.form-group').querySelectorAll('.role-select-card').forEach(function(c){c.classList.toggle('is-selected', c.querySelector('input').checked)})">
+                <div class="role-card-title" style="font-weight:700; margin-top:0.3rem;">出店事業主</div>
               </label>
-              <label style="border:1px solid var(--border-color); padding:0.85rem; border-radius:var(--radius-md); text-align:center; cursor:pointer;">
-                <input type="radio" name="regRole" value="owner">
-                <div style="font-weight:700; margin-top:0.3rem;">物件オーナー</div>
+              <label class="role-select-card">
+                <input type="radio" name="regRole" value="owner" onchange="this.closest('.form-group').querySelectorAll('.role-select-card').forEach(function(c){c.classList.toggle('is-selected', c.querySelector('input').checked)})">
+                <div class="role-card-title" style="font-weight:700; margin-top:0.3rem;">物件オーナー</div>
               </label>
             </div>
           </div>
 
           <div style="margin-top:1.5rem;">
-            <button type="button" class="btn-line-login" onclick="MachirikuScreens.handleLineLogin()">
+            <a href="${registerActionUrl}" class="btn-line-login" style="text-decoration:none; display:flex; align-items:center; justify-content:center; gap:0.75rem;">
               <img src="assets/line_icon.svg" alt="LINE" class="line-icon-svg" style="width:24px; height:24px; flex-shrink:0;">
-              <span>LINEでログイン</span>
-            </button>
+              <span>LINEで登録・ログイン</span>
+            </a>
             <p style="font-size:0.8125rem; color:var(--text-sub); text-align:center; margin-top:0.75rem; line-height:1.5;">
               LINEアカウントを使って簡単・安全に登録・ログインできます。<br>
               <span style="font-size:0.75rem; color:var(--text-muted);">※利用規約・プライバシーポリシーに同意の上、ログインへお進みください。</span>
             </p>
-            <div style="text-align: center; margin-top: 1rem;">
-              <a href="callback.html" style="font-size: 0.78rem; color: var(--text-muted); text-decoration: underline;">[開発・確認用] LINE認証コールバック画面を開く</a>
-            </div>
           </div>
         </div>
       </section>
@@ -2430,7 +2444,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-biz-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 事業者名 / 屋号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-biz-name" name="businessName" type="text" class="form-control" value="${escapeHtml(user.businessName || '')}" required placeholder="例: 宇都宮カフェ Lab">
+              <input id="s18-biz-name" name="businessName" type="text" class="form-control" value="${escapeHtml(user.businessName || user.brand || user.company || sessionData?.businessName || '')}" required placeholder="例: 宇都宮カフェ Lab">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※店舗名、屋号、法人名などをご入力ください。</span>
             </div>
 
@@ -2439,7 +2453,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-rep-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 代表者名 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-rep-name" name="representativeName" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 佐藤 健一" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) h.textContent = this.value.trim();">
+              <input id="s18-rep-name" name="representativeName" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 佐藤 健一" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) { h.textContent = this.value.trim(); if(window.MachirikuHeaderTicker) window.MachirikuHeaderTicker.update(); }">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINEの表示名が初期設定されています。自由に編集できます。</span>
             </div>
 
@@ -2457,7 +2471,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-biz-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(sessionData?.phone || '')}" required placeholder="例: 09012345678 (ハイフンなし)">
+              <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(user.phone || sessionData?.phone || '')}" required placeholder="例: 09012345678 (ハイフンなし)">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店応募や物件オーナーとの連絡・確認用に使用されます。</span>
             </div>
 
@@ -2638,7 +2652,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-owner-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 オーナー氏名 / 代表者名 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-owner-name" name="representativeName" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 佐藤 武雄" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) h.textContent = this.value.trim();">
+              <input id="s18-owner-name" name="representativeName" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 佐藤 武雄" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) { h.textContent = this.value.trim(); if(window.MachirikuHeaderTicker) window.MachirikuHeaderTicker.update(); }">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINEの表示名が初期設定されています。本名や代表者名にご変更いただけます。</span>
             </div>
 
@@ -2647,7 +2661,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-owner-company" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 屋号・法人名 / 管理名 <span style="font-size:0.78rem; color:var(--text-sub);">(任意)</span>
               </label>
-              <input id="s18-owner-company" name="company" type="text" class="form-control" value="${escapeHtml(company)}" placeholder="例: 佐藤不動産管理、宇都宮商事(株) など">
+              <input id="s18-owner-company" name="company" type="text" class="form-control" value="${escapeHtml(user.company || company || '')}" placeholder="例: 佐藤不動産管理、宇都宮商事(株) など">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※屋号や法人名、物件の管理名義などをお持ちの場合はご入力ください（空欄でも可）。</span>
             </div>
 
@@ -2656,7 +2670,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-owner-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(sessionData?.phone || '')}" required placeholder="例: 09012345678 (ハイフンなし)">
+              <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="${escapeHtml(user.phone || sessionData?.phone || '')}" required placeholder="例: 09012345678 (ハイフンなし)">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店希望者との連絡、物件問い合わせや運営確認用に使用されます。</span>
             </div>
 
@@ -2958,8 +2972,9 @@ window.MachirikuScreens = (function() {
       (sessionData && sessionData.role)
     );
 
-    const displayName = params?.displayName || sessionData?.name || (isOnboarding ? 'LINEユーザー' : (user.name || 'LINEユーザー'));
-    const email = params?.email !== undefined ? params.email : (sessionData?.email || user.email || '');
+    const realUserDisplayName = (user.name && user.name !== '田中 一郎' && user.name !== 'LINEユーザー') ? user.name : (user.displayName || '');
+    const displayName = params?.displayName || sessionData?.name || realUserDisplayName || user.name || 'LINEユーザー';
+    const email = user.email || (params?.email !== undefined ? params.email : (sessionData?.email || ''));
     const ageGroup = user.ageGroup || sessionData?.ageGroup || '';
     const gender = user.gender || sessionData?.gender || '';
     const industry = user.industry || sessionData?.industry || '';
@@ -2992,7 +3007,7 @@ window.MachirikuScreens = (function() {
       'その他'
     ];
 
-    const activeRoleKey = (params?.role || sessionData?.role || user?.role || 'resident');
+    const activeRoleKey = String(user?.role || user?.userRole || state.currentRole || params?.role || sessionData?.role || 'resident').toLowerCase();
     const roleLabelMap = {
       resident: '地域住民',
       business: '出店事業主',
@@ -3046,7 +3061,7 @@ window.MachirikuScreens = (function() {
               <label for="s18-name" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
                 ニックネーム (表示名) <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
               </label>
-              <input id="s18-name" name="name" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 山田 太郎" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) h.textContent = this.value.trim();">
+              <input id="s18-name" name="name" type="text" class="form-control" value="${escapeHtml(displayName)}" required placeholder="例: 山田 太郎" oninput="const h = document.getElementById('header-user-name'); if(h && this.value.trim()) { h.textContent = this.value.trim(); if(window.MachirikuHeaderTicker) window.MachirikuHeaderTicker.update(); }">
               <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※LINEの表示名が初期設定されています。自由に編集できます。</span>
             </div>
 
@@ -3886,6 +3901,8 @@ window.MachirikuScreens = (function() {
     s18BizPoints = [];
     const pointsInput = document.getElementById('s18-biz-area-points');
     if (pointsInput) pointsInput.value = '';
+    const areaInput = document.getElementById('s18-biz-area') || document.getElementById('s18-biz-area-name');
+    if (areaInput) areaInput.value = '';
     const statusEl = document.getElementById('s18-biz-map-status');
     if (statusEl) statusEl.textContent = '範囲指定がリセットされました。地図をなぞるか主要エリアから選択してください。';
     const canvas = document.getElementById('s18-biz-draw-canvas');
@@ -4093,6 +4110,21 @@ window.MachirikuScreens = (function() {
       if (phoneInput && phoneInput.focus) phoneInput.focus();
       return;
     }
+    const bizDigitsOnly = phone.replace(/[\s()（）ー−‐-]/g, '');
+    if (!/^\d+$/.test(bizDigitsOnly)) {
+      if (typeof MachirikuApp !== 'undefined') {
+        MachirikuApp.showToast('電話番号は半角数字で入力してください（英字や記号は使用できません）');
+      }
+      if (phoneInput && phoneInput.focus) phoneInput.focus();
+      return;
+    }
+    if (bizDigitsOnly.length < 9 || bizDigitsOnly.length > 11) {
+      if (typeof MachirikuApp !== 'undefined') {
+        MachirikuApp.showToast('電話番号の桁数を確認してください（例: 09012345678）');
+      }
+      if (phoneInput && phoneInput.focus) phoneInput.focus();
+      return;
+    }
 
     const industries = [];
     if (typeof document !== 'undefined') {
@@ -4166,6 +4198,21 @@ window.MachirikuScreens = (function() {
     if (!phone) {
       if (typeof MachirikuApp !== 'undefined') {
         MachirikuApp.showToast('連絡先電話番号を入力してください');
+      }
+      if (phoneInput && phoneInput.focus) phoneInput.focus();
+      return;
+    }
+    const bizDigitsOnly = phone.replace(/[\s()（）ー−‐-]/g, '');
+    if (!/^\d+$/.test(bizDigitsOnly)) {
+      if (typeof MachirikuApp !== 'undefined') {
+        MachirikuApp.showToast('電話番号は半角数字で入力してください（英字や記号は使用できません）');
+      }
+      if (phoneInput && phoneInput.focus) phoneInput.focus();
+      return;
+    }
+    if (bizDigitsOnly.length < 9 || bizDigitsOnly.length > 11) {
+      if (typeof MachirikuApp !== 'undefined') {
+        MachirikuApp.showToast('電話番号の桁数を確認してください（例: 09012345678）');
       }
       if (phoneInput && phoneInput.focus) phoneInput.focus();
       return;
@@ -4453,17 +4500,17 @@ window.MachirikuScreens = (function() {
         <div class="form-stepper-box">
           <div style="border:2px solid var(--primary-600);  padding:1.5rem; margin-bottom:1.5rem; background-color:var(--bg-card);">
             <div style="text-align:center; font-weight:800; font-size:1.15rem; margin-bottom:0.5rem; color:var(--primary-800);">
-              スマホ回答プレビュー画面: 『${survey.title}』
+              スマホ回答プレビュー画面: 『${escapeHtml(survey.title)}』
             </div>
             <div style="font-size:0.875rem; color:var(--text-sub); text-align:center; margin-bottom:1rem;">
-              店舗: <strong>${survey.storeName}</strong> / ${survey.description}
+              店舗: <strong>${escapeHtml(survey.storeName)}</strong> / ${escapeHtml(survey.description)}
             </div>
             <div style="background-color:var(--bg-subtle); padding:1rem;  font-size:0.88rem; margin-bottom:0.75rem; ">
               <strong>Q1.</strong> 本日の店舗の総合満足度をお聞かせください 
             </div>
             ${survey.questions.filter(q => q.id !== 'q1').map((q, idx) => `
               <div style="background-color:var(--bg-subtle); padding:1rem;  font-size:0.88rem; margin-bottom:0.5rem; ">
-                <strong>Q${idx + 2}.</strong> ${q.text} (${q.type === 'choice' ? '選択式' : '自由記述'})
+                <strong>Q${idx + 2}.</strong> ${escapeHtml(q.text)} (${q.type === 'choice' ? '選択式' : '自由記述'})
               </div>
             `).join("")}
           </div>
@@ -4501,7 +4548,7 @@ window.MachirikuScreens = (function() {
 
         <!-- 卓上POP A4 / スタンド印刷用レイアウト (印刷CSS対応) -->
         <div class="tabletop-pop-preview" id="tabletop-pop-preview">
-          <div class="pop-store-title">${survey.storeName}</div>
+          <div class="pop-store-title">${escapeHtml(survey.storeName)}</div>
           <div class="pop-catchcopy">ご来店の感想をお聞かせください</div>
           
           <div class="pop-qr-wrapper">
@@ -4541,8 +4588,8 @@ window.MachirikuScreens = (function() {
 
         <div class="form-stepper-box" style="max-width:600px;">
           <div style="text-align:center; margin-bottom:1.5rem;">
-            <h2 style="font-size:1.25rem; font-weight:800; color:var(--primary-800);">${survey.storeName}</h2>
-            <p style="font-size:0.875rem; color:var(--text-sub); margin-top:0.35rem;">${survey.description}</p>
+            <h2 style="font-size:1.25rem; font-weight:800; color:var(--primary-800);">${escapeHtml(survey.storeName)}</h2>
+            <p style="font-size:0.875rem; color:var(--text-sub); margin-top:0.35rem;">${escapeHtml(survey.description)}</p>
           </div>
 
           ${isAnswered ? `
@@ -4625,7 +4672,7 @@ window.MachirikuScreens = (function() {
             <div class="metric-card">
               <div class="metric-card-top"><span>回答総数</span><span></span></div>
               <div class="metric-card-val">${survey.responseCount} <span style="font-size:1rem;">件</span></div>
-              <div class="metric-card-footer">${survey.storeName}</div>
+              <div class="metric-card-footer">${escapeHtml(survey.storeName)}</div>
             </div>
             <div class="metric-card">
               <div class="metric-card-top"><span>平均満足度</span><span></span></div>
@@ -4947,7 +4994,7 @@ window.MachirikuScreens = (function() {
 
         <div class="form-stepper-box">
           <div style="margin-bottom:1.5rem;">
-            <h3 style="font-size:1.1rem; font-weight:800; margin-bottom:0.35rem;">対象物件: ${prop.title}</h3>
+            <h3 style="font-size:1.1rem; font-weight:800; margin-bottom:0.35rem;">対象物件: ${escapeHtml(prop.title)}</h3>
             <div style="font-size:0.875rem; color:var(--text-muted);">現在PR掲載状態: ${prop.isPr ? ' 掲載中' : '未掲載'}</div>
           </div>
 
@@ -5791,58 +5838,10 @@ window.MachirikuScreens = (function() {
     MachirikuApp.navigate('s05');
   }
 
-  function quickLogin(role) {
-    store.setRole(role);
-    MachirikuApp.showToast(`${data.USERS[role].roleName} としてログインしました`);
-    MachirikuApp.navigate('s01');
-  }
-
   const LINE_AUTH_CONFIG = {
     channelId: '2012162622',
-    channelSecret: 'd2fd71051bdb20f3ee2e71e1604fe19f',
     localCallbackUrl: 'http://localhost:8000/machiriku/callback.html'
   };
-
-  function handleLineLogin() {
-    let role = 'resident';
-    if (typeof document !== 'undefined' && document.querySelector) {
-      const checked = document.querySelector('input[name="regRole"]:checked');
-      if (checked && checked.value) role = checked.value;
-    }
-
-    let gasUrl = (typeof window !== 'undefined' && window.localStorage) ? window.localStorage.getItem('machiriku_line_gas_url') : null;
-
-    if (!gasUrl && typeof window !== 'undefined' && window.prompt) {
-      const input = window.prompt(
-        "【LINEログイン連携テスト】\nデプロイしたGASの「ウェブアプリURL」を入力してください:\n(例: https://script.google.com/macros/s/AKfycb.../exec)\n\n※一度入力するとブラウザに記憶されます。\n※空欄のままOK/キャンセルすると localhost:8000 で直接テストします。"
-      );
-      if (input && input.trim()) {
-        gasUrl = input.trim();
-        window.localStorage.setItem('machiriku_line_gas_url', gasUrl);
-      }
-    }
-
-    const redirectUri = (gasUrl && gasUrl.trim()) ? gasUrl.trim() : LINE_AUTH_CONFIG.localCallbackUrl;
-    const state = `${role}_${Math.random().toString(36).slice(2, 10)}`;
-    const lineAuthUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${encodeURIComponent(LINE_AUTH_CONFIG.channelId)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}&scope=profile%20openid%20email`;
-
-    if (typeof window !== 'undefined' && window.location) {
-      window.location.href = lineAuthUrl;
-      return;
-    }
-
-    const roleName = (data.USERS && data.USERS[role]) ? data.USERS[role].roleName : '地域住民';
-    const initialName = (data.USERS && data.USERS[role]) ? data.USERS[role].name : 'LINEユーザー';
-    store.setRole(role);
-    if (typeof MachirikuApp !== 'undefined') {
-      MachirikuApp.showToast(`LINEでログインしました（${roleName}）`);
-      MachirikuApp.navigate('s18', { onboarding: '1', displayName: initialName, role });
-    }
-  }
-
-  function handleRegisterComplete() {
-    handleLineLogin();
-  }
 
   function handleLogout(isOnboarding) {
     const msg = isOnboarding ? '登録を中断してログアウトしますか？' : 'ログアウトしますか？';
@@ -6272,101 +6271,6 @@ window.MachirikuScreens = (function() {
     }
   }
 
-  return {
-    renderEmptyState, resetSearch, handlePropertyImageError,
-    renderS01, renderS02, renderS03, renderS04, renderS05, renderS06, renderS07,
-    renderS08, renderS09, renderS10, renderS11, renderS12, renderS13, renderS14,
-    renderS15, renderS16, renderS17, renderS18, renderS19, renderS20, renderS21,
-    renderS22, renderS23, renderS24, renderS25, renderS26, renderS27, renderS28,
-    renderS29, renderS30, renderS31, renderS32, renderS33,
-    handleS01Search,
-    filterByCat,
-    filterByPref,
-    scrollToMap,
-    handleCurrentLocationSearch,
-    openAreaModal,
-    closeAreaModal,
-    setAreaModalStep,
-    handleAreaCityCheck,
-    handleAreaCitySoloSelect,
-    clearAreaSelection,
-    applyAreaSelection,
-    toggleRentPopover,
-    closeRentPopover,
-    handleRentSelectChange,
-    handleRentOptionChange,
-    resetRentFilters,
-    applyRentFilters,
-    toggleCatPopover,
-    toggleDemandAccordion,
-    closeCatPopover,
-    handleCatCheckboxChange,
-    toggleAllCategories,
-    applyCatFilters,
-    handleRentSliderInput,
-    handleRentBoxChange,
-    resetRentSlider,
-    handleHistBarHover,
-    handleHistBarLeave,
-    handleHistBarClick,
-    handleSortChange,
-    handleToggleFollow,
-    validateRanks,
-    handleVoteSubmit,
-    handleApplySubmit,
-    handleAppAction,
-    handlePropRegisterSubmit,
-    handleDeleteProp,
-    handleSendOffer,
-    handleContractComplete,
-    handlePublishPlanSubmit,
-    quickLogin,
-    handleLineLogin,
-    handleRegisterComplete,
-    handleLogout,
-    initS02MiniMap,
-    initS18MapPicker,
-    handleS18CurrentLocation,
-    setS18Coords,
-    toggleS18WorkMap,
-    initS18WorkMapPicker,
-    handleS18WorkCurrentLocation,
-    setS18WorkCoords,
-    handleS18ProfileSubmit,
-    handleS18BusinessProfileSubmit,
-    handleS18OwnerProfileSubmit,
-    initS18BizAreaMap,
-    setBizMapMode,
-    clearBizDraw,
-    setBizAreaFromSelect,
-    handleCreateSurveySubmit,
-    handlePublishSurveyConfirm,
-    setRating,
-    handleSurveyResponseSubmit,
-    handleCreateCouponSubmit,
-    handleRedeemCoupon,
-    handleApplyPr,
-    markAllNotifsRead,
-    renderQrCode,
-    initGallerySlider,
-    selectGalleryImage,
-    navGallery,
-    scrollThumbs,
-    openAllPhotosModal,
-    closeAllPhotosModal,
-    openLightbox,
-    closeLightbox,
-    navLightbox,
-    filterPhotosModal,
-    selectGalleryFromModal,
-    switchResidentCatTab,
-    toggleResidentIndustry,
-    toggleAllResidentCatIndustries,
-    removeResidentIndustry,
-    clearAllResidentIndustries
-  };
-})();
-
   let s02GoogleMap = null;
   function initS02MiniMap() {
     if (typeof document === 'undefined') return;
@@ -6416,3 +6320,95 @@ window.MachirikuScreens = (function() {
       }, 500);
     }
   }
+
+  return {
+    renderEmptyState, resetSearch, handlePropertyImageError,
+    renderS01, renderS02, renderS03, renderS04, renderS05, renderS06, renderS07,
+    renderS08, renderS09, renderS10, renderS11, renderS12, renderS13, renderS14,
+    renderS15, renderS16, renderS17, renderS18, renderS19, renderS20, renderS21,
+    renderS22, renderS23, renderS24, renderS25, renderS26, renderS27, renderS28,
+    renderS29, renderS30, renderS31, renderS32, renderS33,
+    handleS01Search,
+    filterByCat,
+    filterByPref,
+    scrollToMap,
+    handleCurrentLocationSearch,
+    openAreaModal,
+    closeAreaModal,
+    setAreaModalStep,
+    handleAreaCityCheck,
+    handleAreaCitySoloSelect,
+    clearAreaSelection,
+    applyAreaSelection,
+    toggleRentPopover,
+    closeRentPopover,
+    handleRentSelectChange,
+    handleRentOptionChange,
+    resetRentFilters,
+    applyRentFilters,
+    toggleCatPopover,
+    toggleDemandAccordion,
+    closeCatPopover,
+    handleCatCheckboxChange,
+    toggleAllCategories,
+    applyCatFilters,
+    handleRentSliderInput,
+    handleRentBoxChange,
+    resetRentSlider,
+    handleHistBarHover,
+    handleHistBarLeave,
+    handleHistBarClick,
+    handleSortChange,
+    handleToggleFollow,
+    validateRanks,
+    handleVoteSubmit,
+    handleApplySubmit,
+    handleAppAction,
+    handlePropRegisterSubmit,
+    handleDeleteProp,
+    handleSendOffer,
+    handleContractComplete,
+    handlePublishPlanSubmit,
+    handleLogout,
+    initS02MiniMap,
+    initS18MapPicker,
+    handleS18CurrentLocation,
+    setS18Coords,
+    toggleS18WorkMap,
+    initS18WorkMapPicker,
+    handleS18WorkCurrentLocation,
+    setS18WorkCoords,
+    handleS18ProfileSubmit,
+    handleS18BusinessProfileSubmit,
+    handleS18OwnerProfileSubmit,
+    initS18BizAreaMap,
+    setBizMapMode,
+    clearBizDraw,
+    setBizAreaFromSelect,
+    handleCreateSurveySubmit,
+    handlePublishSurveyConfirm,
+    setRating,
+    handleSurveyResponseSubmit,
+    handleCreateCouponSubmit,
+    handleRedeemCoupon,
+    handleApplyPr,
+    markAllNotifsRead,
+    renderQrCode,
+    initGallerySlider,
+    selectGalleryImage,
+    navGallery,
+    scrollThumbs,
+    openAllPhotosModal,
+    closeAllPhotosModal,
+    openLightbox,
+    closeLightbox,
+    navLightbox,
+    filterPhotosModal,
+    selectGalleryFromModal,
+    switchResidentCatTab,
+    toggleResidentIndustry,
+    toggleAllResidentCatIndustries,
+    removeResidentIndustry,
+    clearAllResidentIndustries
+  };
+})();
