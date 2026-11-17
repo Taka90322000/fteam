@@ -10,13 +10,16 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import jp.machiriku.bean.BusinessProfileInput;
 import jp.machiriku.bean.LocationInput;
 import jp.machiriku.bean.OwnerProfileInput;
+import jp.machiriku.bean.ProfileSettings;
 import jp.machiriku.bean.RegistrationChoice;
 import jp.machiriku.bean.ResidentProfileInput;
 import jp.machiriku.bean.User;
+import jp.machiriku.tool.PhoneNumbers;
 
 /** 初期設定の関連テーブルを1トランザクションで保存する。途中失敗時に一部だけ登録されることを防ぐ。 */
 public class ProfileDao extends Dao {
@@ -33,14 +36,79 @@ public class ProfileDao extends Dao {
             default -> throw new IllegalArgumentException("プロフィールの利用区分が正しくありません。");
         };
         try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(
-                "SELECT phone_e164,icon_image_url FROM " + table + " WHERE user_id=?")) {
+                "SELECT phone_e164,secondary_phone_e164,icon_image_url FROM " + table + " WHERE user_id=?")) {
             statement.setInt(1, userId);
             try (ResultSet rows = statement.executeQuery()) {
                 if (!rows.next()) { return Map.of(); }
-                String phone = rows.getString("phone_e164");
+                String phone = PhoneNumbers.forDisplay(rows.getString("phone_e164")); // 画面に表示する国内形式の主番号。
+                String secondaryPhone = PhoneNumbers.forDisplay(rows.getString("secondary_phone_e164")); // 任意の追加番号。
                 String icon = rows.getString("icon_image_url");
-                return Map.of("phone", phone == null ? "" : phone, "iconImageUrl", icon == null ? "" : icon);
+                return Map.of("phone", phone, "secondaryPhone", secondaryPhone, "iconImageUrl", icon == null ? "" : icon);
             }
+        }
+    }
+
+    /** 事業主・オーナーの編集項目と選択済みIDを、同じ接続で読み戻す。 */
+    public ProfileSettings findProfileSettings(int userId, String role) throws SQLException {
+        String table = switch (role) { // 認証済み会員の利用区分に対応するプロフィール。
+            case "BUSINESS" -> "business_profiles";
+            case "OWNER" -> "owner_profiles";
+            default -> throw new IllegalArgumentException("プロフィールの利用区分が正しくありません。");
+        };
+        boolean business = "BUSINESS".equals(role); // 出店希望範囲と資格を復元するかどうか。
+        String areaColumn = business
+                ? ", COALESCE((SELECT json_agg(json_build_object('lat', ST_Y(point.geom), 'lng', ST_X(point.geom)) ORDER BY point.path) "
+                    + "FROM ST_DumpPoints(ST_ExteriorRing(p.area)) point "
+                    + "WHERE point.path[1] < ST_NPoints(ST_ExteriorRing(p.area))), '[]'::json)::text AS area_points"
+                : ""; // 地図の入力形式に合わせた点列。末尾の閉じ点は除く。
+        Map<String, String> fields = new LinkedHashMap<>(); // 編集フォームへ渡す保存済みの値。
+        try (Connection connection = openConnection()) {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT p.*, u.email, n.email_enabled" + areaColumn + " FROM " + table + " p "
+                    + "JOIN users u ON u.user_id=p.user_id "
+                    + "LEFT JOIN notification_settings n ON n.user_id=p.user_id WHERE p.user_id=?")) {
+                statement.setInt(1, userId);
+                try (ResultSet row = statement.executeQuery()) {
+                    if (!row.next()) { return null; }
+                    fields.put("representativeName", row.getString("representative_name"));
+                    fields.put("email", emptyIfNull(row.getString("email")));
+                    fields.put("phone", PhoneNumbers.forDisplay(row.getString("phone_e164")));
+                    fields.put("secondaryPhone", PhoneNumbers.forDisplay(row.getString("secondary_phone_e164")));
+                    fields.put("iconImageUrl", emptyIfNull(row.getString("icon_image_url")));
+                    fields.put("emailNotify", row.getBoolean("email_enabled") ? "on" : "");
+                    if (business) {
+                        fields.put("businessName", row.getString("business_name"));
+                        fields.put("employeeCount", row.getString("employee_count"));
+                        fields.put("preferredArea", emptyIfNull(row.getString("preferred_area")));
+                        fields.put("preferredAreaPoints", row.getString("area_points"));
+                        fields.put("mgmtExperience", emptyIfNull(row.getString("management_experience")));
+                        fields.put("industryExperience", emptyIfNull(row.getString("industry_experience")));
+                    } else {
+                        fields.put("company", emptyIfNull(row.getString("company_name")));
+                    }
+                }
+            }
+
+            // 業種・資格のIDを復元し、表示名や画面の並び順では照合しない。
+            Set<String> industries = new LinkedHashSet<>(); // 会員が選択した希望業種のID。
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT industry_type_id FROM user_industry_preferences WHERE user_id=? ORDER BY industry_type_id")) {
+                statement.setInt(1, userId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) { industries.add(rows.getString("industry_type_id")); }
+                }
+            }
+            Set<String> qualifications = new LinkedHashSet<>(); // 選択中の資格・許認可のID。
+            if (business) {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT qualification_id FROM business_qualifications WHERE business_user_id=? AND is_active ORDER BY qualification_id")) {
+                    statement.setInt(1, userId);
+                    try (ResultSet rows = statement.executeQuery()) {
+                        while (rows.next()) { qualifications.add(rows.getString("qualification_id")); }
+                    }
+                }
+            }
+            return new ProfileSettings(fields, industries, qualifications);
         }
     }
 
@@ -61,15 +129,16 @@ public class ProfileDao extends Dao {
                 }
             }
             try (PreparedStatement statement = connection.prepareStatement(
-                    "SELECT location_kind, address_line, latitude, longitude FROM user_locations WHERE user_id=?")) {
+                    "SELECT location_kind, concat(prefecture, municipality, address_line) AS full_address, latitude, longitude "
+                    + "FROM user_locations WHERE user_id=?")) {
                 statement.setInt(1, userId);
                 try (ResultSet rows = statement.executeQuery()) {
                     while (rows.next()) {
                         String kind = rows.getString("location_kind");
-                        String addr = rows.getString("address_line");
+                        String addr = rows.getString("full_address"); // 都道府県・市区町村・番地を結合した住所。
                         BigDecimal lat = rows.getBigDecimal("latitude");
                         BigDecimal lng = rows.getBigDecimal("longitude");
-                        if ("LIVING".equals(kind)) {
+                        if ("HOME".equals(kind)) {
                             if (addr != null) result.put("livingAddress", addr);
                             if (lat != null) result.put("livingLat", lat.toPlainString());
                             if (lng != null) result.put("livingLng", lng.toPlainString());
@@ -191,15 +260,16 @@ public class ProfileDao extends Dao {
                 statement.executeUpdate();
             }
             try (PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO owner_profiles (user_id,representative_name,company_name,phone_e164,icon_image_url) VALUES (?,?,?,?,?) "
+                    "INSERT INTO owner_profiles (user_id,representative_name,company_name,phone_e164,icon_image_url,secondary_phone_e164) VALUES (?,?,?,?,?,?) "
                     + "ON CONFLICT (user_id) DO UPDATE SET representative_name=EXCLUDED.representative_name,"
                     + "company_name=EXCLUDED.company_name,phone_e164=EXCLUDED.phone_e164,"
-                    + "icon_image_url=EXCLUDED.icon_image_url,updated_at=CURRENT_TIMESTAMP")) {
+                    + "icon_image_url=EXCLUDED.icon_image_url,secondary_phone_e164=EXCLUDED.secondary_phone_e164,updated_at=CURRENT_TIMESTAMP")) {
                 statement.setInt(1, userId);
                 statement.setString(2, input.representativeName());
                 statement.setString(3, nullable(input.company()));
                 statement.setString(4, input.phoneE164());
                 statement.setString(5, nullable(input.iconImageUrl()));
+                statement.setString(6, nullable(input.secondaryPhoneE164()));
                 statement.executeUpdate();
             }
             saveIndustryPreferences(connection, userId, industries);
@@ -229,12 +299,13 @@ public class ProfileDao extends Dao {
             }
             // LINEの表示名は保持し、本人が入力した代表者名や電話番号は事業主プロフィールへ保存する。
             try (PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,phone_e164,icon_image_url,area) "
-                    + "VALUES (?,?,?,?,?,?,?,?,?,ST_SetSRID(ST_GeomFromGeoJSON(?),4326)) "
+                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,phone_e164,icon_image_url,area,secondary_phone_e164) "
+                    + "VALUES (?,?,?,?,?,?,?,?,?,ST_SetSRID(ST_GeomFromGeoJSON(?),4326),?) "
                     + "ON CONFLICT (user_id) DO UPDATE SET business_name=EXCLUDED.business_name,representative_name=EXCLUDED.representative_name,"
                     + "employee_count=EXCLUDED.employee_count,preferred_area=EXCLUDED.preferred_area,industry_experience=EXCLUDED.industry_experience,"
                     + "management_experience=EXCLUDED.management_experience,phone_e164=EXCLUDED.phone_e164,"
-                    + "icon_image_url=EXCLUDED.icon_image_url,area=EXCLUDED.area,updated_at=CURRENT_TIMESTAMP")) {
+                    + "icon_image_url=EXCLUDED.icon_image_url,area=EXCLUDED.area,"
+                    + "secondary_phone_e164=EXCLUDED.secondary_phone_e164,updated_at=CURRENT_TIMESTAMP")) {
                 statement.setInt(1, userId);
                 statement.setString(2, input.businessName());
                 statement.setString(3, input.representativeName());
@@ -245,6 +316,7 @@ public class ProfileDao extends Dao {
                 statement.setString(8, input.phoneE164());
                 statement.setString(9, nullable(input.iconImageUrl()));
                 statement.setString(10, areaGeoJson);
+                statement.setString(11, nullable(input.secondaryPhoneE164()));
                 statement.executeUpdate();
             }
             try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_industry_preferences WHERE user_id=?")) {
@@ -420,6 +492,8 @@ public class ProfileDao extends Dao {
     }
 
     private static String nullable(String value) { return value == null || value.isBlank() ? null : value; }
+
+    private static String emptyIfNull(String value) { return value == null ? "" : value; }
 
     @FunctionalInterface
     private interface SaveWork { void run(Connection connection, User current) throws SQLException; }

@@ -30,7 +30,7 @@ public class OwnerSetupAction extends Action {
         if ("POST".equalsIgnoreCase(req.getMethod())) {
             req.setCharacterEncoding("UTF-8");
             if (!OnboardingSupport.validCsrf(req)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
-            fields = OnboardingSupport.fields(req, "representativeName", "company", "email", "phone", "iconImageUrl", "emailNotify");
+            fields = OnboardingSupport.fields(req, "representativeName", "company", "email", "phone", "secondaryPhone", "iconImageUrl", "emailNotify");
             industries = OnboardingSupport.selection(req, "preferredIndustry");
             try {
                 var input = RegistrationForms.owner(fields, OnboardingSupport.values(req, "preferredIndustry"));
@@ -51,7 +51,7 @@ public class OwnerSetupAction extends Action {
                 if ("28000".equals(e.getSQLState())) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
                 String message;
                 if ("23505".equals(e.getSQLState())) {
-                    message = "このメールアドレスまたは電話番号は既に登録されています。入力内容を確認してください。";
+                    message = "このメールアドレスは既に登録されています。入力内容を確認してください。";
                 } else if ("42P01".equals(e.getSQLState()) || "42501".equals(e.getSQLState())) {
                     message = "オーナー登録の準備が完了していません。管理者に確認してください。";
                 } else {
@@ -64,6 +64,7 @@ public class OwnerSetupAction extends Action {
             fields.put("representativeName", OnboardingSupport.lineValue(req.getSession(), "lineDisplayName", user.getDisplayName()));
             fields.put("email", OnboardingSupport.lineValue(req.getSession(), "lineEmail", user.getEmail()));
             fields.put("phone", "");
+            fields.put("secondaryPhone", "");
             fields.put("iconImageUrl", "");
             fields.put("company", "");
             fields.put("emailNotify", "on");

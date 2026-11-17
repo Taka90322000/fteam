@@ -250,6 +250,40 @@ public class RegistrationFormsTest {
     }
 
     @Test
+    public void businessAndOwnerAcceptOptionalSecondaryNumbersInTheSameFormat() {
+        Map<String, String> business = businessFields();
+        business.put("secondaryPhone", "０２８－６３３－９９８８");
+        assertEquals("+81286339988", RegistrationForms.business(business, List.of("1"), List.of()).secondaryPhoneE164());
+        Map<String, String> owner = ownerFields();
+        owner.put("secondaryPhone", "+81 90 1234 5678");
+        assertEquals("+819012345678", RegistrationForms.owner(owner, List.of("1")).secondaryPhoneE164());
+
+        for (String blank : new String[] { null, "", " \t" }) {
+            business.put("secondaryPhone", blank);
+            owner.put("secondaryPhone", blank);
+            assertNull(RegistrationForms.business(business, List.of("1"), List.of()).secondaryPhoneE164());
+            assertNull(RegistrationForms.owner(owner, List.of("1")).secondaryPhoneE164());
+        }
+    }
+
+    @Test
+    public void businessAndOwnerRejectDuplicateOrInvalidSecondaryNumbers() {
+        Map<String, String> business = businessFields();
+        Map<String, String> owner = ownerFields();
+        for (String secondary : new String[] { "invalid", "+819012345678" }) {
+            business.put("secondaryPhone", secondary);
+            rejects(() -> RegistrationForms.business(business, List.of("1"), List.of()));
+        }
+        for (String secondary : new String[] { "invalid", "+81286339988" }) {
+            owner.put("secondaryPhone", secondary);
+            rejects(() -> RegistrationForms.owner(owner, List.of("1")));
+        }
+        business.put("phone", " ");
+        business.put("secondaryPhone", "028-633-9988");
+        rejects(() -> RegistrationForms.business(business, List.of("1"), List.of()));
+    }
+
+    @Test
     public void repeatedBusinessMasterIdentifiersAreDeduplicated() {
         var input = RegistrationForms.business(businessFields(), List.of("2", "1", "2"), List.of("3", "3"));
         assertEquals(2, input.industryTypeIds().size());

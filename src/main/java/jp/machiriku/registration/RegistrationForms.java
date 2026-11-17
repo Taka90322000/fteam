@@ -24,6 +24,7 @@ import jp.machiriku.bean.BusinessProfileInput;
 import jp.machiriku.bean.LocationInput;
 import jp.machiriku.bean.OwnerProfileInput;
 import jp.machiriku.bean.ResidentProfileInput;
+import jp.machiriku.tool.PhoneNumbers;
 
 /** フォームの文字列を検証し、DBへ保存できるデータへ変換する。会員ID・利用区分は入力から受け取らない。 */
 public final class RegistrationForms {
@@ -60,10 +61,11 @@ public final class RegistrationForms {
         String company = optional(fields.get("company"), 150, "屋号・法人名");
         String email = email(fields.get("email"));
         String phone = normalizePhone(fields.get("phone"));
+        String secondaryPhone = secondaryPhone(fields.get("secondaryPhone"), phone); // 任意の追加番号。空欄はnull。
         List<Integer> industries = ids(industryIds, "誘致希望業種");
         if (industries.isEmpty()) { throw invalid("誘致希望業種を少なくとも1つ選択してください。"); }
         return new OwnerProfileInput(name, company, email, phone, industries, checked(fields.get("emailNotify")),
-                iconImageUrl(fields.get("iconImageUrl")));
+                iconImageUrl(fields.get("iconImageUrl")), secondaryPhone);
     }
 
     /** タブ選択画面のJSONを業種コードへ変換する。表示名の連結文字列は保存に使わない。 */
@@ -87,6 +89,7 @@ public final class RegistrationForms {
         String representative = required(fields.get("representativeName"), 100, "代表者名");
         String email = email(fields.get("email"));
         String phone = normalizePhone(fields.get("phone"));
+        String secondaryPhone = secondaryPhone(fields.get("secondaryPhone"), phone); // 任意の追加番号。空欄はnull。
         String areaName = required(fields.get("preferredArea"), 150, "出店希望エリア名");
         int employeeCount;
         try {
@@ -104,7 +107,7 @@ public final class RegistrationForms {
         String area = areaGeoJson(fields.get("preferredAreaPoints"));
         return new BusinessProfileInput(name, representative, email, phone, areaName, employeeCount,
                 management, experience, industries, qualifications, area, checked(fields.get("emailNotify")),
-                iconImageUrl(fields.get("iconImageUrl")));
+                iconImageUrl(fields.get("iconImageUrl")), secondaryPhone);
     }
 
     /** アイコンの参照先として、HTTP(S)のURLとWeb用の相対パスを受け付ける。 */
@@ -137,10 +140,16 @@ public final class RegistrationForms {
 
     /** 国内形式の電話番号を、プロフィールのphone_e164が使う国際形式へ統一する。 */
     public static String normalizePhone(String value) {
-        String phone = required(value, 50, "連絡先電話番号").replaceAll("[\\s()（）ー−‐-]", "");
-        if (phone.startsWith("0")) { phone = "+81" + phone.substring(1); }
-        if (!phone.matches("\\+[1-9][0-9]{7,14}")) { throw invalid("電話番号を正しく入力してください（例：090-1234-5678）。"); }
-        return phone;
+        return PhoneNumbers.toE164(required(value, 50, "主な連絡先電話番号"), "主な連絡先電話番号");
+    }
+
+    /** 追加番号を同じ形式で検証し、主番号と同じ番号の二重登録を防ぐ。 */
+    private static String secondaryPhone(String value, String primaryPhone) {
+        String secondary = PhoneNumbers.toE164(value, "追加の電話番号"); // 国際形式に統一した追加番号。
+        if (primaryPhone.equals(secondary)) {
+            throw invalid("追加の電話番号には、主な連絡先電話番号と異なる番号を入力してください。");
+        }
+        return secondary;
     }
 
     /** 日本の住所を都道府県・市区町村・番地へ分ける。座標は入力がある場合のみ対で保存する。 */

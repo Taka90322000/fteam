@@ -14,7 +14,6 @@
       ? (Set<String>) request.getAttribute("selectedIndustries") : java.util.Collections.emptySet();
   List<RegistrationChoice> industryChoices = request.getAttribute("industryChoices") instanceof List
       ? (List<RegistrationChoice>) request.getAttribute("industryChoices") : java.util.Collections.emptyList();
-  boolean formSubmitted = "POST".equals(request.getMethod());
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="物件オーナー プロフィール設定 | マチリク" />
@@ -73,11 +72,20 @@
         <!-- 連絡先電話番号 -->
         <div class="form-group" style="margin-bottom:1.25rem;">
           <label for="s18-owner-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
-            連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
+            主な連絡先電話番号（携帯・固定電話可） <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
           </label>
-          <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("phone", "")) %>" required placeholder="例: 09012345678 (ハイフンなし)">
-          <div id="s18-owner-phone-error" style="display:none; color:var(--danger-text); font-size:0.8rem; margin-top:0.35rem; font-weight:600;"></div>
+          <input id="s18-owner-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("phone", "")) %>" required maxlength="50" placeholder="例：028-633-9988、090-1234-5678">
+          <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">携帯・固定・IP電話を入力できます。ハイフン付きでも入力できます。</span>
           <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店希望者との連絡、物件問い合わせや運営確認用に使用されます。</span>
+        </div>
+
+        <%-- 任意の追加連絡先。空欄で保存すると登録済みの追加番号を削除する。 --%>
+        <div class="form-group" style="margin-bottom:1.25rem;">
+          <label for="s18-owner-secondary-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
+            追加の電話番号 <span style="font-size:0.78rem; color:var(--text-sub);">（任意）</span>
+          </label>
+          <input id="s18-owner-secondary-phone" name="secondaryPhone" type="tel" inputmode="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("secondaryPhone", "")) %>" maxlength="50" placeholder="例：090-1234-5678">
+          <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">事業所や担当者の別の連絡先がある場合に入力してください。</span>
         </div>
 
         <!-- メールアドレス -->
@@ -116,7 +124,7 @@
            ======================================================== -->
       <div class="profile-section-block" style="margin-bottom:1.5rem; padding-top:0.5rem; border-top:1px solid var(--border-color);">
         <label style="display:flex; align-items:center; gap:0.65rem; cursor:pointer; font-size:0.875rem; color:var(--text-main); font-weight:600; line-height:1.45; padding:0.75rem 1rem; background:var(--bg-subtle); border-radius:var(--radius-md); border:1px solid var(--border-color); box-sizing:border-box; min-height:48px;">
-          <input type="checkbox" id="s18-owner-email-notify" name="emailNotify" <%= !formSubmitted || formValues.containsKey("emailNotify") ? "checked" : "" %> style="cursor:pointer; width:18px; height:18px; margin:0; flex-shrink:0;">
+          <input type="checkbox" id="s18-owner-email-notify" name="emailNotify" <%= "on".equals(formValues.get("emailNotify")) ? "checked" : "" %> style="cursor:pointer; width:18px; height:18px; margin:0; flex-shrink:0;">
           <span>所有物件への出店応募や事業主からの問い合わせ通知をメールで受け取る</span>
         </label>
       </div>
@@ -144,30 +152,6 @@
 </section>
 
 <script>
-  function showOwnerPhoneError(msg) {
-    const errorEl = document.getElementById('s18-owner-phone-error');
-    const phoneInput = document.getElementById('s18-owner-phone');
-    if (errorEl) {
-      errorEl.textContent = msg;
-      errorEl.style.display = 'block';
-    }
-    if (phoneInput) {
-      phoneInput.style.borderColor = 'var(--danger-border, #ef4444)';
-    }
-  }
-
-  function clearOwnerPhoneError() {
-    const errorEl = document.getElementById('s18-owner-phone-error');
-    const phoneInput = document.getElementById('s18-owner-phone');
-    if (errorEl) {
-      errorEl.textContent = '';
-      errorEl.style.display = 'none';
-    }
-    if (phoneInput) {
-      phoneInput.style.borderColor = '';
-    }
-  }
-
   function validateOwnerForm() {
     const repName = document.getElementById('s18-owner-name');
     const phone = document.getElementById('s18-owner-phone');
@@ -177,27 +161,12 @@
       if (repName) repName.focus();
       return false;
     }
+    // 番号の形式はサーバーの共通処理で検証し、ここでは必須入力を確認する。
     if (!phone || !phone.value.trim()) {
-      showOwnerPhoneError('連絡先電話番号を入力してください');
       alert('連絡先電話番号を入力してください');
       if (phone) phone.focus();
       return false;
     }
-    const rawOwnerPhone = phone.value.trim();
-    const ownerDigitsOnly = rawOwnerPhone.replace(/[\s()（）ー−‐-]/g, '');
-    if (!/^\d+$/.test(ownerDigitsOnly)) {
-      showOwnerPhoneError('電話番号は半角数字で入力してください（英字や記号は使用できません）');
-      alert('電話番号は半角数字で入力してください（英字や記号は使用できません）');
-      if (phone) phone.focus();
-      return false;
-    }
-    if (ownerDigitsOnly.length < 9 || ownerDigitsOnly.length > 11) {
-      showOwnerPhoneError('電話番号の桁数を確認してください（例: 09012345678）');
-      alert('電話番号の桁数を確認してください（例: 09012345678）');
-      if (phone) phone.focus();
-      return false;
-    }
-    clearOwnerPhoneError();
 
     const industries = document.querySelectorAll('input[name="preferredIndustry"]:checked');
     if (industries.length === 0) {
@@ -208,21 +177,6 @@
     return true;
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const ownerPhoneInput = document.getElementById('s18-owner-phone');
-    if (ownerPhoneInput) {
-      ownerPhoneInput.addEventListener('input', function() {
-        const val = this.value.trim();
-        if (!val) { clearOwnerPhoneError(); return; }
-        const digits = val.replace(/[\s()（）ー−‐-]/g, '');
-        if (!/^\d*$/.test(digits)) {
-          showOwnerPhoneError('※電話番号は半角数字で入力してください（英字や記号は使用できません）');
-        } else {
-          clearOwnerPhoneError();
-        }
-      });
-    }
-  });
 </script>
 
 <jsp:include page="/WEB-INF/views/common/footer.jsp" />

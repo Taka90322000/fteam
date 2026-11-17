@@ -31,7 +31,7 @@ public class BusinessSetupAction extends Action {
         if (posting) {
             req.setCharacterEncoding("UTF-8");
             if (!OnboardingSupport.validCsrf(req)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
-            fields = OnboardingSupport.fields(req, "businessName", "representativeName", "email", "phone", "preferredArea", "preferredAreaPoints",
+            fields = OnboardingSupport.fields(req, "businessName", "representativeName", "email", "phone", "secondaryPhone", "preferredArea", "preferredAreaPoints",
                     "employeeCount", "mgmtExperience", "industryExperience", "iconImageUrl", "emailNotify");
             industries = OnboardingSupport.selection(req, "preferredIndustry");
             qualifications = OnboardingSupport.selection(req, "qualification");
@@ -53,7 +53,7 @@ public class BusinessSetupAction extends Action {
                 OnboardingSupport.logDatabaseError(req, e);
                 if ("28000".equals(e.getSQLState())) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
                 req.setAttribute("errorMessage", "23505".equals(e.getSQLState())
-                        ? "このメールアドレスまたは電話番号は既に登録されています。入力内容を確認してください。"
+                        ? "このメールアドレスは既に登録されています。入力内容を確認してください。"
                         : "登録内容を保存できませんでした。入力内容と地図の範囲を確認して、もう一度お試しください。");
             }
         } else {
@@ -62,6 +62,7 @@ public class BusinessSetupAction extends Action {
             fields.put("businessName", "");
             fields.put("representativeName", "");
             fields.put("phone", "");
+            fields.put("secondaryPhone", "");
             fields.put("iconImageUrl", "");
             fields.put("employeeCount", "1");
             fields.put("mgmtExperience", "");

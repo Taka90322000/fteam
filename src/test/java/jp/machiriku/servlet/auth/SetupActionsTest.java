@@ -62,14 +62,15 @@ public class SetupActionsTest {
         request.sessionValues.put("lineEmail", "line-business@example.com");
         request.parameters.put("representativeName", "不正な代表者名");
         FakeDao dao = new FakeDao();
-        dao.profileContact = Map.of("phone", "+819012345678", "iconImageUrl", "/assets/business.png");
+        dao.profileContact = Map.of("phone", "090-1234-5678", "secondaryPhone", "028-633-9988", "iconImageUrl", "/assets/business.png");
         new BusinessAction(dao).execute(request.request, request.response);
         assertEquals(BUSINESS_VIEW, request.forwarded);
         assertEquals("", request.attributes.get("displayName"));
         assertEquals("line-business@example.com", request.attributes.get("email"));
         assertEquals("", values(request).get("businessName"));
         assertEquals("", values(request).get("representativeName"));
-        assertEquals("+819012345678", values(request).get("phone"));
+        assertEquals("090-1234-5678", values(request).get("phone"));
+        assertEquals("028-633-9988", values(request).get("secondaryPhone"));
         assertEquals("/assets/business.png", values(request).get("iconImageUrl"));
         assertEquals(42, dao.contactUserId);
         assertEquals("BUSINESS", dao.contactRole);
@@ -91,14 +92,15 @@ public class SetupActionsTest {
         request.parameters.put("displayName", "不正な名前");
         request.parameters.put("email", "attacker@example.invalid");
         FakeDao dao = new FakeDao();
-        dao.profileContact = Map.of("phone", "+81286339988", "iconImageUrl", "https://example.com/owner.png");
+        dao.profileContact = Map.of("phone", "028-633-9988", "secondaryPhone", "090-1234-5678", "iconImageUrl", "https://example.com/owner.png");
         new OwnerAction(dao).execute(request.request, request.response);
         assertEquals(OWNER_VIEW, request.forwarded);
         assertEquals("検証済みオーナー名", request.attributes.get("displayName"));
         assertEquals("検証済みオーナー名", values(request).get("representativeName"));
         assertEquals("line-owner@example.invalid", values(request).get("email"));
         assertEquals("", values(request).get("company"));
-        assertEquals("+81286339988", values(request).get("phone"));
+        assertEquals("028-633-9988", values(request).get("phone"));
+        assertEquals("090-1234-5678", values(request).get("secondaryPhone"));
         assertEquals("https://example.com/owner.png", values(request).get("iconImageUrl"));
         assertEquals(42, dao.contactUserId);
         assertEquals("OWNER", dao.contactRole);
@@ -306,6 +308,7 @@ public class SetupActionsTest {
     @Test
     public void ownerPostSavesValidatedFieldsAndCompletesSessionOnlyAfterSave() throws Exception {
         Harness request = ownerPost();
+        request.parameters.put("secondaryPhone", "090-1234-5678");
         request.parameters.put("userId", "1");
         request.parameters.put("userRole", "admin");
         request.parameters.put("email", " ");
@@ -318,6 +321,7 @@ public class SetupActionsTest {
         assertEquals("テスト不動産", dao.ownerInput.company());
         assertNull(dao.ownerInput.email());
         assertEquals("+81286339988", dao.ownerInput.phoneE164());
+        assertEquals("+819012345678", dao.ownerInput.secondaryPhoneE164());
         assertEquals("https://example.com/owner.png", dao.ownerInput.iconImageUrl());
         assertEquals("https://example.com/owner.png", request.sessionValues.get("iconImageUrl"));
         assertEquals("+81286339988", request.sessionValues.get("phone"));
@@ -336,6 +340,7 @@ public class SetupActionsTest {
     @Test
     public void businessPostPersistsNormalizedPhoneMasterIdsAndPolygonBeforeSessionUpdate() throws Exception {
         Harness request = businessPost();
+        request.parameters.put("secondaryPhone", "+81 28 633 9988");
         FakeDao dao = new FakeDao();
         new BusinessAction(dao).execute(request.request, request.response);
         assertEquals(1, dao.saves);
@@ -343,6 +348,7 @@ public class SetupActionsTest {
         assertEquals("新しい事業所", dao.businessInput.businessName());
         assertEquals("代表者氏名", dao.businessInput.representativeName());
         assertEquals("+819012345678", dao.businessInput.phoneE164());
+        assertEquals("+81286339988", dao.businessInput.secondaryPhoneE164());
         assertEquals("/assets/business.png", dao.businessInput.iconImageUrl());
         assertEquals("/assets/business.png", request.sessionValues.get("iconImageUrl"));
         assertEquals("+819012345678", request.sessionValues.get("phone"));
@@ -373,6 +379,24 @@ public class SetupActionsTest {
         assertSame(previous, request.sessionValues.get("user"));
         assertNull(request.sessionValues.get("isOnboarded"));
         assertNull(request.redirect);
+    }
+
+    @Test
+    public void invalidSecondaryPhonePreservesBothInputsForEachRegistrationRole() throws Exception {
+        for (String role : List.of("OWNER", "BUSINESS")) {
+            Harness request = "OWNER".equals(role) ? ownerPost() : businessPost();
+            request.parameters.put("secondaryPhone", "invalid");
+            User previous = (User) request.sessionValues.get("user");
+            FakeDao dao = new FakeDao();
+            Action action = "OWNER".equals(role) ? new OwnerAction(dao) : new BusinessAction(dao);
+            action.execute(request.request, request.response);
+            assertEquals(0, dao.saves);
+            assertEquals("invalid", values(request).get("secondaryPhone"));
+            assertEquals(request.parameters.get("phone"), values(request).get("phone"));
+            assertSame(previous, request.sessionValues.get("user"));
+            assertNull(request.sessionValues.get("isOnboarded"));
+            assertTrue(request.attributes.get("errorMessage").toString().contains("追加の電話番号"));
+        }
     }
 
     @Test

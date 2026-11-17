@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jp.machiriku.bean.BusinessProfileInput;
 import jp.machiriku.bean.OwnerProfileInput;
+import jp.machiriku.bean.ProfileSettings;
 import jp.machiriku.bean.RegistrationChoice;
 import jp.machiriku.bean.ResidentProfileInput;
 import jp.machiriku.bean.User;
@@ -96,11 +97,13 @@ public class ProfileAction extends Action {
             fields.put("gender", "回答しない");
             fields.put("industry", "");
             fields.put("preferredIndustries", "[]");
-            fields.put("emailNotify", "on");
+            fields.put("emailNotify", "");
             try {
                 fields.putAll(createProfileDao().findResidentFields(user.getUserId()));
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
+                res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+                return;
             }
         }
 
@@ -125,7 +128,7 @@ public class ProfileAction extends Action {
                 res.sendError(HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
-            fields = ProfileSupport.fields(req, "businessName", "representativeName", "email", "phone",
+            fields = ProfileSupport.fields(req, "businessName", "representativeName", "email", "phone", "secondaryPhone",
                     "preferredArea", "preferredAreaPoints", "employeeCount", "mgmtExperience",
                     "industryExperience", "iconImageUrl", "emailNotify");
             industries = ProfileSupport.selection(req, "preferredIndustry");
@@ -152,7 +155,7 @@ public class ProfileAction extends Action {
                     return;
                 }
                 req.setAttribute("errorMessage", "23505".equals(e.getSQLState())
-                        ? "このメールアドレスまたは電話番号は既に登録されています。入力内容を確認してください。"
+                        ? "このメールアドレスは既に登録されています。入力内容を確認してください。"
                         : "設定内容を保存できませんでした。入力内容をご確認の上、もう一度お試しください。");
             }
         }
@@ -164,23 +167,26 @@ public class ProfileAction extends Action {
             qualificationChoices = createProfileDao().listQualifications();
         } catch (SQLException e) {
             ProfileSupport.logDatabaseError(req, e);
+            res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+            return;
         }
 
         if (fields == null) {
-            fields = new LinkedHashMap<>();
-            fields.put("email", user.getEmail() == null ? "" : user.getEmail());
-            fields.put("businessName", "");
-            fields.put("representativeName", user.getDisplayName());
-            fields.put("phone", "");
-            fields.put("iconImageUrl", "");
-            fields.put("employeeCount", "1");
-            fields.put("mgmtExperience", "");
-            fields.put("industryExperience", "");
-            fields.put("emailNotify", "on");
             try {
-                fields.putAll(createProfileDao().findProfileContact(user.getUserId(), "BUSINESS"));
+                // 保存済みの項目と選択IDをまとめて復元する。
+                ProfileSettings settings = createProfileDao().findProfileSettings(user.getUserId(), "BUSINESS");
+                if (settings == null) {
+                    res.sendError(HttpServletResponse.SC_NOT_FOUND);
+                    return;
+                }
+                fields = new LinkedHashMap<>(settings.fields());
+                industries = settings.selectedIndustries();
+                qualifications = settings.selectedQualifications();
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
+                // 復元に失敗した空のフォームから、保存済み情報を上書きさせない。
+                res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+                return;
             }
         }
 
@@ -208,7 +214,7 @@ public class ProfileAction extends Action {
                 res.sendError(HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
-            fields = ProfileSupport.fields(req, "representativeName", "company", "email", "phone", "iconImageUrl", "emailNotify");
+            fields = ProfileSupport.fields(req, "representativeName", "company", "email", "phone", "secondaryPhone", "iconImageUrl", "emailNotify");
             industries = ProfileSupport.selection(req, "preferredIndustry");
             try {
                 OwnerProfileInput input = RegistrationForms.owner(fields, ProfileSupport.values(req, "preferredIndustry"));
@@ -230,7 +236,7 @@ public class ProfileAction extends Action {
                     return;
                 }
                 req.setAttribute("errorMessage", "23505".equals(e.getSQLState())
-                        ? "このメールアドレスまたは電話番号は既に登録されています。入力内容を確認してください。"
+                        ? "このメールアドレスは既に登録されています。入力内容を確認してください。"
                         : "設定内容を保存できませんでした。入力内容をご確認の上、もう一度お試しください。");
             }
         }
@@ -240,20 +246,24 @@ public class ProfileAction extends Action {
             industryChoices = createProfileDao().listIndustries();
         } catch (SQLException e) {
             ProfileSupport.logDatabaseError(req, e);
+            res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+            return;
         }
 
         if (fields == null) {
-            fields = new LinkedHashMap<>();
-            fields.put("representativeName", user.getDisplayName());
-            fields.put("company", "");
-            fields.put("email", user.getEmail() == null ? "" : user.getEmail());
-            fields.put("phone", "");
-            fields.put("iconImageUrl", "");
-            fields.put("emailNotify", "on");
             try {
-                fields.putAll(createProfileDao().findProfileContact(user.getUserId(), "OWNER"));
+                // LINE表示名とは別に保存した代表者名・法人名も復元する。
+                ProfileSettings settings = createProfileDao().findProfileSettings(user.getUserId(), "OWNER");
+                if (settings == null) {
+                    res.sendError(HttpServletResponse.SC_NOT_FOUND);
+                    return;
+                }
+                fields = new LinkedHashMap<>(settings.fields());
+                industries = settings.selectedIndustries();
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
+                res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+                return;
             }
         }
 

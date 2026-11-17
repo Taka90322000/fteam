@@ -10,7 +10,6 @@
       ? (Map<String, String>) request.getAttribute("formValues") : java.util.Collections.emptyMap();
   displayName = formValues.getOrDefault("name", displayName);
   email = formValues.getOrDefault("email", email);
-  boolean formSubmitted = "POST".equals(request.getMethod());
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="プロフィール・基本情報設定 | マチリク" />
@@ -220,7 +219,7 @@
            ======================================================== -->
       <div class="profile-section-block" style="margin-bottom:1.5rem; padding-top:0.5rem; border-top:1px solid var(--border-color);">
         <label style="display:flex; align-items:center; gap:0.65rem; cursor:pointer; font-size:0.875rem; color:var(--text-main); font-weight:600; line-height:1.45; padding:0.75rem 1rem; background:var(--bg-subtle); border-radius:var(--radius-md); border:1px solid var(--border-color); box-sizing:border-box; min-height:48px;">
-          <input type="checkbox" id="s18-email-notify" name="emailNotify" <%= !formSubmitted || formValues.containsKey("emailNotify") ? "checked" : "" %> style="cursor:pointer; width:18px; height:18px; margin:0; flex-shrink:0;">
+          <input type="checkbox" id="s18-email-notify" name="emailNotify" <%= "on".equals(formValues.get("emailNotify")) ? "checked" : "" %> style="cursor:pointer; width:18px; height:18px; margin:0; flex-shrink:0;">
           <span>新着店舗や新着クーポン情報をメールで受け取る</span>
         </label>
       </div>

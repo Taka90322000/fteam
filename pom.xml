@@ -22,6 +22,12 @@
 
   <dependencies>
     <dependency>
+        <!-- 携帯・固定・IP電話を検証し、保存用と表示用の形式に変換する。 -->
+        <groupId>com.googlecode.libphonenumber</groupId>
+        <artifactId>libphonenumber</artifactId>
+        <version>9.0.43</version>
+    </dependency>
+    <dependency>
         <!-- Web公開ディレクトリ外に置いた.envを読み込むためのライブラリ。 -->
         <groupId>io.github.cdimascio</groupId>
         <artifactId>dotenv-java</artifactId>

@@ -8,9 +8,13 @@ CREATE TABLE public.owner_profiles (
     company_name varchar(150),
     icon_image_url text,
     phone_e164 varchar(16) NOT NULL,
+    secondary_phone_e164 varchar(16),
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_owner_profiles_phone_e164 UNIQUE (phone_e164),
-    CONSTRAINT ck_owner_profiles_phone_e164 CHECK (phone_e164 ~ '^\+[1-9][0-9]{7,14}$')
+    CONSTRAINT ck_owner_profiles_phone_e164 CHECK (phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
+    CONSTRAINT ck_owner_profiles_secondary_phone_e164
+        CHECK (secondary_phone_e164 IS NULL OR secondary_phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
+    CONSTRAINT ck_owner_profiles_phone_numbers_distinct
+        CHECK (secondary_phone_e164 IS NULL OR secondary_phone_e164 <> phone_e164)
 );
 
 -- 登録処理が必要とする参照・登録・更新だけをアプリ用ユーザーへ付与する。

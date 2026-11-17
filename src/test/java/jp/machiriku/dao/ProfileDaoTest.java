@@ -5,12 +5,17 @@ import static org.junit.Assert.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.After;
 import org.junit.Assume;
@@ -20,7 +25,9 @@ import org.junit.Test;
 import jp.machiriku.bean.BusinessProfileInput;
 import jp.machiriku.bean.LocationInput;
 import jp.machiriku.bean.OwnerProfileInput;
+import jp.machiriku.bean.ProfileSettings;
 import jp.machiriku.bean.ResidentProfileInput;
+import jp.machiriku.registration.RegistrationForms;
 
 /** 実DBの構造を独立した一時テーブルへ複製し、既存会員・実テーブルの採番を変更せず保存と取消を確認する。 */
 public class ProfileDaoTest {
@@ -40,7 +47,7 @@ public class ProfileDaoTest {
                 if (table.equals("owner_profiles")) {
                     // 管理者が本番用SQLを実行する前でも、新規テーブルの形を一時表だけで検証できる。
                     sql.execute("CREATE TEMP TABLE owner_profiles (user_id integer PRIMARY KEY,representative_name varchar(100) NOT NULL,"
-                            + "company_name varchar(150),phone_e164 varchar(16) NOT NULL UNIQUE CHECK (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'),"
+                            + "company_name varchar(150),phone_e164 varchar(16) NOT NULL CHECK (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'),"
                             + "icon_image_url text,updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP) ON COMMIT PRESERVE ROWS");
                 } else {
                     sql.execute("CREATE TEMP TABLE " + table + " (LIKE public." + table + " INCLUDING ALL) ON COMMIT PRESERVE ROWS");
@@ -54,7 +61,21 @@ public class ProfileDaoTest {
             sql.execute("ALTER TABLE users DROP COLUMN IF EXISTS phone_e164");
             sql.execute("ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS phone_e164 varchar(16), ADD COLUMN IF NOT EXISTS icon_image_url text");
             sql.execute("ALTER TABLE business_profiles ALTER COLUMN phone_e164 SET NOT NULL, ADD CHECK (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$')");
-            sql.execute("CREATE UNIQUE INDEX test_business_phone_unique ON business_profiles(phone_e164)");
+            // LIKEで複製した電話番号の一意制約を、旧移行SQLと同じ名前で作り直す。
+            List<String> phoneConstraints = new ArrayList<>();
+            try (ResultSet constraints = sql.executeQuery(
+                    "SELECT c.conname FROM pg_constraint c JOIN pg_attribute a "
+                    + "ON a.attrelid=c.conrelid AND c.conkey=ARRAY[a.attnum] "
+                    + "WHERE c.conrelid='pg_temp.business_profiles'::regclass AND c.contype='u' AND a.attname='phone_e164'")) {
+                while (constraints.next()) { phoneConstraints.add(constraints.getString(1)); }
+            }
+            for (String name : phoneConstraints) {
+                sql.execute("ALTER TABLE pg_temp.business_profiles DROP CONSTRAINT \"" + name.replace("\"", "\"\"") + "\"");
+            }
+            sql.execute("ALTER TABLE pg_temp.business_profiles ADD CONSTRAINT uq_business_profiles_phone_e164 UNIQUE (phone_e164)");
+            sql.execute("ALTER TABLE pg_temp.owner_profiles ADD CONSTRAINT uq_owner_profiles_phone_e164 UNIQUE (phone_e164)");
+            // 実際の移行SQLを一時テーブルに適用し、公開テーブルへは変更を加えない。
+            sql.execute(phoneMigration());
             // LIKEで複製されない外部キーは、一時テーブル同士にだけ追加する。
             sql.execute("ALTER TABLE resident_profiles ADD FOREIGN KEY (user_id) REFERENCES pg_temp.users(user_id)");
             sql.execute("ALTER TABLE business_profiles ADD FOREIGN KEY (user_id) REFERENCES pg_temp.users(user_id)");
@@ -109,6 +130,96 @@ public class ProfileDaoTest {
         assertEquals("36.561000", text("SELECT latitude::text FROM user_locations WHERE user_id=1 AND location_kind='HOME'"));
         assertEquals("true", text("SELECT email_enabled::text FROM notification_settings WHERE user_id=1"));
         assertEquals("test-resident", saved.getLineSubject());
+    }
+
+    @Test
+    public void residentCanChangeOnlyNicknameWithoutLosingAddressesCoordinatesOrNotificationChoice() throws Exception {
+        var saved = dao.saveResident(1, resident("登録名", "resident-new@example.invalid", home(), work(), false));
+        Map<String, String> fields = new LinkedHashMap<>(dao.findResidentFields(1));
+        assertEquals("栃木県宇都宮市本町1-1", fields.get("livingAddress"));
+        assertEquals("栃木県宇都宮市駅前通り2-2", fields.get("workAddress"));
+        assertEquals("36.561000", fields.get("livingLat"));
+        assertEquals("139.883000", fields.get("livingLng"));
+        assertEquals("36.561000", fields.get("workLat"));
+        assertEquals("139.883000", fields.get("workLng"));
+        assertEquals("", fields.get("emailNotify"));
+
+        fields.put("name", "ニックネームだけ変更");
+        fields.put("email", saved.getEmail());
+        dao.saveResident(1, RegistrationForms.resident(fields));
+        assertEquals("ニックネームだけ変更", text("SELECT display_name FROM users WHERE user_id=1"));
+        assertEquals("栃木県宇都宮市本町1-1", dao.findResidentFields(1).get("livingAddress"));
+        assertEquals("栃木県宇都宮市駅前通り2-2", dao.findResidentFields(1).get("workAddress"));
+        assertEquals(2, count("SELECT count(*) FROM user_locations WHERE user_id=1"));
+        assertEquals("false", text("SELECT email_enabled::text FROM notification_settings WHERE user_id=1"));
+
+        // 番地が任意の場合も、都道府県と市区町村を再表示する。
+        execute("UPDATE user_locations SET address_line=NULL WHERE user_id=1 AND location_kind='HOME'");
+        assertEquals("栃木県宇都宮市", dao.findResidentFields(1).get("livingAddress"));
+    }
+
+    @Test
+    public void businessSettingsCanBeSavedUnchangedWithAllPreferencesAndQualifications() throws Exception {
+        dao.saveBusiness(2, new BusinessProfileInput("保存済み屋号", "本人が入力した代表者", "business-new@example.invalid",
+                "+81286339988", "宇都宮駅周辺", 0, "あり", "5年以上", List.of(10, 11), List.of(100),
+                AREA, false, "/assets/business.png", "+819012345678"));
+        execute("UPDATE business_qualifications SET credential_number='SAVED-CREDENTIAL',obtained_on=DATE '2020-01-01' WHERE business_user_id=2 AND qualification_id=100");
+        ProfileSettings settings = dao.findProfileSettings(2, "BUSINESS");
+        Map<String, String> fields = settings.fields();
+        assertEquals("保存済み屋号", fields.get("businessName"));
+        assertEquals("本人が入力した代表者", fields.get("representativeName"));
+        assertEquals("0", fields.get("employeeCount"));
+        assertEquals("宇都宮駅周辺", fields.get("preferredArea"));
+        assertEquals("あり", fields.get("mgmtExperience"));
+        assertEquals("5年以上", fields.get("industryExperience"));
+        assertEquals("028-633-9988", fields.get("phone"));
+        assertEquals("090-1234-5678", fields.get("secondaryPhone"));
+        assertEquals("/assets/business.png", fields.get("iconImageUrl"));
+        assertEquals("", fields.get("emailNotify"));
+        assertEquals(Set.of("10", "11"), settings.selectedIndustries());
+        assertEquals(Set.of("100"), settings.selectedQualifications());
+
+        // 地図の再選択なしで、復元した点列から元の範囲を保存できる。
+        var input = RegistrationForms.business(fields, new ArrayList<>(settings.selectedIndustries()),
+                new ArrayList<>(settings.selectedQualifications()));
+        dao.saveBusiness(2, input);
+        assertBusinessArea(AREA);
+        assertEquals("SAVED-CREDENTIAL", text("SELECT credential_number FROM business_qualifications WHERE business_user_id=2 AND qualification_id=100 AND is_active"));
+        assertEquals("あり", text("SELECT management_experience FROM business_profiles WHERE user_id=2"));
+        assertEquals("5年以上", text("SELECT industry_experience FROM business_profiles WHERE user_id=2"));
+        assertEquals("false", text("SELECT email_enabled::text FROM notification_settings WHERE user_id=2"));
+        assertEquals(2, count("SELECT count(*) FROM user_industry_preferences WHERE user_id=2"));
+    }
+
+    @Test
+    public void ownerSettingsRestoreRepresentativeCompanyAndIndustriesForAnUnchangedSave() throws Exception {
+        dao.saveOwner(6, new OwnerProfileInput("保存済み代表者", "保存済み法人", "owner-new@example.invalid", "+81286339988",
+                List.of(10, 11), false, "/assets/owner.png", "+819012345678"));
+        ProfileSettings settings = dao.findProfileSettings(6, "OWNER");
+        assertEquals("保存済み代表者", settings.fields().get("representativeName"));
+        assertEquals("保存済み法人", settings.fields().get("company"));
+        assertEquals("owner-new@example.invalid", settings.fields().get("email"));
+        assertEquals("028-633-9988", settings.fields().get("phone"));
+        assertEquals("", settings.fields().get("emailNotify"));
+        assertEquals(Set.of("10", "11"), settings.selectedIndustries());
+        assertEquals(Set.of(), settings.selectedQualifications());
+        dao.saveOwner(6, RegistrationForms.owner(settings.fields(), new ArrayList<>(settings.selectedIndustries())));
+        assertEquals("保存済み代表者", text("SELECT representative_name FROM owner_profiles WHERE user_id=6"));
+        assertEquals("保存済み法人", text("SELECT company_name FROM owner_profiles WHERE user_id=6"));
+        assertEquals("false", text("SELECT email_enabled::text FROM notification_settings WHERE user_id=6"));
+        assertEquals(2, count("SELECT count(*) FROM user_industry_preferences WHERE user_id=6"));
+    }
+
+    @Test
+    public void savedEmailNotificationsAreRestoredAsEnabledForEveryRole() throws Exception {
+        dao.saveResident(1, resident("住民", "resident-new@example.invalid", home(), null, true));
+        dao.saveBusiness(2, business("business-new@example.invalid", List.of(10), List.of(), AREA, true));
+        dao.saveOwner(6, owner("owner-new@example.invalid", null, List.of(10), true));
+        assertEquals("on", dao.findResidentFields(1).get("emailNotify"));
+        assertEquals("on", dao.findProfileSettings(2, "BUSINESS").fields().get("emailNotify"));
+        assertEquals("on", dao.findProfileSettings(6, "OWNER").fields().get("emailNotify"));
+        execute("DELETE FROM notification_settings WHERE user_id=2");
+        assertEquals("", dao.findProfileSettings(2, "BUSINESS").fields().get("emailNotify"));
     }
 
     @Test
@@ -200,9 +311,9 @@ public class ProfileDaoTest {
                 "https://example.invalid/owner.png"));
         dao.saveBusiness(2, new BusinessProfileInput("店舗", "代表者", null, "+819022222222", "宇都宮", 1,
                 null, null, List.of(10), List.of(), AREA, false, "/assets/business.png"));
-        assertEquals(Map.of("phone", "+819055555555", "iconImageUrl", "https://example.invalid/owner.png"),
+        assertEquals(Map.of("phone", "090-5555-5555", "secondaryPhone", "", "iconImageUrl", "https://example.invalid/owner.png"),
                 dao.findProfileContact(6, "OWNER"));
-        assertEquals(Map.of("phone", "+819022222222", "iconImageUrl", "/assets/business.png"),
+        assertEquals(Map.of("phone", "090-2222-2222", "secondaryPhone", "", "iconImageUrl", "/assets/business.png"),
                 dao.findProfileContact(2, "BUSINESS"));
         assertEquals(0, count("SELECT count(*) FROM pg_attribute WHERE attrelid='pg_temp.users'::regclass AND attname='phone_e164' AND NOT attisdropped"));
         dao.saveOwner(6, owner(null, null, List.of(10), false));
@@ -212,7 +323,7 @@ public class ProfileDaoTest {
     }
 
     @Test
-    public void profilePhoneConstraintsRejectMissingOrDuplicateNumbersAtomically() throws Exception {
+    public void profilePhoneConstraintsRequirePrimaryNumbersAndAllowSharedOfficeNumbers() throws Exception {
         SQLException ownerMissing = assertThrows(SQLException.class, () -> dao.saveOwner(6,
                 new OwnerProfileInput("オーナー", null, null, null, List.of(10), false)));
         assertEquals("23502", ownerMissing.getSQLState());
@@ -224,14 +335,59 @@ public class ProfileDaoTest {
         assertEquals("PENDING", text("SELECT account_status FROM users WHERE user_id=2"));
         dao.saveOwner(6, owner(null, null, List.of(10), false));
         dao.saveBusiness(2, business(null, List.of(10), List.of(), AREA, false));
-        SQLException ownerDuplicate = assertThrows(SQLException.class, () -> dao.saveOwner(8, owner(null, null, List.of(10), false)));
-        SQLException businessDuplicate = assertThrows(SQLException.class, () -> dao.saveBusiness(7, business(null, List.of(10), List.of(), AREA, false)));
-        assertEquals("23505", ownerDuplicate.getSQLState());
-        assertEquals("23505", businessDuplicate.getSQLState());
-        assertEquals("PENDING", text("SELECT account_status FROM users WHERE user_id=8"));
-        assertEquals("PENDING", text("SELECT account_status FROM users WHERE user_id=7"));
-        assertEquals(1, count("SELECT count(*) FROM owner_profiles"));
-        assertEquals(1, count("SELECT count(*) FROM business_profiles"));
+        dao.saveOwner(8, owner(null, null, List.of(10), false));
+        dao.saveBusiness(7, business(null, List.of(10), List.of(), AREA, false));
+        assertEquals("ACTIVE", text("SELECT account_status FROM users WHERE user_id=8"));
+        assertEquals("ACTIVE", text("SELECT account_status FROM users WHERE user_id=7"));
+        assertEquals(2, count("SELECT count(*) FROM owner_profiles"));
+        assertEquals(2, count("SELECT count(*) FROM business_profiles"));
+    }
+
+    @Test
+    public void secondaryNumbersAreInsertedReplacedClearedAndDisplayedInDomesticFormat() throws Exception {
+        dao.saveOwner(6, new OwnerProfileInput("オーナー", null, null, "+81286339988", List.of(10), false,
+                null, "+819012345678"));
+        dao.saveBusiness(2, new BusinessProfileInput("店舗", "代表者", null, "+81286339988", "宇都宮", 1,
+                null, null, List.of(10), List.of(), AREA, false, null, "+819012345678"));
+        for (String table : List.of("owner_profiles", "business_profiles")) {
+            assertEquals("+819012345678", text("SELECT secondary_phone_e164 FROM " + table));
+        }
+        assertEquals("090-1234-5678", dao.findProfileContact(6, "OWNER").get("secondaryPhone"));
+        assertEquals("028-633-9988", dao.findProfileContact(2, "BUSINESS").get("phone"));
+        assertEquals("090-1234-5678", dao.findProfileContact(2, "BUSINESS").get("secondaryPhone"));
+
+        dao.saveOwner(6, new OwnerProfileInput("オーナー", null, null, "+81286339988", List.of(10), false,
+                null, "+815012345678"));
+        dao.saveBusiness(2, new BusinessProfileInput("店舗", "代表者", null, "+81286339988", "宇都宮", 1,
+                null, null, List.of(10), List.of(), AREA, false, null, "+815012345678"));
+        for (String table : List.of("owner_profiles", "business_profiles")) {
+            assertEquals("+815012345678", text("SELECT secondary_phone_e164 FROM " + table));
+        }
+
+        // 移行SQLを再適用しても、主番号と追加番号を保持する。
+        execute(phoneMigration());
+        assertEquals("050-1234-5678", dao.findProfileContact(6, "OWNER").get("secondaryPhone"));
+        assertEquals("050-1234-5678", dao.findProfileContact(2, "BUSINESS").get("secondaryPhone"));
+        dao.saveOwner(6, owner(null, null, List.of(10), false));
+        dao.saveBusiness(2, business(null, List.of(10), List.of(), AREA, false));
+        for (String table : List.of("owner_profiles", "business_profiles")) {
+            assertNull(text("SELECT secondary_phone_e164 FROM " + table));
+        }
+    }
+
+    @Test
+    public void malformedOrRepeatedSecondaryNumbersRollBackRegistration() throws Exception {
+        for (String secondary : List.of("invalid", "+81286339988")) {
+            SQLException ownerError = assertThrows(SQLException.class, () -> dao.saveOwner(6,
+                    new OwnerProfileInput("オーナー", null, null, "+81286339988", List.of(10), false, null, secondary)));
+            SQLException businessError = assertThrows(SQLException.class, () -> dao.saveBusiness(2,
+                    new BusinessProfileInput("店舗", "代表者", null, "+81286339988", "宇都宮", 1,
+                            null, null, List.of(10), List.of(), AREA, false, null, secondary)));
+            assertEquals("23514", ownerError.getSQLState());
+            assertEquals("23514", businessError.getSQLState());
+            assertEquals("PENDING", text("SELECT account_status FROM users WHERE user_id=6"));
+            assertEquals("PENDING", text("SELECT account_status FROM users WHERE user_id=2"));
+        }
     }
 
     @Test
@@ -367,6 +523,12 @@ public class ProfileDaoTest {
                 assertTrue("送信した出店希望範囲が保存されること", row.getBoolean(1));
             }
         }
+    }
+
+    private String phoneMigration() throws Exception {
+        return Files.readString(Path.of("database/migrate-profile-phone-numbers.sql"))
+                .replace("public.business_profiles", "pg_temp.business_profiles")
+                .replace("public.owner_profiles", "pg_temp.owner_profiles");
     }
 
     private void execute(String query) throws SQLException { try (Statement sql = connection.createStatement()) { sql.execute(query); } }

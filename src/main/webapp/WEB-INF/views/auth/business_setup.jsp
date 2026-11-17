@@ -100,11 +100,18 @@
       <!-- 連絡先電話番号 -->
       <div class="form-group" style="margin-bottom:1.25rem;">
         <label for="s18-biz-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
-          連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
+          連絡先電話番号（携帯・固定電話可） <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-        <input id="s18-biz-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.get("phone")) %>" required placeholder="例: 09012345678 (ハイフンなし)">
-        <div id="s18-biz-phone-error" style="display:none; color:var(--danger-text); font-size:0.8rem; margin-top:0.35rem; font-weight:600;"></div>
+        <input id="s18-biz-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" class="form-control" value="<%= Html.escape(formValues.get("phone")) %>" required maxlength="50" placeholder="例：028-633-9988、090-1234-5678">
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店応募や物件オーナーとの連絡・確認用に使用されます。</span>
+      </div>
+
+      <%-- 任意の追加連絡先。空欄で保存すると登録済みの追加番号を削除する。 --%>
+      <div class="form-group" style="margin-bottom:1.25rem;">
+        <label for="s18-biz-secondary-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
+          追加の電話番号 <span style="font-size:0.78rem; color:var(--text-sub);">（任意）</span>
+        </label>
+        <input id="s18-biz-secondary-phone" name="secondaryPhone" type="tel" inputmode="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("secondaryPhone", "")) %>" maxlength="50" placeholder="例：090-1234-5678">
       </div>
 
       <!-- 出店希望業種・ジャンル (複数選択可) -->
@@ -317,27 +324,12 @@
       if (repName) repName.focus();
       return false;
     }
+    // 番号の形式はサーバーの共通処理で検証し、ここでは必須入力を確認する。
     if (!phone || !phone.value.trim()) {
-      showBizPhoneError('連絡先電話番号を入力してください');
       alert('連絡先電話番号を入力してください');
       if (phone) phone.focus();
       return false;
     }
-    const rawBizPhone = phone.value.trim();
-    const bizDigitsOnly = rawBizPhone.replace(/[\s()（）ー−‐-]/g, '');
-    if (!/^\d+$/.test(bizDigitsOnly)) {
-      showBizPhoneError('電話番号は半角数字で入力してください（英字や記号は使用できません）');
-      alert('電話番号は半角数字で入力してください（英字や記号は使用できません）');
-      if (phone) phone.focus();
-      return false;
-    }
-    if (bizDigitsOnly.length < 9 || bizDigitsOnly.length > 11) {
-      showBizPhoneError('電話番号の桁数を確認してください（例: 09012345678）');
-      alert('電話番号の桁数を確認してください（例: 09012345678）');
-      if (phone) phone.focus();
-      return false;
-    }
-    clearBizPhoneError();
     // DBで必須となる実際の範囲を確認し、エリア名だけでの登録を防ぐ。
     if (!areaInput || !areaInput.value.trim()) {
       alert('出店希望エリアを地図上で囲んで指定し、エリア名を入力してください');
@@ -664,47 +656,10 @@
     }
   }
 
-  function showBizPhoneError(msg) {
-    const errorEl = document.getElementById('s18-biz-phone-error');
-    const phoneInput = document.getElementById('s18-biz-phone');
-    if (errorEl) {
-      errorEl.textContent = msg;
-      errorEl.style.display = 'block';
-    }
-    if (phoneInput) {
-      phoneInput.style.borderColor = 'var(--danger-border, #ef4444)';
-    }
-  }
-
-  function clearBizPhoneError() {
-    const errorEl = document.getElementById('s18-biz-phone-error');
-    const phoneInput = document.getElementById('s18-biz-phone');
-    if (errorEl) {
-      errorEl.textContent = '';
-      errorEl.style.display = 'none';
-    }
-    if (phoneInput) {
-      phoneInput.style.borderColor = '';
-    }
-  }
-
   // 画面要素を取得できるようになってから、希望エリアマップの準備を始める。
   window.addEventListener('DOMContentLoaded', () => {
     // 範囲選択後に手修正したエリア名を、遅れて返った住所検索結果で上書きしない。
     document.getElementById('s18-biz-area').addEventListener('input', () => s18BizSelectionRevision++);
-    const bizPhoneInput = document.getElementById('s18-biz-phone');
-    if (bizPhoneInput) {
-      bizPhoneInput.addEventListener('input', function() {
-        const val = this.value.trim();
-        if (!val) { clearBizPhoneError(); return; }
-        const digits = val.replace(/[\s()（）ー−‐-]/g, '');
-        if (!/^\d*$/.test(digits)) {
-          showBizPhoneError('※電話番号は半角数字で入力してください（英字や記号は使用できません）');
-        } else {
-          clearBizPhoneError();
-        }
-      });
-    }
     initS18BizAreaMap();
   });
 </script>
