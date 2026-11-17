@@ -924,7 +924,7 @@ window.MachirikuScreens = (function() {
             </span>
             <span class="demand-stacked-metrics">
               <strong>${d.score} pt</strong>
-              <span class="demand-votes-breakdown">/ 計${totalVotes}票（1位:${r1}・2位:${r2}・3位:${r3}）</span>
+              <span class="demand-votes-breakdown">/ 計${totalVotes}票</span>
             </span>
           </div>
           <div class="demand-stacked-track" aria-hidden="true">
@@ -1236,11 +1236,11 @@ window.MachirikuScreens = (function() {
               </div>
 
               <div class="demand-ranking-header-row">
-                <h3 style="font-size:0.95rem; font-weight:800; color:var(--primary-700); margin:0;">希望業種ランキング Top 5</h3>
+                <h3 style="font-size:0.95rem; font-weight:800; color:var(--primary-700); margin:0;">希望業種ランキング</h3>
                 <ul class="demand-legend-list" role="list" aria-label="グラフ凡例">
-                  <li><span class="demand-legend-swatch rank-1" aria-hidden="true"></span>第1希望（×1.0）</li>
-                  <li><span class="demand-legend-swatch rank-2" aria-hidden="true"></span>第2希望（×0.6）</li>
-                  <li><span class="demand-legend-swatch rank-3" aria-hidden="true"></span>第3希望（×0.3）</li>
+                  <li><span class="demand-legend-swatch rank-1" aria-hidden="true"></span>第1希望</li>
+                  <li><span class="demand-legend-swatch rank-2" aria-hidden="true"></span>第2希望</li>
+                  <li><span class="demand-legend-swatch rank-3" aria-hidden="true"></span>第3希望</li>
                 </ul>
               </div>
               <div class="demand-bar-list ${restDemands.length > 0 ? 'demand-ranking-list-top' : ''}">

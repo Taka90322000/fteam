@@ -44,7 +44,7 @@
   <meta name="theme-color" content="#1b4332">
   <title>マチリク | 宇都宮の空き店舗と、欲しいお店</title>
   <meta name="description" content="宇都宮市の空き店舗を探し、欲しいお店に投票。地域の声を出店につなげるマチリク。">
-  <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css?v=20261116_mwg">
+  <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css?v=20261117_legend">
 </head>
 
 <body data-context-path="${pageContext.request.contextPath}">
@@ -150,7 +150,7 @@
   <script defer src="${pageContext.request.contextPath}/js/data.js?v=20261116_s02_demand"></script>
   <script defer src="${pageContext.request.contextPath}/js/map.js?v=20261112_profile_action"></script>
   <script defer src="${pageContext.request.contextPath}/js/store.js?v=20261116_s02_demand"></script>
-  <script defer src="${pageContext.request.contextPath}/js/screens.js?v=20261116_mwg"></script>
+  <script defer src="${pageContext.request.contextPath}/js/screens.js?v=20261117_ranking"></script>
   <script defer src="${pageContext.request.contextPath}/js/app.js?v=20261116_mwg"></script>
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";

@@ -5164,6 +5164,13 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
   .s02-view .disclosure-footer-action {
     margin-top: var(--space-3);
   }
+
+  .s02-view .demand-legend-list {
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    gap: var(--space-3);
+    font-size: 0.78rem;
+  }
 }
 
 /* モバイル専用 ページトップへ戻るボタン（PC版 > 640px では常に非表示） */
