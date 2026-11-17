@@ -115,6 +115,88 @@ window.MachirikuApp = (function() {
     return '';
   }
 
+  function isJspApp() {
+    return typeof window !== 'undefined' && window.__MACHIRIKU_CONTEXT_PATH__ !== undefined;
+  }
+
+  function getFixedScreen() {
+    return (typeof window !== 'undefined' && window.__MACHIRIKU_FIXED_SCREEN__)
+      ? String(window.__MACHIRIKU_FIXED_SCREEN__).toLowerCase()
+      : '';
+  }
+
+  function getQueryParams() {
+    const params = {};
+    if (typeof window === 'undefined' || !window.location || !window.location.search) return params;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      sp.forEach((v, k) => {
+        params[k] = v;
+      });
+    } catch (_) {}
+    return params;
+  }
+
+  const JSP_ROUTE_MAP = {
+    s02: '/property/detail.jsp',
+    r01: '/property/vote.jsp',
+    s03: '/property/vote.jsp',
+    b01: '/property/apply.jsp',
+    s08: '/property/apply.jsp',
+    o01: '/property/manage.jsp',
+    s11: '/property/manage.jsp',
+    o02: '/property/analytics.jsp',
+    s07: '/property/analytics.jsp',
+    o03: '/property/apply-list.jsp',
+    s09: '/property/apply-list.jsp',
+    o04: '/property/add.jsp',
+    o05: '/property/add-confirm.jsp',
+    o06: '/property/edit.jsp',
+    o07: '/property/edit-confirm.jsp',
+    o08: '/property/delete-confirm.jsp',
+    o09: '/property/delete-complete.jsp'
+  };
+
+  function resolveJspRoutePath(screenId, params = {}) {
+    const id = String(screenId || '').toLowerCase();
+    if (id === 's12') {
+      return (params && params.id) ? '/property/edit.jsp' : '/property/add.jsp';
+    }
+    return JSP_ROUTE_MAP[id] || null;
+  }
+
+  function buildScreenUrl(screenId = 's01', params = {}) {
+    const id = String(screenId || 's01').toLowerCase();
+    const base = String(getContextPath() || '').replace(/\/+$/, '');
+    if (isJspApp()) {
+      if (id === 's16' || id === 's17') {
+        const action = id === 's16' ? 'Login' : 'Register';
+        return `${base}/jp/machiriku/servlet/auth/${action}.action`;
+      }
+      const jspPath = resolveJspRoutePath(id, params);
+      if (jspPath) {
+        const keys = Object.keys(params || {}).filter(k => params[k] !== undefined && params[k] !== '');
+        const qs = keys.length ? `?${keys.map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join('&')}` : '';
+        return `${base}${jspPath}${qs}`;
+      }
+    }
+    return buildIndexJspUrl(id, params);
+  }
+
+  function buildDetailJspUrl(params = {}) {
+    return buildScreenUrl('s02', params);
+  }
+
+  function buildIndexJspUrl(screenId = 's01', params = {}) {
+    const base = String(getContextPath() || '').replace(/\/+$/, '');
+    let hash = `#${String(screenId || 's01').toLowerCase()}`;
+    const keys = Object.keys(params || {}).filter(k => params[k] !== undefined && params[k] !== '');
+    if (keys.length > 0) {
+      hash += `?${keys.map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join('&')}`;
+    }
+    return `${base}/index.jsp${hash}`;
+  }
+
   // 画面ごとのアクセス可能ロール定義（未定義の画面は全ユーザー公開）
   const SCREEN_PERMISSIONS = {
     // 出店事業主（および管理者）向け機能
@@ -174,6 +256,13 @@ window.MachirikuApp = (function() {
     return false;
   }
 
+  function isDemoPreviewMode() {
+    if (typeof document === 'undefined') return false;
+    const wrap = document.getElementById('header-role-picker-wrap');
+    const select = document.getElementById('preview-role');
+    return Boolean(wrap && select && wrap.style.display !== 'none' && !isUserAuthenticated());
+  }
+
   function checkRouteAuthorization(screenId) {
     const requiredRoles = SCREEN_PERMISSIONS[screenId];
     if (!requiredRoles) {
@@ -186,8 +275,11 @@ window.MachirikuApp = (function() {
       return { authorized: true };
     }
 
+    // デモ表示（未ログイン時のロール切替プルダウン有効時）は、会員専用プロフィール(S18)以外をロール別プレビュー許可
+    const allowDemoPreview = screenId !== 's18' && isDemoPreviewMode();
+
     // 1. 認証チェック（ログイン確認）
-    if (!isUserAuthenticated()) {
+    if (!isUserAuthenticated() && !allowDemoPreview) {
       return {
         authorized: false,
         reason: 'unauthenticated',
@@ -234,16 +326,41 @@ window.MachirikuApp = (function() {
       screenScrollPositions['s01'] = window.scrollY || window.pageYOffset || 0;
     }
 
+    const fixedScreen = getFixedScreen();
+    const rawHash = (typeof window !== 'undefined' && window.location && window.location.hash) ? window.location.hash.slice(1) : '';
     const parsed = parseHash();
-    currentScreenId = parsed.screenId;
-    currentParams = parsed.params;
-
-    // トップ画面内の認証リンクも、サーバー側のログイン状態と登録状態で振り分ける。
     const contextPath = getContextPath();
-    if (contextPath && (currentScreenId === 's16' || currentScreenId === 's17')) {
-      const action = currentScreenId === 's16' ? 'Login' : 'Register';
-      window.location.replace(`${contextPath}/jp/machiriku/servlet/auth/${action}.action`);
-      return;
+
+    if (fixedScreen) {
+      const fixedJspPath = resolveJspRoutePath(fixedScreen, getQueryParams());
+      if (rawHash) {
+        const targetJspPath = resolveJspRoutePath(parsed.screenId, parsed.params);
+        if (parsed.screenId !== fixedScreen && (!targetJspPath || targetJspPath !== fixedJspPath)) {
+          window.location.replace(buildScreenUrl(parsed.screenId, parsed.params));
+          return;
+        }
+      }
+      currentScreenId = fixedScreen;
+      const fixedParams = (typeof window !== 'undefined' && window.__MACHIRIKU_FIXED_PARAMS__) ? window.__MACHIRIKU_FIXED_PARAMS__ : {};
+      currentParams = Object.assign({}, fixedParams, getQueryParams(), rawHash ? parsed.params : {});
+    } else {
+      currentScreenId = parsed.screenId;
+      currentParams = parsed.params;
+
+      if (isJspApp()) {
+        const jspTargetPath = resolveJspRoutePath(currentScreenId, currentParams);
+        if (jspTargetPath) {
+          window.location.replace(buildScreenUrl(currentScreenId, currentParams));
+          return;
+        }
+      }
+
+      // トップ画面内の認証リンクも、サーバー側のログイン状態と登録状態で振り分ける。
+      if (contextPath && (currentScreenId === 's16' || currentScreenId === 's17')) {
+        const action = currentScreenId === 's16' ? 'Login' : 'Register';
+        window.location.replace(`${contextPath}/jp/machiriku/servlet/auth/${action}.action`);
+        return;
+      }
     }
 
     // ルーターガード: 未認証ユーザーが認証必須画面にアクセスした場合は安全にリダイレクト
@@ -305,7 +422,15 @@ window.MachirikuApp = (function() {
   }
 
   function navigate(screenId, params = {}) {
-    let hash = `#${screenId}`;
+    const target = String(screenId || 's01').toLowerCase();
+    if (isJspApp()) {
+      const targetJspPath = resolveJspRoutePath(target, params);
+      if (targetJspPath || target === 's16' || target === 's17' || getFixedScreen()) {
+        window.location.href = buildScreenUrl(target, params);
+        return;
+      }
+    }
+    let hash = `#${target}`;
     const keys = Object.keys(params);
     if (keys.length > 0) {
       const qs = keys.map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join("&");
@@ -365,7 +490,31 @@ window.MachirikuApp = (function() {
     if (!mainEl) return;
 
     // 画面認可 / ルーターガードの検証
+    const fixedScreen = getFixedScreen();
+    if (fixedScreen === 's02' && typeof document !== 'undefined' && document.getElementById('s02-detail-section') && typeof screens.hydrateS02 === 'function') {
+      screens.hydrateS02(currentParams);
+      renderedScreenId = 's02';
+      if (typeof screens.initS02MiniMap === 'function') {
+        screens.initS02MiniMap();
+      }
+      if (typeof screens.initGallerySlider === 'function') {
+        screens.initGallerySlider();
+      }
+      updateSubnavActive();
+      updateDocumentTitle();
+      return;
+    }
+
+    if (fixedScreen && window.MachirikuPropertyPages && typeof window.MachirikuPropertyPages.hydrate === 'function') {
+      window.MachirikuPropertyPages.hydrate(fixedScreen, currentParams);
+      renderedScreenId = fixedScreen;
+      updateSubnavActive();
+      updateDocumentTitle();
+      return;
+    }
+
     const authCheck = checkRouteAuthorization(currentScreenId);
+
     let html;
     if (!authCheck.authorized) {
       if (authCheck.reason === 'unauthenticated') {
@@ -435,19 +584,44 @@ window.MachirikuApp = (function() {
     updateDocumentTitle();
   }
 
+  const FIXED_PAGE_TITLES = {
+    r01: '投票 | マチリク',
+    b01: '出店応募 | マチリク',
+    o01: '登録物件管理 | マチリク',
+    o02: '物件需要分析 | マチリク',
+    o03: '出店希望確認 | マチリク',
+    o04: '物件登録 | マチリク',
+    o05: '物件登録確認 | マチリク',
+    o06: '物件編集 | マチリク',
+    o07: '物件編集確認 | マチリク',
+    o08: '物件削除確認 | マチリク',
+    o09: '物件削除完了 | マチリク'
+  };
+
   function updateDocumentTitle() {
     if (typeof document === 'undefined') return;
     if (currentScreenId === 's01') {
       document.title = 'マチリク | 宇都宮の空き店舗と、欲しいお店';
       return;
     }
-    if (currentScreenId === 's02') {
+    if (currentScreenId === 's02' || currentScreenId === 'r01' || currentScreenId === 'b01' || currentScreenId === 'o06' || currentScreenId === 'o07' || currentScreenId === 'o08') {
       const propId = currentParams?.id || store.getProperties()[0]?.id;
       const prop = propId ? store.getPropertyById(propId) : null;
       if (prop && prop.title) {
-        document.title = `${prop.title} | マチリク`;
-        return;
+        if (currentScreenId === 's02') {
+          document.title = `${prop.title} | マチリク`;
+          return;
+        }
+        const suffix = FIXED_PAGE_TITLES[currentScreenId];
+        if (suffix) {
+          document.title = `${prop.title} - ${suffix}`;
+          return;
+        }
       }
+    }
+    if (FIXED_PAGE_TITLES[currentScreenId]) {
+      document.title = FIXED_PAGE_TITLES[currentScreenId];
+      return;
     }
     const spec = (window.MACHIRIKU_DATA?.SCREENS_SPEC || []).find(s => s.id === currentScreenId);
     document.title = spec ? `${spec.name} | マチリク` : 'マチリク | 宇都宮の空き店舗と、欲しいお店';
@@ -653,24 +827,42 @@ window.MachirikuApp = (function() {
     }
   }
 
+  function isNavTabActive(tabHashScreenId, activeScreen) {
+    if (!tabHashScreenId) return false;
+    if (tabHashScreenId === activeScreen) return true;
+    const aliases = {
+      s02: 's02',
+      r01: 's03',
+      b01: 's08',
+      o01: 's11',
+      o02: 's07',
+      o03: 's09',
+      o04: 's12'
+    };
+    return aliases[activeScreen] === tabHashScreenId;
+  }
+
   function renderSubnavLinks(role) {
     const container = document.querySelector(".subnav-links");
     if (!container) return;
     if (renderedNavRole === role) return;
     renderedNavRole = role;
+    const fixedScreen = getFixedScreen();
     const items = ROLE_NAV_MENUS[role] || ROLE_NAV_MENUS.resident;
     container.innerHTML = items.map(item => {
       const sId = item.hash.replace("#", "").toLowerCase();
-      const isActive = currentScreenId === sId ? "is-active" : "";
-      return `<a href="${item.hash}" class="subnav-link ${isActive}" ${isActive ? 'aria-current="page"' : ''}>${item.label}</a>`;
+      const href = isJspApp() ? buildScreenUrl(sId) : item.hash;
+      const isActive = isNavTabActive(sId, fixedScreen || currentScreenId) ? "is-active" : "";
+      return `<a href="${href}" data-nav-screen="${sId}" class="subnav-link ${isActive}" ${isActive ? 'aria-current="page"' : ''}>${item.label}</a>`;
     }).join("");
   }
 
   function updateSubnavActive() {
+    const activeScreen = getFixedScreen() || currentScreenId;
     const links = document.querySelectorAll(".subnav-link");
     links.forEach(l => {
-      const href = l.getAttribute("href") || "";
-      if (href.replace("#", "").toLowerCase() === currentScreenId) {
+      const sId = (l.getAttribute("data-nav-screen") || (l.getAttribute("href") || "").replace("#", "")).toLowerCase();
+      if (isNavTabActive(sId, activeScreen)) {
         l.classList.add("is-active");
         l.setAttribute('aria-current', 'page');
       } else {

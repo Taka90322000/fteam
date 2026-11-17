@@ -2345,6 +2345,10 @@ window.MACHIRIKU_DATA = (function() {
       phone: "090-1234-5678",
       livingArea: "宇都宮市江野町",
       livingDistanceKm: 0.4,
+      locations: [
+        { id: "loc-home", label: "自宅", address: "栃木県宇都宮市江野町5丁目付近", lat: 36.5608, lng: 139.8825 },
+        { id: "loc-work", label: "職場・学校", address: "栃木県宇都宮市川向町1丁目付近（宇都宮駅）", lat: 36.5590, lng: 139.8980 }
+      ],
       followedProps: [],
       votedProps: {},
       receivedCoupons: [],
@@ -2396,6 +2400,114 @@ window.MACHIRIKU_DATA = (function() {
   const INITIAL_SURVEYS = [];
   const INITIAL_COUPONS = [];
 
+  // 資格・許可・必要書類マスタ (machiriku_schema.sql: qualifications 準拠)
+  const QUALIFICATIONS = [
+    {
+      id: "qual-food-hygiene",
+      name: "食品衛生責任者",
+      kind: "QUALIFICATION",
+      kindLabel: "資格",
+      guidanceText: "飲食店営業に必須の資格です。各都道府県の食品衛生協会の講習会（1日）で取得できます（調理師・栄養士等の資格者は講習免除）。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/kurashi/eisei/shokuhin/index.html"
+    },
+    {
+      id: "qual-cook",
+      name: "調理師免許",
+      kind: "QUALIFICATION",
+      kindLabel: "資格",
+      guidanceText: "実務経験2年以上または養成施設卒業で都道府県試験により取得可能です。",
+      guidanceUrl: "https://www.pref.tochigi.lg.jp/e07/welfare/eisei/eisei/chourishi.html"
+    },
+    {
+      id: "qual-restaurant-permit",
+      name: "飲食店営業許可（保健所）",
+      kind: "PERMIT",
+      kindLabel: "営業許可",
+      guidanceText: "宇都宮市保健所への事前相談・図面確認・施設検査を経て交付される許可です（着工前の図面相談を推奨）。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/kurashi/eisei/shokuhin/1006431.html"
+    },
+    {
+      id: "qual-confectionery-permit",
+      name: "菓子製造業許可",
+      kind: "PERMIT",
+      kindLabel: "営業許可",
+      guidanceText: "パン・焼き菓子を製造して販売・卸売する場合に保健所への申請が必要です。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/kurashi/eisei/shokuhin/1006431.html"
+    },
+    {
+      id: "qual-barber-beauty",
+      name: "美容師免許・美容所開設届",
+      kind: "QUALIFICATION",
+      kindLabel: "資格・届出",
+      guidanceText: "美容師国家資格（厚生労働大臣免許）および宇都宮市保健所への美容所開設届・検査確認が必要です。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/kurashi/eisei/seikatsu/index.html"
+    },
+    {
+      id: "qual-fire-mgr",
+      name: "防火管理者（甲種）",
+      kind: "QUALIFICATION",
+      kindLabel: "資格",
+      guidanceText: "収容人員30名以上の飲食店・物販店等で選任義務が発生する場合があります（消防本部講習で取得）。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/kurashi/bosai/shobo/index.html"
+    },
+    {
+      id: "qual-biz-plan",
+      name: "出店事業計画書・収支計画",
+      kind: "DOCUMENT",
+      kindLabel: "提出書類",
+      guidanceText: "初期投資額・月次収支見込み・ターゲット顧客層を記載した簡易事業計画をご用意ください（宇都宮市創業支援窓口でも相談可能）。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/sangyo/sangyo/shogyo/index.html"
+    }
+  ];
+
+  const QUALIFICATIONS_MAP = QUALIFICATIONS.reduce((acc, q) => {
+    acc[q.id] = q;
+    return acc;
+  }, {});
+
+  // 業種別 必要資格・許可要件 (industry_qualification_requirements 準拠)
+  const INDUSTRY_QUALIFICATION_REQUIREMENTS = {
+    I0101: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "カフェ・喫茶店営業で1店舗につき1名選任必須" },
+      { qualificationId: "qual-restaurant-permit", isRequired: false, conditionText: "物件決定後に宇都宮市保健所で取得申請（着工前相談推奨）" },
+      { qualificationId: "qual-biz-plan", isRequired: false, conditionText: "オーナー審査・面談時の補足資料として推奨" }
+    ],
+    I0102: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "飲食店営業で選任必須" },
+      { qualificationId: "qual-cook", isRequired: false, conditionText: "調理専門性の証明として推奨" },
+      { qualificationId: "qual-fire-mgr", isRequired: false, conditionText: "収容人員30名以上の客席を設ける場合に必要" }
+    ],
+    I0103: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "飲食店営業で選任必須" },
+      { qualificationId: "qual-restaurant-permit", isRequired: false, conditionText: "換気・グリストラップ設備確認の上、保健所で申請" }
+    ],
+    I0104: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "飲食店営業で選任必須" },
+      { qualificationId: "qual-cook", isRequired: false, conditionText: "保有している場合は信頼性アピールに有効" }
+    ],
+    I0105: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "飲食店営業で選任必須" },
+      { qualificationId: "qual-fire-mgr", isRequired: true, conditionText: "夜間営業・客席規模に応じて選任または防火計画確認が必要" }
+    ],
+    I0106: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "テイクアウト・弁当販売でも選任必須" },
+      { qualificationId: "qual-restaurant-permit", isRequired: false, conditionText: "惣菜・飲食店営業許可を保健所へ申請" }
+    ],
+    I0107: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "製造販売の衛生管理責任者として必須" },
+      { qualificationId: "qual-confectionery-permit", isRequired: true, conditionText: "パン・焼き菓子製造販売には菓子製造業許可の事前要件確認が必要" }
+    ],
+    I0301: [
+      { qualificationId: "qual-barber-beauty", isRequired: true, conditionText: "美容師免許の保有および保健所への美容所開設届が必須" }
+    ],
+    I0302: [
+      { qualificationId: "qual-barber-beauty", isRequired: true, conditionText: "理容師免許および理容所開設届が必要" }
+    ],
+    DEFAULT_NON_FOOD: [
+      { qualificationId: "qual-biz-plan", isRequired: false, conditionText: "業態概要・運営体制の確認資料として用意を推奨" }
+    ]
+  };
+
   // 全33画面仕様定義（レビュー画面S20およびルーター制御用）
   const SCREENS_SPEC = [
     { id: "s01", num: "S01", name: "物件検索・地図・需要", role: "all", roleLabel: "全員", desc: "空き店舗を一覧・地図から探す。需要ランキング表示とアットホーム風カード・Mapbox風地図連携", refExcel: "Row 4 (S01 / home)" },
@@ -2443,6 +2555,9 @@ window.MACHIRIKU_DATA = (function() {
     INITIAL_APPLICATIONS,
     INITIAL_SURVEYS,
     INITIAL_COUPONS,
+    QUALIFICATIONS,
+    QUALIFICATIONS_MAP,
+    INDUSTRY_QUALIFICATION_REQUIREMENTS,
     SCREENS_SPEC
   };
 })();
