@@ -38,7 +38,7 @@ public class BusinessSetupAction extends Action {
             try {
                 var input = RegistrationForms.business(fields, OnboardingSupport.values(req, "preferredIndustry"),
                         OnboardingSupport.values(req, "qualification"));
-                User saved = createProfileDao().saveBusiness(user.getUserId(), input);
+                User saved = createProfileDao().completeBusinessSetup(user.getUserId(), input);
                 OnboardingSupport.completed(req, saved, input.representativeName());
                 req.getSession().setAttribute("businessName", input.businessName());
                 req.getSession().setAttribute("phone", input.phoneE164());

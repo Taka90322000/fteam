@@ -56,6 +56,74 @@ public class SetupActionsTest {
     }
 
     @Test
+    public void completedMembersAreRedirectedFromSetupGetToProfileEditing() throws Exception {
+        for (String role : List.of("RESIDENT", "BUSINESS", "OWNER")) {
+            Harness request = authenticated("GET", role);
+            ((User) request.sessionValues.get("user")).setAccountStatus("ACTIVE");
+            request.parameters.put("preview", "1");
+            FakeDao dao = new FakeDao();
+            Action action = setupAction(role, dao);
+            action.execute(request.request, request.response);
+            assertEquals("/machiriku/jp/machiriku/servlet/user/Profile.action", request.redirect);
+            assertNull(request.forwarded);
+            assertEquals(0, createdDaos(action));
+            assertEquals(0, dao.saves);
+        }
+    }
+
+    @Test
+    public void completedMembersCannotSubmitAnOldSetupFormEvenWithValidCsrf() throws Exception {
+        for (String role : List.of("RESIDENT", "BUSINESS", "OWNER")) {
+            Harness request = setupPost(role);
+            User savedUser = (User) request.sessionValues.get("user");
+            savedUser.setAccountStatus("ACTIVE");
+            savedUser.setDisplayName("まち太郎");
+            savedUser.setEmail("contact@example.com");
+            request.sessionValues.put("lineDisplayName", "LINE太郎");
+            request.sessionValues.put("lineEmail", "line@example.com");
+            request.sessionValues.put("emailNotify", false);
+            FakeDao dao = new FakeDao();
+            Action action = setupAction(role, dao);
+            action.execute(request.request, request.response);
+            assertEquals(403, request.status);
+            assertNull(request.forwarded);
+            assertNull(request.redirect);
+            assertEquals(0, createdDaos(action));
+            assertSame(savedUser, request.sessionValues.get("user"));
+            assertEquals("まち太郎", savedUser.getDisplayName());
+            assertEquals("contact@example.com", savedUser.getEmail());
+            assertEquals(false, request.sessionValues.get("emailNotify"));
+        }
+    }
+
+    @Test
+    public void stalePendingSessionsCannotCompleteSetupAfterTheDatabaseRejectsTheState() throws Exception {
+        for (String role : List.of("RESIDENT", "BUSINESS", "OWNER")) {
+            Harness request = setupPost(role);
+            User previous = (User) request.sessionValues.get("user");
+            FakeDao dao = new FakeDao();
+            dao.failure = new SQLException("The registration is already complete.", "28000");
+            setupAction(role, dao).execute(request.request, request.response);
+            assertEquals(403, request.status);
+            assertEquals(1, dao.saves);
+            assertSame(previous, request.sessionValues.get("user"));
+            assertNull(request.sessionValues.get("isOnboarded"));
+            assertNull(request.forwarded);
+        }
+    }
+
+    @Test
+    public void anonymousResidentPreviewRemainsAReadOnlyDisplay() throws Exception {
+        Harness request = new Harness("GET");
+        request.parameters.put("preview", "1");
+        ResidentAction action = new ResidentAction(new FakeDao());
+        action.execute(request.request, request.response);
+        assertEquals(RESIDENT_VIEW, request.forwarded);
+        assertEquals("LINEユーザー", request.attributes.get("displayName"));
+        assertEquals(0, action.created);
+    }
+
+    @Test
     public void businessGetLoadsMasterOptionsButDoesNotGuessRepresentativeName() throws Exception {
         Harness request = authenticated("GET", "BUSINESS");
         request.sessionValues.put("lineDisplayName", "LINEの事業表示名");
@@ -518,7 +586,7 @@ public class SetupActionsTest {
         User user = new User();
         user.setUserId(42);
         user.setUserRole(role);
-        user.setAccountStatus("ACTIVE");
+        user.setAccountStatus("PENDING");
         user.setDisplayName("保存済み表示名");
         user.setEmail("stored@example.com");
         request.sessionValues.put("user", user);
@@ -582,8 +650,28 @@ public class SetupActionsTest {
         return business ? new BusinessAction(dao) : new ResidentAction(dao);
     }
 
+    private static Action setupAction(String role, FakeDao dao) {
+        return switch (role) {
+            case "RESIDENT" -> new ResidentAction(dao);
+            case "BUSINESS" -> new BusinessAction(dao);
+            case "OWNER" -> new OwnerAction(dao);
+            default -> throw new IllegalArgumentException(role);
+        };
+    }
+
+    private static Harness setupPost(String role) {
+        return switch (role) {
+            case "RESIDENT" -> residentPost();
+            case "BUSINESS" -> businessPost();
+            case "OWNER" -> ownerPost();
+            default -> throw new IllegalArgumentException(role);
+        };
+    }
+
     private static int createdDaos(Action action) {
-        return action instanceof BusinessAction business ? business.created : ((ResidentAction) action).created;
+        if (action instanceof BusinessAction business) { return business.created; }
+        if (action instanceof OwnerAction owner) { return owner.created; }
+        return ((ResidentAction) action).created;
     }
 
     private static final class ResidentAction extends ResidentSetupAction {
@@ -631,17 +719,17 @@ public class SetupActionsTest {
         }
         @Override public List<RegistrationChoice> listIndustries() { industryReads++; return industries; }
         @Override public List<RegistrationChoice> listQualifications() { qualificationReads++; return qualifications; }
-        @Override public User saveResident(int userId, ResidentProfileInput input) throws SQLException {
+        @Override public User completeResidentSetup(int userId, ResidentProfileInput input) throws SQLException {
             saves++; savedUserId = userId; residentInput = input;
             if (failure != null) { throw failure; }
             return saved(userId, "RESIDENT", input.displayName(), input.email());
         }
-        @Override public User saveBusiness(int userId, BusinessProfileInput input) throws SQLException {
+        @Override public User completeBusinessSetup(int userId, BusinessProfileInput input) throws SQLException {
             saves++; savedUserId = userId; businessInput = input;
             if (failure != null) { throw failure; }
             return saved(userId, "BUSINESS", input.businessName(), input.email());
         }
-        @Override public User saveOwner(int userId, OwnerProfileInput input) throws SQLException {
+        @Override public User completeOwnerSetup(int userId, OwnerProfileInput input) throws SQLException {
             saves++; savedUserId = userId; ownerInput = input;
             if (failure != null) { throw failure; }
             return saved(userId, "OWNER", "保存済み表示名", input.email());

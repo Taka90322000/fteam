@@ -35,6 +35,15 @@ final class OnboardingSupport {
             res.sendError(HttpServletResponse.SC_FORBIDDEN);
             return null;
         }
+        // 本登録後の初期設定は表示・保存せず、GETでは現在のプロフィール編集へ案内する。
+        if ("ACTIVE".equals(user.getAccountStatus())) {
+            if ("GET".equalsIgnoreCase(req.getMethod())) {
+                res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/user/Profile.action");
+            } else {
+                res.sendError(HttpServletResponse.SC_FORBIDDEN);
+            }
+            return null;
+        }
         return user;
     }
 

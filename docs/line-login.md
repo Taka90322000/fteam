@@ -51,10 +51,10 @@ LINE Developers Consoleで以下を設定します。
 
 ## DBの利用権限
 
-確認時点の `MACHIRIKU_DB_USER` には `public.users` の `SELECT`・`INSERT` 権限がありませんでした。この状態では実際のログイン・登録はDBで拒否されます。DB所有者または管理者が、アプリ用ロールを指定して同梱のSQLを実行してください。
+確認時点の `MACHIRIKU_DB_USER` には `public.users` の `SELECT`・`INSERT` 権限がありませんでした。この状態では実際のログイン・登録はDBで拒否されます。DB所有者または管理者が、`machiriku_app` に権限を付与する同梱のSQLを実行してください。
 
 ```powershell
-psql <管理者用の接続オプション> -v app_user=<MACHIRIKU_DB_USERの値> -f database/grant-user-access.sql
+psql <管理者用の接続オプション> -f database/grant-user-access.sql
 ```
 
 SQLは `public` スキーマの利用権限、`users` の読取・登録・更新、自動採番シーケンスの利用を付与します。本登録前の利用区分を選び直す処理でも `users` の更新権限を使用します。

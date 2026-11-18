@@ -207,11 +207,20 @@ public class ProfileDao extends Dao {
     }
 
     public User saveResident(int userId, ResidentProfileInput input) throws SQLException {
+        return saveResident(userId, input, false);
+    }
+
+    /** 住民の初期設定を完了する。DBでも本登録前であることを確認する。 */
+    public User completeResidentSetup(int userId, ResidentProfileInput input) throws SQLException {
+        return saveResident(userId, input, true);
+    }
+
+    private User saveResident(int userId, ResidentProfileInput input, boolean pendingOnly) throws SQLException {
         if (input == null || input.home() == null || !"HOME".equals(input.home().kind())
                 || (input.work() != null && !"WORK".equals(input.work().kind()))) {
             throw new IllegalArgumentException("居住地と職場の入力内容を確認してください。");
         }
-        return save(userId, "RESIDENT", (connection, user) -> {
+        return save(userId, "RESIDENT", pendingOnly, (connection, user) -> {
             try (PreparedStatement statement = connection.prepareStatement(
                     "UPDATE users SET display_name=?,email=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
                 statement.setString(1, input.displayName());
@@ -246,10 +255,19 @@ public class ProfileDao extends Dao {
 
     /** オーナーの連絡先・プロフィール・誘致希望業種・通知設定をまとめて登録する。 */
     public User saveOwner(int userId, OwnerProfileInput input) throws SQLException {
+        return saveOwner(userId, input, false);
+    }
+
+    /** オーナーの初期設定を完了する。DBでも本登録前であることを確認する。 */
+    public User completeOwnerSetup(int userId, OwnerProfileInput input) throws SQLException {
+        return saveOwner(userId, input, true);
+    }
+
+    private User saveOwner(int userId, OwnerProfileInput input, boolean pendingOnly) throws SQLException {
         if (input == null || input.industryTypeIds() == null || input.industryTypeIds().isEmpty()) {
             throw new IllegalArgumentException("誘致希望業種を少なくとも1つ選択してください。");
         }
-        return save(userId, "OWNER", (connection, user) -> {
+        return save(userId, "OWNER", pendingOnly, (connection, user) -> {
             List<Integer> industries = uniqueIds(input.industryTypeIds());
             validateMasterIds(connection, industries, true);
             // LINE表示名は保持し、編集したオーナー氏名は専用プロフィールへ保存する。
@@ -278,10 +296,19 @@ public class ProfileDao extends Dao {
     }
 
     public User saveBusiness(int userId, BusinessProfileInput input) throws SQLException {
+        return saveBusiness(userId, input, false);
+    }
+
+    /** 事業主の初期設定を完了する。DBでも本登録前であることを確認する。 */
+    public User completeBusinessSetup(int userId, BusinessProfileInput input) throws SQLException {
+        return saveBusiness(userId, input, true);
+    }
+
+    private User saveBusiness(int userId, BusinessProfileInput input, boolean pendingOnly) throws SQLException {
         if (input == null || input.industryTypeIds() == null || input.industryTypeIds().isEmpty()) {
             throw new IllegalArgumentException("希望業種を指定してください。");
         }
-        return save(userId, "BUSINESS", (connection, user) -> {
+        return save(userId, "BUSINESS", pendingOnly, (connection, user) -> {
             List<Integer> industries = uniqueIds(input.industryTypeIds());
             List<Integer> qualifications = uniqueIds(input.qualificationIds());
             validateMasterIds(connection, industries, true);
@@ -353,7 +380,7 @@ public class ProfileDao extends Dao {
     }
 
     /** 同じ会員の同時送信を直列化し、権限をDBでも再確認してから関連情報を保存する。 */
-    private User save(int userId, String requiredRole, SaveWork work) throws SQLException {
+    private User save(int userId, String requiredRole, boolean pendingOnly, SaveWork work) throws SQLException {
         try (Connection connection = openConnection()) {
             boolean autoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
@@ -364,8 +391,10 @@ public class ProfileDao extends Dao {
                     statement.setInt(1, userId);
                     try (ResultSet rows = statement.executeQuery()) { current = rows.next() ? UserDao.readUser(rows) : null; }
                 }
+                // 古いセッションからの初期設定送信も、行ロック後のDB状態で拒否する。
                 if (current == null || !requiredRole.equals(current.getUserRole()) || current.getWithdrawnAt() != null
-                        || (!"PENDING".equals(current.getAccountStatus()) && !"ACTIVE".equals(current.getAccountStatus()))) {
+                        || (!"PENDING".equals(current.getAccountStatus()) && !"ACTIVE".equals(current.getAccountStatus()))
+                        || (pendingOnly && !"PENDING".equals(current.getAccountStatus()))) {
                     throw new SQLException("This account cannot complete the requested registration.", "28000");
                 }
                 work.run(connection, current);

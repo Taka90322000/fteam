@@ -34,7 +34,7 @@ public class OwnerSetupAction extends Action {
             industries = OnboardingSupport.selection(req, "preferredIndustry");
             try {
                 var input = RegistrationForms.owner(fields, OnboardingSupport.values(req, "preferredIndustry"));
-                User saved = createProfileDao().saveOwner(user.getUserId(), input);
+                User saved = createProfileDao().completeOwnerSetup(user.getUserId(), input);
                 // DBのcommit後にだけ、画面用の名前と初期設定完了状態を更新する。
                 OnboardingSupport.completed(req, saved, input.representativeName());
                 req.getSession().setAttribute("company", input.company() == null ? "" : input.company());

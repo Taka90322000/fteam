@@ -159,6 +159,44 @@ public class ProfileDaoTest {
     }
 
     @Test
+    public void initialSetupCompletesPendingMembersAndRejectsEveryLaterSubmission() throws Exception {
+        assertEquals("ACTIVE", dao.completeResidentSetup(1,
+                resident("まち太郎", "contact@example.invalid", home(), work(), false)).getAccountStatus());
+        assertEquals("ACTIVE", dao.completeBusinessSetup(2,
+                business("business-done@example.invalid", List.of(10), List.of(100), AREA, false)).getAccountStatus());
+        assertEquals("ACTIVE", dao.completeOwnerSetup(6,
+                owner("owner-done@example.invalid", "保存済み法人", List.of(10), false)).getAccountStatus());
+        execute("UPDATE business_qualifications SET credential_number='KEEP-CREDENTIAL' WHERE business_user_id=2 AND qualification_id=100");
+        String usersBefore = text("SELECT json_agg(u ORDER BY user_id)::text FROM users u WHERE user_id IN (1,2,6)");
+        Map<String, String> residentBefore = dao.findResidentFields(1);
+        ProfileSettings businessBefore = dao.findProfileSettings(2, "BUSINESS");
+        ProfileSettings ownerBefore = dao.findProfileSettings(6, "OWNER");
+
+        SQLException residentError = assertThrows(SQLException.class, () -> dao.completeResidentSetup(1,
+                resident("LINE太郎", "line@example.invalid", home(), null, true)));
+        SQLException businessError = assertThrows(SQLException.class, () -> dao.completeBusinessSetup(2,
+                business("business-line@example.invalid", List.of(11), List.of(), AREA, true)));
+        SQLException ownerError = assertThrows(SQLException.class, () -> dao.completeOwnerSetup(6,
+                owner("owner-line@example.invalid", null, List.of(11), true)));
+        for (SQLException error : List.of(residentError, businessError, ownerError)) {
+            assertEquals("28000", error.getSQLState());
+        }
+        assertEquals(usersBefore, text("SELECT json_agg(u ORDER BY user_id)::text FROM users u WHERE user_id IN (1,2,6)"));
+        assertEquals(residentBefore, dao.findResidentFields(1));
+        assertEquals(businessBefore, dao.findProfileSettings(2, "BUSINESS"));
+        assertEquals(ownerBefore, dao.findProfileSettings(6, "OWNER"));
+        assertEquals("KEEP-CREDENTIAL", text("SELECT credential_number FROM business_qualifications WHERE business_user_id=2 AND qualification_id=100 AND is_active"));
+
+        // 本登録後も、プロフィール編集用の保存処理からは変更できる。
+        dao.saveResident(1, resident("プロフィール編集後", "contact@example.invalid", home(), work(), false));
+        dao.saveBusiness(2, business("business-edited@example.invalid", List.of(11), List.of(100), AREA, false));
+        dao.saveOwner(6, owner("owner-edited@example.invalid", "編集後の法人", List.of(11), false));
+        assertEquals("プロフィール編集後", text("SELECT display_name FROM users WHERE user_id=1"));
+        assertEquals("business-edited@example.invalid", text("SELECT email FROM users WHERE user_id=2"));
+        assertEquals("編集後の法人", text("SELECT company_name FROM owner_profiles WHERE user_id=6"));
+    }
+
+    @Test
     public void businessSettingsCanBeSavedUnchangedWithAllPreferencesAndQualifications() throws Exception {
         dao.saveBusiness(2, new BusinessProfileInput("保存済み屋号", "本人が入力した代表者", "business-new@example.invalid",
                 "+81286339988", "宇都宮駅周辺", 0, "あり", "5年以上", List.of(10, 11), List.of(100),

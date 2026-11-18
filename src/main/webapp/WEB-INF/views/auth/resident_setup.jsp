@@ -248,7 +248,7 @@
 </section>
 
 <!-- Google Maps JavaScript API -->
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNWrNbVnBfZsjuTJ3sHCKDemfkxNsIv7w&libraries=marker"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCNWrNbVnBfZsjuTJ3sHCKDemfkxNsIv7w&libraries=marker&language=ja&region=JP"></script>
 
 <script>
   // 初期中心は宇都宮にするが、利用者が選ぶまでは住所・座標・ピンを登録しない。
@@ -583,7 +583,7 @@
       updateResidentStatus(kind, '住所を取得できませんでした。地図の読み込み後に選び直してください');
       return;
     }
-    new google.maps.Geocoder().geocode({ location: point }, (results, status) => {
+    new google.maps.Geocoder().geocode({ location: point, language: 'ja', region: 'JP' }, (results, status) => {
       // 地図選択後に入力を修正した場合、古い住所検索結果で上書きしない。
       if (revision !== location.revision) return;
       if (status === 'OK' && results && results[0] && results[0].formatted_address) {

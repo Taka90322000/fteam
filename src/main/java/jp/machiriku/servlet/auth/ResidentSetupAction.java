@@ -6,6 +6,7 @@ import java.util.Map;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import jp.machiriku.bean.User;
 import jp.machiriku.dao.ProfileDao;
 import jp.machiriku.registration.RegistrationForms;
@@ -18,8 +19,10 @@ public class ResidentSetupAction extends Action {
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
         User user;
+        HttpSession session = req.getSession(false); // すでに認証済みの会員がいるかを確認するセッション。
+        boolean authenticated = session != null && session.getAttribute("user") instanceof User;
         // プレビューはGET表示だけに限定する。POSTはクエリに関係なく本物のログイン会員で処理する。
-        boolean preview = "GET".equalsIgnoreCase(req.getMethod())
+        boolean preview = !authenticated && "GET".equalsIgnoreCase(req.getMethod())
                 && ("1".equals(req.getParameter("preview")) || "true".equalsIgnoreCase(req.getParameter("preview")));
         if (preview) {
             user = new User();
@@ -45,7 +48,7 @@ public class ResidentSetupAction extends Action {
                     "livingLng", "workAddress", "workLat", "workLng", "emailNotify");
             try {
                 var input = RegistrationForms.resident(fields);
-                User saved = createProfileDao().saveResident(user.getUserId(), input);
+                User saved = createProfileDao().completeResidentSetup(user.getUserId(), input);
                 // 選択した欲しい業種・施設ジャンルをセッションにも保存
                 req.getSession().setAttribute("userIndustry", fields.get("industry"));
                 req.getSession().setAttribute("userPreferredIndustries", input.preferredIndustryCodes());
@@ -72,14 +75,6 @@ public class ResidentSetupAction extends Action {
             fields.put("industry", "");
             fields.put("preferredIndustries", "[]");
             fields.put("emailNotify", "on");
-            // すでに登録済み会員の場合はDBから保存済みのプロフィール情報を読み込んで復元
-            if ("ACTIVE".equals(user.getAccountStatus())) {
-                try {
-                    fields.putAll(createProfileDao().findResidentFields(user.getUserId()));
-                } catch (SQLException e) {
-                    OnboardingSupport.logDatabaseError(req, e);
-                }
-            }
         }
         req.setAttribute("formValues", fields);
         req.setAttribute("displayName", fields.get("name"));
