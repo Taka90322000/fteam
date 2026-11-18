@@ -719,6 +719,9 @@ public class SetupActionsTest {
         }
         @Override public List<RegistrationChoice> listIndustries() { industryReads++; return industries; }
         @Override public List<RegistrationChoice> listQualifications() { qualificationReads++; return qualifications; }
+        @Override public List<Map<String, Object>> listResidentTaxonomy() {
+            return List.of(Map.of("id", "C01", "name", "飲食", "subcategories", List.of(Map.of("id", "I0101", "name", "カフェ・喫茶店"))));
+        }
         @Override public User completeResidentSetup(int userId, ResidentProfileInput input) throws SQLException {
             saves++; savedUserId = userId; residentInput = input;
             if (failure != null) { throw failure; }

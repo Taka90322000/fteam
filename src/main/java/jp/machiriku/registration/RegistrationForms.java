@@ -33,7 +33,17 @@ public final class RegistrationForms {
     private static final Set<String> GENDERS = Set.of("男性", "女性", "その他");
     private static final Set<String> EXPERIENCE = Set.of("未経験", "1〜3年未満", "3〜5年未満", "5年以上");
     private static final Pattern ADDRESS = Pattern.compile("^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)(.+)$");
-    private static final Pattern MUNICIPALITY = Pattern.compile("^(.+?市(?:.+?区)?|.+?区|.+?[町村])(.+)?$");
+    // 郡＋町村（例：芳賀郡市貝町）や「市・郡・町・村」を含む市名、政令指定都市の行政区を町名内の「市・区」と誤認せず分割する。
+    private static final Pattern MUNICIPALITY = Pattern.compile(
+            "^("
+            + "(?:札幌|仙台|さいたま|千葉|横浜|川崎|相模原|新潟|静岡|浜松|名古屋|京都|大阪|堺|神戸|岡山|広島|北九州|福岡|熊本)市[^区0-9０-９]{1,6}?区"
+            + "|(?:大和郡山|郡山|蒲郡|小郡|郡上)市"
+            + "|(?:(?:余市|高市|(?:東|西|北)?村山|田村|[^市区町村郡])+?郡)(?:大町町|田原本町|[^町村]+?[町村])"
+            + "|(?:市川|市原|四日市|廿日市|野々市|八日市|十日市|今市|町田|大町|十日町|原町|村上|村山|東村山|武蔵村山|羽村|大村|田村)市"
+            + "|[^市区町村]+?市"
+            + "|[^市区町村]+?区"
+            + "|(?:大島町|八丈町|[^市区町村]+?[町村])"
+            + ")(.+)?$");
     private static final Pattern PARENT_PATH_SEGMENT = Pattern.compile("(^|/)\\.\\.(/|$)");
 
     private RegistrationForms() { }

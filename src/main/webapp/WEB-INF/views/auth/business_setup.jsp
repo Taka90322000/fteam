@@ -249,9 +249,12 @@
       </div>
     </form>
     <div style="margin-top:1.5rem; text-align:center;">
-      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('登録を中断してログアウトしますか？');" style="color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer;">
-        登録を中断してログアウト
-      </a>
+      <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('登録を中断してログアウトしますか？');">
+        <input type="hidden" name="csrfToken" value="<%= Html.escape(request.getAttribute("csrfToken")) %>">
+        <button type="submit" style="background:none; border:none; padding:0; color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer; font-family:inherit;">
+          登録を中断してログアウト
+        </button>
+      </form>
     </div>
     <%-- 本登録前は、利用者区分の選択画面へ戻って登録を続けられる。 --%>
     <% User registrationUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;

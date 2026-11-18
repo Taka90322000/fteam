@@ -1,5 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="jp.machiriku.bean.User" %>
+<%@ page import="jp.machiriku.bean.User,jp.machiriku.servlet.auth.LogoutAction" %>
 <%-- 各画面からincludeする共通ヘッダー。画面名・初期設定中の表示・ログイン状態を受け取る。 --%>
 <%!
   // 表示名や利用区分などの文字列をHTML向けに置換し、タグとして解釈されることを防ぐ。
@@ -14,6 +14,10 @@
   String roleLabel = request.getParameter("roleLabel") != null ? request.getParameter("roleLabel") : "地域住民";
   String userName = request.getParameter("userName") != null ? request.getParameter("userName") : "LINEユーザー";
   User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
+  String rawHeaderRole = session.getAttribute("userRole") instanceof String ? (String) session.getAttribute("userRole") : null;
+  boolean isDemoSession = currentUser == null && rawHeaderRole != null
+      && java.util.Set.of("resident", "business", "owner", "admin").contains(rawHeaderRole);
+  String logoutCsrfToken = LogoutAction.csrfToken(session);
   if (currentUser != null && (request.getParameter("userName") == null)) {
     userName = currentUser.getDisplayName();
   }
@@ -49,6 +53,14 @@
           <a href="${pageContext.request.contextPath}/index.jsp#s18" class="btn-header-action profile-link">
             <span id="header-user-name"><%= escapeHtml(currentUser.getDisplayName()) %></span>
           </a>
+        <% } else if (isDemoSession) { %>
+          <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;">
+            <input type="hidden" name="csrfToken" value="<%= escapeHtml(logoutCsrfToken) %>">
+            <input type="hidden" name="next" value="login">
+            <button type="submit" class="btn-header-action profile-link" style="border:none; cursor:pointer; font:inherit;">
+              <span>ログイン</span>
+            </button>
+          </form>
         <% } else { %>
           <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
             <span>ログイン</span>
@@ -103,11 +115,29 @@
   <nav class="header-subnav" aria-label="メインメニュー">
     <div class="subnav-links">
       <a href="${pageContext.request.contextPath}/index.jsp" class="subnav-link">ホーム</a>
-      <% if (currentUser == null) { %>
+      <% if (currentUser == null && !isDemoSession) { %>
       <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="subnav-link <%= "login".equals(request.getParameter("activeNav")) ? "is-active" : "" %>">ログイン</a>
       <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action" class="subnav-link <%= "register".equals(request.getParameter("activeNav")) ? "is-active" : "" %>">新規会員登録</a>
+      <% } else if (isDemoSession) { %>
+      <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;">
+        <input type="hidden" name="csrfToken" value="<%= escapeHtml(logoutCsrfToken) %>">
+        <input type="hidden" name="next" value="login">
+        <button type="submit" class="subnav-link" style="background:none; border:none; cursor:pointer; font:inherit;">ログイン</button>
+      </form>
+      <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;">
+        <input type="hidden" name="csrfToken" value="<%= escapeHtml(logoutCsrfToken) %>">
+        <input type="hidden" name="next" value="register">
+        <button type="submit" class="subnav-link" style="background:none; border:none; cursor:pointer; font:inherit;">新規会員登録</button>
+      </form>
+      <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('デモ表示を終了してログアウトしますか？');">
+        <input type="hidden" name="csrfToken" value="<%= escapeHtml(logoutCsrfToken) %>">
+        <button type="submit" class="subnav-link" style="background:none; border:none; cursor:pointer; font:inherit;">デモ終了（ログアウト）</button>
+      </form>
       <% } else { %>
-      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('ログアウトしますか？');" class="subnav-link">ログアウト</a>
+      <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('ログアウトしますか？');">
+        <input type="hidden" name="csrfToken" value="<%= escapeHtml(logoutCsrfToken) %>">
+        <button type="submit" class="subnav-link" style="background:none; border:none; cursor:pointer; font:inherit;">ログアウト</button>
+      </form>
       <% } %>
     </div>
   </nav>

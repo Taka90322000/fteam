@@ -89,6 +89,15 @@ public class ProfileAction extends Action {
             }
         }
 
+        List<Map<String, Object>> residentTaxonomy = Collections.emptyList();
+        try {
+            residentTaxonomy = createProfileDao().listResidentTaxonomy();
+        } catch (SQLException e) {
+            ProfileSupport.logDatabaseError(req, e);
+            res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+            return;
+        }
+
         if (fields == null) {
             fields = new LinkedHashMap<>();
             fields.put("name", user.getDisplayName());
@@ -99,7 +108,18 @@ public class ProfileAction extends Action {
             fields.put("preferredIndustries", "[]");
             fields.put("emailNotify", "");
             try {
-                fields.putAll(createProfileDao().findResidentFields(user.getUserId()));
+                Map<String, String> savedFields = createProfileDao().findResidentFields(user.getUserId());
+                fields.putAll(savedFields);
+                // 別端末で氏名・メールが更新されていた場合、セッション内の会員情報も現在のDB保存値に揃える。
+                if (savedFields.containsKey("name")) {
+                    user.setDisplayName(savedFields.get("name"));
+                    req.getSession().setAttribute("userName", savedFields.get("name"));
+                }
+                if (savedFields.containsKey("email")) {
+                    String latestEmail = savedFields.get("email");
+                    user.setEmail(latestEmail == null || latestEmail.isEmpty() ? null : latestEmail);
+                    req.getSession().setAttribute("userEmail", latestEmail == null ? "" : latestEmail);
+                }
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
                 res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
@@ -112,6 +132,7 @@ public class ProfileAction extends Action {
         req.setAttribute("email", fields.get("email"));
         req.setAttribute("role", "resident");
         req.setAttribute("roleLabel", "地域住民");
+        req.setAttribute("residentTaxonomy", residentTaxonomy);
         req.setAttribute("csrfToken", ProfileSupport.csrfToken(req.getSession()));
         req.getRequestDispatcher("/WEB-INF/views/user/resident_profile.jsp").forward(req, res);
     }

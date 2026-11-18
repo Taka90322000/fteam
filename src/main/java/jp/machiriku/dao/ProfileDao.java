@@ -112,10 +112,21 @@ public class ProfileDao extends Dao {
         }
     }
 
-    /** 登録済み住民のプロフィール・居住地・職場・通知・希望業種を再表示用に取得する。 */
+    /** 登録済み住民の氏名・メール・プロフィール・居住地・職場・通知・希望業種を再表示用に取得する。 */
     public Map<String, String> findResidentFields(int userId) throws SQLException {
         Map<String, String> result = new LinkedHashMap<>();
         try (Connection connection = openConnection()) {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT display_name, email FROM users WHERE user_id=?")) {
+                statement.setInt(1, userId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    if (rows.next()) {
+                        String displayName = rows.getString("display_name");
+                        if (displayName != null) result.put("name", displayName);
+                        result.put("email", emptyIfNull(rows.getString("email")));
+                    }
+                }
+            }
             try (PreparedStatement statement = connection.prepareStatement(
                     "SELECT age_group, gender FROM resident_profiles WHERE user_id=?")) {
                 statement.setInt(1, userId);
@@ -160,7 +171,11 @@ public class ProfileDao extends Dao {
                 }
             }
             try (PreparedStatement statement = connection.prepareStatement(
-                    "SELECT i.industry_code FROM user_industry_preferences u JOIN industry_types i ON i.industry_type_id=u.industry_type_id WHERE u.user_id=?")) {
+                    "SELECT i.industry_code FROM user_industry_preferences u "
+                    + "JOIN industry_types i ON i.industry_type_id=u.industry_type_id "
+                    + "JOIN industry_categories c ON c.category_id=i.category_id "
+                    + "WHERE u.user_id=? AND i.is_active AND c.is_active "
+                    + "ORDER BY c.category_id, i.industry_type_id")) {
                 statement.setInt(1, userId);
                 try (ResultSet rows = statement.executeQuery()) {
                     List<String> codes = new ArrayList<>();
@@ -181,6 +196,38 @@ public class ProfileDao extends Dao {
             }
         }
         return result;
+    }
+
+    /** 住民画面のタブ・ピル選択用に、DBで有効な業種カテゴリと業種コードの階層を取得する。 */
+    public List<Map<String, Object>> listResidentTaxonomy() throws SQLException {
+        String sql = "SELECT c.category_id, c.category_code, c.category_name, i.industry_code, i.industry_name "
+                + "FROM industry_categories c JOIN industry_types i ON i.category_id = c.category_id "
+                + "WHERE c.is_active AND i.is_active AND i.industry_code IS NOT NULL "
+                + "ORDER BY c.category_id, i.industry_type_id";
+        try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(sql);
+                ResultSet rows = statement.executeQuery()) {
+            Map<Integer, Map<String, Object>> categories = new LinkedHashMap<>();
+            while (rows.next()) {
+                int categoryId = rows.getInt("category_id");
+                String rawCatCode = rows.getString("category_code");
+                String catId = (rawCatCode != null && !rawCatCode.isBlank()) ? rawCatCode.trim() : ("C" + categoryId);
+                String catName = rows.getString("category_name");
+                Map<String, Object> category = categories.computeIfAbsent(categoryId, k -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("id", catId);
+                    map.put("name", catName);
+                    map.put("subcategories", new ArrayList<Map<String, String>>());
+                    return map;
+                });
+                @SuppressWarnings("unchecked")
+                List<Map<String, String>> subcategories = (List<Map<String, String>>) category.get("subcategories");
+                Map<String, String> sub = new LinkedHashMap<>();
+                sub.put("id", rows.getString("industry_code"));
+                sub.put("name", rows.getString("industry_name"));
+                subcategories.add(sub);
+            }
+            return List.copyOf(categories.values());
+        }
     }
 
     /** 有効な業種だけを、DBのマスターID付きで画面へ渡す。 */

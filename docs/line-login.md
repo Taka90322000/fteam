@@ -25,7 +25,9 @@ Copy-Item .env.example .env
 http://localhost:8080/machiriku/jp/machiriku/servlet/auth/LineCallback.action
 ```
 
-公開環境ではHTTPSを使います。`.env` を変更したらTomcatを再起動し、VS Codeで `Ctrl+Shift+B` を実行してください。VS Codeの再起動は不要です。
+公開環境ではHTTPSを使います。`.env` を変更したらTomcatを再起動し、VS Codeで `Ctrl+Shift+B`（`scripts/deploy.ps1`）を実行してください。VS Codeの再起動は不要です。
+
+旧版をビルドした環境を更新配備する際は、削除済みのサーブレット（旧 `DbCheckServlet` 等）の `.class` ファイルが `target` や展開先に残らないよう、必ずビルド先と展開先のクラスディレクトリをクリーンにしてから更新してください（`scripts/deploy.ps1` は展開前に `target/classes` と `target/machiriku/WEB-INF/classes` を自動削除します。手動でMavenを実行する場合は `mvn clean compile war:exploded` または `mvn clean package` を使用し、Tomcat の旧展開先を削除してから配備してください）。
 
 `.env` にある項目はOSの環境変数より優先します。項目がなければ従来のOS環境変数を使用します。`KEY=` のような空欄は空の設定として扱うため、古いOSの値では補いません。
 
@@ -57,7 +59,7 @@ LINE Developers Consoleで以下を設定します。
 psql <管理者用の接続オプション> -f database/grant-user-access.sql
 ```
 
-SQLは `public` スキーマの利用権限、`users` の読取・登録・更新、自動採番シーケンスの利用を付与します。本登録前の利用区分を選び直す処理でも `users` の更新権限を使用します。
+SQLは `public` スキーマの利用権限、`users` の読取・登録・更新に加え、本登録およびプロフィール設定（`ProfileDao`）が使用する各プロフィール（`resident_profiles`・`business_profiles`・`owner_profiles`）、住所（`user_locations`）、希望業種（`user_industry_preferences`）、保有資格（`business_qualifications`）、通知設定（`notification_settings`）、各種マスター（`industry_categories`・`industry_types`・`qualifications`）、および自動採番シーケンスの利用権限をまとめて付与します。事業主の出店希望範囲（`business_profiles.area`）を含むDB移行の適用順は [docs/registration.md](registration.md) を参照してください。
 
 ## 登録とログイン
 

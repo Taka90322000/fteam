@@ -33,13 +33,27 @@ LINE認証が成功すると、今回取得した表示名とメールを認証�
 
 住民の「欲しい業種」は職業とは別の希望条件として保存します。任意の複数選択に対応し、選択をすべて外して再登録した場合は既存の希望業種を解除します。無効・未登録のコードは保存せず、プロフィールや住所の変更もまとめて取り消します。
 
-## オーナー・事業主プロフィールの準備
+## オーナー・事業主プロフィールの準備（DB移行手順）
 
-既存DBを更新する場合は、DB管理者として `machiriku` に接続し、`database/migrate-profile-contacts.sql` を実行します。オーナー用テーブルの作成、両プロフィールへのアイコン参照先・電話番号の追加、既存電話番号の移行、`users.phone_e164` の削除を1つのトランザクションで処理します。
+事業主の出店希望範囲（`business_profiles.area`）は PostGIS の `geometry(Polygon, 4326)` 型を使用します。既存DBを更新する場合は、**事前に PostgreSQL へ PostGIS 拡張をインストールした上で**（Windows 環境では Stack Builder 等から対象の PostgreSQL 用 PostGIS を導入）、DB管理者（`postgres` 等）として `machiriku` に接続し、**以下の順番で** SQL を適用してください。
 
-続けて `database/migrate-profile-phone-numbers.sql` を実行します。主番号は必須、追加番号は任意とし、どちらもE.164形式で保存します。事業所の共有番号を複数会員で利用できるように一意制約を解除し、同一プロフィール内で主番号と追加番号が重複することを防ぎます。
+1. **`database/machiriku_business_alter.sql`（PostGIS拡張と出店希望範囲列の追加）**  
+   PostGIS 拡張（`CREATE EXTENSION IF NOT EXISTS postgis`）を有効化し、`business_profiles.area` 列、ポリゴン妥当性制約（`ck_business_profiles_area_valid`）、空間検索用の GiST インデックス（`idx_business_profiles_area`）を作成します。この移行を行わない環境では、事業主の初期登録時の保存と登録済みプロフィールの読み込みが失敗します。
+2. **`database/migrate-profile-contacts.sql`（オーナー用テーブル作成と連絡先列の移行）**  
+   `owner_profiles` テーブルの作成、両プロフィール（`business_profiles`・`owner_profiles`）へのアイコン参照先（`icon_image_url`）・電話番号（`phone_e164`）の追加、既存電話番号の移行、`users.phone_e164` の削除を1つのトランザクションで処理します。
+3. **`database/migrate-profile-phone-numbers.sql`（主番号・追加番号の制約整備）**  
+   主番号（`phone_e164`）は必須、追加番号（`secondary_phone_e164`）は任意とし、どちらも E.164 形式で保存します。事業所の共有番号を複数会員で利用できるように一意制約を解除し、同一プロフィール内で主番号と追加番号が重複することを防ぎます。
+4. **`database/grant-user-access.sql`（アプリ実行ロールへの権限付与）**  
+   アプリ用ロール `machiriku_app` に対し、`users` のほか、`ProfileDao` が使用する全テーブル（`resident_profiles`、`business_profiles`、`owner_profiles`、`user_locations`、`user_industry_preferences`、`business_qualifications`、`notification_settings`、`industry_categories`、`industry_types`、`qualifications`）および自動採番シーケンスへの権限を付与します。
 
-`database/create-owner-profiles.sql` は、移行済みのDBへオーナー用テーブルだけを新規作成するときの定義です。
+```powershell
+psql <管理者用の接続オプション> -d machiriku -f database/machiriku_business_alter.sql
+psql <管理者用の接続オプション> -d machiriku -f database/migrate-profile-contacts.sql
+psql <管理者用の接続オプション> -d machiriku -f database/migrate-profile-phone-numbers.sql
+psql <管理者用の接続オプション> -d machiriku -f database/grant-user-access.sql
+```
+
+`database/create-owner-profiles.sql` は、すでに連絡先移行済みのDBへオーナー用テーブルだけを単体で新規作成するときの定義です。
 
 LINE認証では表示名・任意メール・利用区分・LINEの識別子を会員に保存します。事業主とオーナーの電話番号は、認証後の初期設定で必須入力します。保存済みの電話番号とアイコン参照先は、各プロフィールから再表示します。
 

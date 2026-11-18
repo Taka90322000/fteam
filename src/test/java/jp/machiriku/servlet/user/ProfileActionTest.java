@@ -61,6 +61,8 @@ public class ProfileActionTest {
         Harness h = authenticated("GET", "RESIDENT");
         FakeDao dao = new FakeDao();
         dao.residentFields = Map.of(
+            "name", "別端末で更新済みの名前",
+            "email", "updated-elsewhere@example.com",
             "ageGroup", "30代",
             "gender", "女性",
             "livingAddress", "栃木県宇都宮市中央1-1"
@@ -69,13 +71,18 @@ public class ProfileActionTest {
         new ProfileAction(dao).execute(h.request, h.response);
         assertEquals(RESIDENT_VIEW, h.forwarded);
         assertNull(h.redirect);
-        assertEquals("テストユーザー", h.attributes.get("displayName"));
-        assertEquals("test@example.com", h.attributes.get("email"));
+        assertEquals("別端末で更新済みの名前", h.attributes.get("displayName"));
+        assertEquals("updated-elsewhere@example.com", h.attributes.get("email"));
+        assertEquals("別端末で更新済みの名前", h.sessionValues.get("userName"));
+        assertEquals("updated-elsewhere@example.com", h.sessionValues.get("userEmail"));
         assertEquals("resident", h.attributes.get("role"));
         assertNotNull(h.attributes.get("csrfToken"));
+        assertNotNull(h.attributes.get("residentTaxonomy"));
 
         @SuppressWarnings("unchecked")
         Map<String, String> values = (Map<String, String>) h.attributes.get("formValues");
+        assertEquals("別端末で更新済みの名前", values.get("name"));
+        assertEquals("updated-elsewhere@example.com", values.get("email"));
         assertEquals("30代", values.get("ageGroup"));
         assertEquals("女性", values.get("gender"));
         assertEquals("栃木県宇都宮市中央1-1", values.get("livingAddress"));
@@ -334,6 +341,11 @@ public class ProfileActionTest {
         @Override
         public List<RegistrationChoice> listQualifications() {
             return List.of(new RegistrationChoice(2, "飲食店営業許可"));
+        }
+
+        @Override
+        public List<Map<String, Object>> listResidentTaxonomy() {
+            return List.of(Map.of("id", "C01", "name", "飲食", "subcategories", List.of(Map.of("id", "I0101", "name", "カフェ・喫茶店"))));
         }
 
         @Override

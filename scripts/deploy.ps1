@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # 展開形式のWebアプリをビルドし、必要な場合にTomcatを起動して応答を確認する。
 # Windows PowerShell 5.1でも日本語を読み取れるよう、UTF-8（BOM付き）で保存する。
 
@@ -45,8 +45,18 @@ if ($configuredDocBase -ne $expectedDocBase) {
 }
 
 # Javaをコンパイルし、Tomcatが参照するtarget/machirikuへWebアプリを展開する。
+# 削除済みのServlet等（旧DbCheckServlet等）がtargetに残らないよう、ビルド先と展開先のclasses/viewsを事前にクリーンアップする。
 Push-Location $projectRoot
 try {
+    foreach ($cleanDir in @(
+        (Join-Path $projectRoot 'target\classes'),
+        (Join-Path $projectRoot 'target\machiriku\WEB-INF\classes'),
+        (Join-Path $projectRoot 'target\machiriku\WEB-INF\views')
+    )) {
+        if (Test-Path -LiteralPath $cleanDir) {
+            Remove-Item -LiteralPath $cleanDir -Recurse -Force
+        }
+    }
     Write-Host 'Building Maven exploded application...' -ForegroundColor Cyan
     & mvn compile war:exploded
     if ($LASTEXITCODE -ne 0) {

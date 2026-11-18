@@ -1,7 +1,12 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="jp.machiriku.bean.User,jp.machiriku.tool.Html,com.fasterxml.jackson.databind.ObjectMapper" %>
+<%@ page import="jp.machiriku.bean.User,jp.machiriku.servlet.auth.LogoutAction,jp.machiriku.tool.Html,com.fasterxml.jackson.databind.ObjectMapper" %>
 <%
   User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
+  String rawSessionRole = session.getAttribute("userRole") instanceof String ? (String) session.getAttribute("userRole") : null;
+  boolean isDemoSession = currentUser == null && rawSessionRole != null
+      && java.util.Set.of("resident", "business", "owner", "admin").contains(rawSessionRole);
+  String logoutCsrfToken = LogoutAction.csrfToken(session);
+
   String displayName = (String) session.getAttribute("userName");
   if (displayName == null && currentUser != null) {
     displayName = currentUser.getDisplayName();
@@ -9,7 +14,7 @@
   if (displayName == null || displayName.trim().isEmpty()) {
     displayName = "LINEユーザー";
   }
-  String userRole = (String) session.getAttribute("userRole");
+  String userRole = rawSessionRole;
   if (userRole == null && currentUser != null && currentUser.getUserRole() != null) {
     userRole = currentUser.getUserRole().toLowerCase(java.util.Locale.ROOT);
   }
@@ -61,19 +66,35 @@
         <% if (currentUser == null) { %>
           <label class="role-picker" id="header-role-picker-wrap" for="preview-role">デモ表示
             <select id="preview-role" onchange="MachirikuStore.setRole(this.value)">
-              <option value="resident">地域住民</option>
-              <option value="business">出店事業主</option>
-              <option value="owner">物件オーナー</option>
-              <option value="admin">運営管理者</option>
+              <option value="resident" <%= "resident".equalsIgnoreCase(userRole) ? "selected" : "" %>>地域住民</option>
+              <option value="business" <%= "business".equalsIgnoreCase(userRole) ? "selected" : "" %>>出店事業主</option>
+              <option value="owner" <%= "owner".equalsIgnoreCase(userRole) ? "selected" : "" %>>物件オーナー</option>
+              <option value="admin" <%= "admin".equalsIgnoreCase(userRole) ? "selected" : "" %>>運営管理者</option>
             </select>
           </label>
           <span id="header-role-badge" class="header-role-badge" style="display:none;">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span id="header-role-badge-text">地域住民</span>
           </span>
-          <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
-            <span>ログイン</span>
-          </a>
+          <% if (isDemoSession) { %>
+            <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;">
+              <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+              <input type="hidden" name="next" value="login">
+              <button type="submit" class="btn-header-action profile-link" style="border:none; cursor:pointer; font:inherit;">
+                <span>ログイン</span>
+              </button>
+            </form>
+            <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('デモ表示を終了してログアウトしますか？');">
+              <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+              <button type="submit" class="btn-header-action" style="border:none; cursor:pointer; font:inherit;">
+                <span>デモ終了</span>
+              </button>
+            </form>
+          <% } else { %>
+            <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
+              <span>ログイン</span>
+            </a>
+          <% } %>
         <% } else { %>
           <label class="role-picker" id="header-role-picker-wrap" for="preview-role" style="display:none;">利用者
             <select id="preview-role" onchange="MachirikuStore.setRole(this.value)">
@@ -117,11 +138,29 @@
       <nav class="footer-links" aria-label="関連メニュー">
         <a href="#s01">空き店舗を探す</a>
         <a href="#s21">開店の相談</a>
-        <% if (currentUser == null) { %>
+        <% if (currentUser == null && !isDemoSession) { %>
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action">ログイン</a>
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action">新規会員登録</a>
+        <% } else if (isDemoSession) { %>
+        <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;">
+          <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+          <input type="hidden" name="next" value="login">
+          <button type="submit" style="background:none; border:none; padding:0; color:inherit; font:inherit; text-decoration:underline; cursor:pointer;">ログイン</button>
+        </form>
+        <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;">
+          <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+          <input type="hidden" name="next" value="register">
+          <button type="submit" style="background:none; border:none; padding:0; color:inherit; font:inherit; text-decoration:underline; cursor:pointer;">新規会員登録</button>
+        </form>
+        <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('デモ表示を終了してログアウトしますか？');">
+          <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+          <button type="submit" style="background:none; border:none; padding:0; color:inherit; font:inherit; text-decoration:underline; cursor:pointer;">デモ終了（ログアウト）</button>
+        </form>
         <% } else { %>
-        <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('ログアウトしますか？');">ログアウト</a>
+        <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('ログアウトしますか？');">
+          <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+          <button type="submit" style="background:none; border:none; padding:0; color:inherit; font:inherit; text-decoration:underline; cursor:pointer;">ログアウト</button>
+        </form>
         <% } %>
       </nav>
     </div>
@@ -148,13 +187,14 @@
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
     document.addEventListener('DOMContentLoaded', function () {
-      <% if (isLoggedOut) { %>
-        // 明示的なログアウト時のみブラウザ側に残存するキャッシュを破棄し初期状態にリセット
+      <% if (currentUser == null) { %>
+        // セッション失効時や未ログイン時は、常にブラウザー内の実会員情報とログイン済みフラグを消去する。
         try {
           if (window.sessionStorage) {
             window.sessionStorage.removeItem('machiriku_user_display_name');
             window.sessionStorage.removeItem('machiriku_onboarding');
           }
+          <% if (isLoggedOut) { %>
           if (window.localStorage) {
             const keysToRemove = [];
             for (let i = 0; i < window.localStorage.length; i++) {
@@ -168,14 +208,24 @@
           if (window.MachirikuStore && typeof window.MachirikuStore.resetState === 'function') {
             window.MachirikuStore.resetState();
           }
+          <% } %>
+          if (window.MachirikuStore && typeof window.MachirikuStore.setSessionUser === 'function') {
+            window.MachirikuStore.setSessionUser(null);
+          }
+          <% if (isDemoSession) { %>
+          if (window.MachirikuStore && typeof window.MachirikuStore.setRole === 'function') {
+            window.MachirikuStore.setRole(<%= jsonUserRole %>);
+          }
+          <% } %>
         } catch (_) {}
-      <% } else if (currentUser != null) { %>
+      <% } else { %>
         if (window.MachirikuStore && typeof MachirikuStore.setRole === 'function') {
           MachirikuStore.setRole(<%= jsonUserRole %>);
         }
-        if (window.MachirikuStore && typeof MachirikuStore.updateUserProfile === 'function') {
-          MachirikuStore.updateUserProfile({
+        if (window.MachirikuStore && typeof MachirikuStore.setSessionUser === 'function') {
+          MachirikuStore.setSessionUser({
             name: <%= jsonDisplayName %>,
+            displayName: <%= jsonDisplayName %>,
             role: <%= jsonUserRole %>,
             email: <%= jsonUserEmail %>,
             isLoggedIn: true

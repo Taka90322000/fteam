@@ -57,6 +57,17 @@ window.MachirikuStore = (function() {
       if (!saved || saved.datasetVersion !== data.DATASET_VERSION || collections.some(key => !Array.isArray(saved[key]))) return initial;
       if (collections.some(key => saved[key].some(item => !item || typeof item.id !== 'string'))) return initial;
       if (!saved.users || Object.keys(initial.users).some(role => !saved.users[role] || saved.users[role].role !== role)) return initial;
+      // localStorageに実会員の氏名・メール・ログイン済みフラグを残さないよう、読込時に各ロールの本人情報を初期値へ戻す。
+      for (const role of Object.keys(initial.users)) {
+        const template = initial.users[role];
+        const target = saved.users[role];
+        target.name = template.name;
+        target.email = template.email;
+        delete target.displayName;
+        delete target.userId;
+        delete target.accountStatus;
+        delete target.isLoggedIn;
+      }
       const currentRole = saved.users[saved.currentRole] ? saved.currentRole : 'resident';
       // Upgrade previous covers or external URLs to local assets without resetting votes or follows.
       for (const prop of saved.properties) {
@@ -103,7 +114,23 @@ window.MachirikuStore = (function() {
   function saveState() {
     try {
       if (!window.localStorage) { persistenceAvailable = false; return; }
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      // 実会員の氏名・メール・ログイン状態はサーバーセッションから毎回取得し、localStorageには永続化しない。
+      const sanitizedUsers = {};
+      for (const role of Object.keys(state.users || {})) {
+        const template = data.USERS[role] || {};
+        const copy = { ...state.users[role], name: template.name, email: template.email };
+        delete copy.displayName;
+        delete copy.userId;
+        delete copy.accountStatus;
+        delete copy.isLoggedIn;
+        sanitizedUsers[role] = copy;
+      }
+      const snapshot = {
+        ...state,
+        users: sanitizedUsers,
+        currentUser: sanitizedUsers[state.currentRole] || sanitizedUsers.resident
+      };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
       persistenceAvailable = true;
     } catch (_) { persistenceAvailable = false; }
   }
@@ -718,9 +745,19 @@ window.MachirikuStore = (function() {
   // サーバーセッション情報（index.jsp / User bean）による認証ユーザーの反映
   function setSessionUser(userData) {
     if (!userData) {
-      if (state.currentUser) {
-        state.currentUser.isLoggedIn = false;
+      for (const role of Object.keys(state.users || {})) {
+        const template = data.USERS[role] || {};
+        const target = state.users[role];
+        if (target) {
+          target.name = template.name;
+          target.email = template.email;
+          delete target.displayName;
+          delete target.userId;
+          delete target.accountStatus;
+          delete target.isLoggedIn;
+        }
       }
+      state.currentUser = state.users[state.currentRole] || state.users.resident;
       notify('profile', { user: state.currentUser });
       return null;
     }

@@ -1,6 +1,6 @@
 <%-- 住民の初期設定画面。Actionから渡されたLINE表示名と任意のメールアドレスを初期表示に使う。 --%>
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="java.util.Map,jp.machiriku.bean.User,jp.machiriku.tool.Html" %>
+<%@ page import="java.util.List,java.util.Map,com.fasterxml.jackson.databind.ObjectMapper,jp.machiriku.bean.User,jp.machiriku.tool.Html" %>
 <%
   String displayName = (String) request.getAttribute("displayName");
   if (displayName == null) displayName = "";
@@ -15,6 +15,10 @@
   User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
   boolean isOnboarding = currentUser == null || "PENDING".equals(currentUser.getAccountStatus())
       || "1".equals(request.getParameter("onboarding"));
+  Object rawTaxonomy = request.getAttribute("residentTaxonomy");
+  String jsonResidentTaxonomy = new ObjectMapper()
+      .writeValueAsString(rawTaxonomy instanceof List ? rawTaxonomy : java.util.Collections.emptyList())
+      .replace("</", "<\\/");
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="アカウントの初期設定 | マチリク" />
@@ -190,6 +194,9 @@
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
                 <span>現在地から自動設定</span>
               </button>
+              <button type="button" class="btn-outline btn-sm" onclick="removeWorkLocation()" style="font-size:0.8rem; padding:0.3rem 0.65rem; border-radius:var(--radius-full); display:inline-flex; align-items:center; gap:0.25rem; background:var(--bg-card); color:var(--danger-text, #991b1b); cursor:pointer;">
+                <span>登録を解除</span>
+              </button>
               <button type="button" class="btn-outline btn-sm" onclick="toggleWorkMap(false)" style="font-size:0.8rem; padding:0.3rem 0.65rem; border-radius:var(--radius-full); display:inline-flex; align-items:center; gap:0.25rem; background:var(--bg-card); cursor:pointer;">
                 <span>✕ 閉じる</span>
               </button>
@@ -231,9 +238,12 @@
       </div>
     </form>
     <div style="margin-top:1.5rem; text-align:center;">
-      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('登録を中断してログアウトしますか？');" style="color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer;">
-        登録を中断してログアウト
-      </a>
+      <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('登録を中断してログアウトしますか？');">
+        <input type="hidden" name="csrfToken" value="<%= Html.escape(request.getAttribute("csrfToken")) %>">
+        <button type="submit" style="background:none; border:none; padding:0; color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer; font-family:inherit;">
+          登録を中断してログアウト
+        </button>
+      </form>
     </div>
     <%-- 本登録前の本人に、利用者区分の選択画面への導線を表示する。 --%>
     <% User registrationUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
@@ -253,8 +263,8 @@
 <script>
   // 初期中心は宇都宮にするが、利用者が選ぶまでは住所・座標・ピンを登録しない。
   const s18Locations = {
-    living: { map: null, marker: null, revision: 0, mapId: 's18-map-picker', statusId: 's18-map-status' },
-    work: { map: null, marker: null, revision: 0, mapId: 's18-work-map-picker', statusId: 's18-work-map-status' }
+    living: { map: null, marker: null, revision: 0, geocodeState: 'idle', mapId: 's18-map-picker', statusId: 's18-map-status' },
+    work: { map: null, marker: null, revision: 0, geocodeState: 'idle', mapId: 's18-work-map-picker', statusId: 's18-work-map-status' }
   };
   const s18MapCenter = { lat: 36.5610, lng: 139.8830 };
 
@@ -270,7 +280,7 @@
   // ==========================================
   // S18: 地域住民向け「欲しい店舗・施設ジャンル」タブ＆ピル選択状態・ヘルパー
   // ==========================================
-  const RESIDENT_TAXONOMY = [
+  const DEFAULT_RESIDENT_TAXONOMY = [
     {
       id: "C01", name: "飲食",
       subcategories: [
@@ -335,14 +345,19 @@
     }
   ];
 
-  let residentActiveCatId = 'C01';
+  const SERVER_RESIDENT_TAXONOMY = <%= jsonResidentTaxonomy %>;
+  const RESIDENT_TAXONOMY = (Array.isArray(SERVER_RESIDENT_TAXONOMY) && SERVER_RESIDENT_TAXONOMY.length > 0)
+      ? SERVER_RESIDENT_TAXONOMY
+      : DEFAULT_RESIDENT_TAXONOMY;
+
+  let residentActiveCatId = RESIDENT_TAXONOMY[0] ? RESIDENT_TAXONOMY[0].id : 'C01';
   let residentSelectedIndustries = new Set();
 
-  // hidden項目は利用者が変更できるため、再表示時は画面にある業種だけを復元する。
+  // hidden項目は利用者が変更できるため、再表示時はDBマスターまたは有効な業種コードだけを復元する。
   // 以前の名称形式も既知の項目に限ってコードへ直し、名称をHTMLへ直接差し込まない。
   function restoreResidentIndustrySelection(rawValue) {
     const knownIndustries = new Map();
-    RESIDENT_TAXONOMY.forEach(category => category.subcategories.forEach(subcategory => {
+    RESIDENT_TAXONOMY.forEach(category => (category.subcategories || []).forEach(subcategory => {
       knownIndustries.set(subcategory.id, subcategory.id);
       knownIndustries.set(subcategory.name, subcategory.id);
     }));
@@ -351,7 +366,12 @@
       const saved = JSON.parse(rawValue || '[]');
       if (!Array.isArray(saved) || saved.length > 200) return restored;
       saved.forEach(value => {
-        if (typeof value === 'string' && knownIndustries.has(value)) restored.add(knownIndustries.get(value));
+        if (typeof value !== 'string') return;
+        if (knownIndustries.has(value)) {
+          restored.add(knownIndustries.get(value));
+        } else if (/^I[0-9]{4}$/.test(value)) {
+          restored.add(value);
+        }
       });
     } catch (_) {
       // 壊れたJSONを実行・描画せず、利用者が画面上で選び直せる状態にする。
@@ -424,12 +444,20 @@
 
   function renderResidentSelectedTagsHtml() {
     var allSubs = [];
+    var matchedIds = new Set();
     RESIDENT_TAXONOMY.forEach(function(c) {
-      c.subcategories.forEach(function(s) {
+      (c.subcategories || []).forEach(function(s) {
         if (residentSelectedIndustries.has(s.id) || residentSelectedIndustries.has(s.name)) {
           allSubs.push({ id: s.id, name: s.name, catName: c.name });
+          matchedIds.add(s.id);
+          matchedIds.add(s.name);
         }
       });
+    });
+    residentSelectedIndustries.forEach(function(code) {
+      if (!matchedIds.has(code) && /^I[0-9]{4}$/.test(code)) {
+        allSubs.push({ id: code, name: code, catName: '' });
+      }
     });
 
     if (allSubs.length === 0) {
@@ -524,20 +552,33 @@
       nameInput.focus();
       return false;
     }
+    if (s18Locations.living.geocodeState === 'loading') {
+      alert('選択した居住地の住所を確認しています。住所が表示されてから登録してください');
+      return false;
+    }
     if (!addrInput.value.trim() || !readResidentCoords('living')) {
       alert('居住地を地図上で選択してください（必須）');
       addrInput.focus();
       return false;
     }
     const workInput = document.getElementById('s18-work-address');
-    if (workInput.value.trim() && !readResidentCoords('work')) {
-      alert('職場・学校を登録する場合は、地図上で住所を選択してください');
+    const workCoords = readResidentCoords('work');
+    if (s18Locations.work.geocodeState === 'loading') {
+      alert('選択した職場・学校の住所を確認しています。住所が表示されてから登録してください');
+      toggleWorkMap(true);
+      return false;
+    }
+    if (s18Locations.work.geocodeState === 'error') {
+      alert('職場・学校の住所を取得できませんでした。地図上で選び直すか、「登録を解除」を押してください');
+      toggleWorkMap(true);
+      return false;
+    }
+    if ((workInput.value.trim() && !workCoords) || (!workInput.value.trim() && workCoords)) {
+      alert('職場・学校を登録する場合は地図上で住所を選択してください（削除する場合は「登録を解除」を押してください）');
       toggleWorkMap(true);
       workInput.focus();
       return false;
     }
-    // 任意の職場・学校が空欄なら、以前の座標も送らない。
-    if (!workInput.value.trim()) clearResidentCoords('work');
     return true;
   }
 
@@ -549,10 +590,17 @@
   function clearResidentCoords(kind) {
     const location = s18Locations[kind];
     location.revision++;
+    location.geocodeState = 'idle';
     document.getElementById('s18-' + kind + '-lat').value = '';
     document.getElementById('s18-' + kind + '-lng').value = '';
     if (location.marker) location.marker.setMap(null);
     updateResidentStatus(kind, '※地図上で住所を選択してください');
+  }
+
+  function removeWorkLocation() {
+    document.getElementById('s18-work-address').value = '';
+    clearResidentCoords('work');
+    toggleWorkMap(false);
   }
 
   function showResidentMarker(kind, point) {
@@ -572,6 +620,7 @@
   function selectResidentLocation(kind, point) {
     const location = s18Locations[kind];
     const revision = ++location.revision;
+    location.geocodeState = 'loading';
     const addressInput = document.getElementById('s18-' + kind + '-address');
     document.getElementById('s18-' + kind + '-lat').value = point.lat;
     document.getElementById('s18-' + kind + '-lng').value = point.lng;
@@ -580,6 +629,7 @@
     if (location.map) location.map.panTo(point);
     updateResidentStatus(kind, '選択した位置の住所を確認しています…');
     if (typeof google === 'undefined' || !google.maps || !google.maps.Geocoder) {
+      location.geocodeState = 'error';
       updateResidentStatus(kind, '住所を取得できませんでした。地図の読み込み後に選び直してください');
       return;
     }
@@ -587,9 +637,11 @@
       // 地図選択後に入力を修正した場合、古い住所検索結果で上書きしない。
       if (revision !== location.revision) return;
       if (status === 'OK' && results && results[0] && results[0].formatted_address) {
+        location.geocodeState = 'resolved';
         addressInput.value = results[0].formatted_address.replace(/^日本、/, '');
         updateResidentStatus(kind, '✓ 選択中: (' + point.lat.toFixed(4) + ', ' + point.lng.toFixed(4) + ')');
       } else {
+        location.geocodeState = 'error';
         updateResidentStatus(kind, '住所を取得できませんでした。地図上で選び直してください');
       }
     });
@@ -651,6 +703,9 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     ['living', 'work'].forEach((kind) => {
+      if (document.getElementById('s18-' + kind + '-address').value.trim() && readResidentCoords(kind)) {
+        s18Locations[kind].geocodeState = 'resolved';
+      }
       document.getElementById('s18-' + kind + '-address').addEventListener('input', () => clearResidentCoords(kind));
     });
     residentSelectedIndustries = restoreResidentIndustrySelection(document.getElementById('s18-preferred-industries').value);

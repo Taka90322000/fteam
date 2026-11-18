@@ -39,7 +39,7 @@ function Get-ActivePagePath {
     param(
         [string]$ProjectRoot,
         [string]$ActiveFile,
-        [string]$FallbackPath = '/machiriku/hello'
+        [string]$FallbackPath = '/machiriku/index.jsp'
     )
 
     if ([string]::IsNullOrWhiteSpace($ActiveFile)) { return $FallbackPath }

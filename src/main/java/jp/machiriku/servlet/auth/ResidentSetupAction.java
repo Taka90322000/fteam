@@ -76,11 +76,23 @@ public class ResidentSetupAction extends Action {
             fields.put("preferredIndustries", "[]");
             fields.put("emailNotify", "on");
         }
+        java.util.List<Map<String, Object>> residentTaxonomy = java.util.Collections.emptyList();
+        if (!preview) {
+            try {
+                residentTaxonomy = createProfileDao().listResidentTaxonomy();
+            } catch (SQLException e) {
+                OnboardingSupport.logDatabaseError(req, e);
+                if (req.getAttribute("errorMessage") == null) {
+                    req.setAttribute("errorMessage", "業種の選択肢を取得できませんでした。時間をおいて再度お試しください。");
+                }
+            }
+        }
         req.setAttribute("formValues", fields);
         req.setAttribute("displayName", fields.get("name"));
         req.setAttribute("email", fields.get("email"));
         req.setAttribute("role", "resident");
         req.setAttribute("roleLabel", "地域住民");
+        req.setAttribute("residentTaxonomy", residentTaxonomy);
         req.setAttribute("csrfToken", OnboardingSupport.csrfToken(req.getSession()));
         req.getRequestDispatcher("/WEB-INF/views/auth/resident_setup.jsp").forward(req, res);
     }

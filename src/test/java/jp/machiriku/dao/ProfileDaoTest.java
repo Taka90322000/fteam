@@ -531,6 +531,13 @@ public class ProfileDaoTest {
     public void choicesUseActiveDatabaseIdsRatherThanDisplayOrder() throws Exception {
         assertEquals(List.of(10, 11), dao.listIndustries().stream().map(choice -> choice.id()).toList());
         assertEquals(List.of(100, 101), dao.listQualifications().stream().map(choice -> choice.id()).toList());
+        List<Map<String, Object>> taxonomy = dao.listResidentTaxonomy();
+        assertEquals(1, taxonomy.size());
+        assertEquals("001", taxonomy.get(0).get("id"));
+        assertEquals("飲食", taxonomy.get(0).get("name"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> subs = (List<Map<String, String>>) taxonomy.get(0).get("subcategories");
+        assertEquals(List.of("I0101", "I0201"), subs.stream().map(s -> s.get("id")).toList());
     }
 
     private ResidentProfileInput resident(String name, String email, LocationInput home, LocationInput work, boolean notify) {
