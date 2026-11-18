@@ -90,6 +90,14 @@ window.MachirikuStore = (function() {
           loadedFilters.cities = ['宇都宮市'];
         }
       }
+      if (saved.users.business && initial.users.business) {
+        if (!saved.users.business.businessName) {
+          saved.users.business.businessName = initial.users.business.businessName || initial.users.business.company || "";
+        }
+        if (!Array.isArray(saved.users.business.preferredIndustries) || !saved.users.business.preferredIndustries.length) {
+          saved.users.business.preferredIndustries = [...(initial.users.business.preferredIndustries || [])];
+        }
+      }
       return { ...initial, ...saved, currentRole, currentUser: saved.users[currentRole], filters: loadedFilters };
     } catch (_) {
       // Damaged or unavailable local storage must never prevent previewing a screen.
@@ -425,23 +433,30 @@ window.MachirikuStore = (function() {
 
   // 出店応募送信 (S08 / B01)
   function submitApplication(appData) {
+    const bizName = appData.businessName || state.currentUser.businessName || state.currentUser.company || "";
+    const plannedStoreName = appData.plannedStoreName || "";
+    const displayStoreName = plannedStoreName || appData.storeName || bizName || "新規店舗";
+    const contractKind = appData.contractKind || "LONG";
     const newApp = {
       id: "app-" + Date.now(),
       propId: appData.propId,
       propTitle: appData.propTitle,
       applicantId: state.currentUser.id,
-      applicantName: state.currentUser.name + (state.currentUser.company ? `（${state.currentUser.company}）` : ''),
+      applicantName: state.currentUser.name + (bizName ? `（${bizName}）` : ''),
+      businessName: bizName,
+      plannedStoreName: plannedStoreName,
       genreId: appData.genreId,
       genreName: data.SUBCATS[appData.genreId]?.name || "飲食店",
-      storeName: appData.storeName,
+      storeName: displayStoreName,
       targetRent: Number(appData.targetRent) || 0,
       targetOpenDate: appData.targetOpenDate || appData.requestedStartOn || "",
       message: appData.message || appData.concept || "",
       concept: appData.concept || appData.message || "",
-      contractKind: appData.contractKind || "LONG",
+      contractKind: contractKind,
       requestedStartOn: appData.requestedStartOn || appData.targetOpenDate || "",
-      requestedEndOn: appData.requestedEndOn || "",
+      requestedEndOn: contractKind === "POPUP" ? (appData.requestedEndOn || "") : "",
       viewingRequestedAt: appData.viewingRequestedAt || "",
+      experienceYears: appData.experienceYears || "",
       checks: Array.isArray(appData.checks) ? appData.checks : [],
       ownerReply: "",
       repliedAt: null,
@@ -464,7 +479,7 @@ window.MachirikuStore = (function() {
     state.notifications.unshift({
       id: "notif-" + Date.now(),
       type: "application",
-      title: `【新規出店応募】${appData.storeName}様より応募がありました`,
+      title: `【新規出店応募】${displayStoreName}様より応募がありました`,
       body: `${prop?.title}に新しい出店申込が届きました。内容をご確認ください。`,
       date: "たった今",
       linkScreen: "o03",

@@ -74,17 +74,182 @@ window.MachirikuPropertyPages = (function () {
     }
   }
 
-  function buildCategoryOptgroupsHtml(selectedId = "", emptyLabel = "") {
+  function buildCategoryOptgroupsHtml(selectedId = "", emptyLabel = "", preferredIds = []) {
     let html = emptyLabel ? `<option value="">${escapeHtml(emptyLabel)}</option>` : "";
+    const prefSet = new Set(Array.isArray(preferredIds) ? preferredIds : []);
+    if (prefSet.size > 0) {
+      let prefOpts = "";
+      prefSet.forEach(id => {
+        const sub = data.SUBCATS?.[id];
+        if (sub) {
+          const sel = sub.id === selectedId ? "selected" : "";
+          prefOpts += `<option value="${escapeHtml(sub.id)}" ${sel}>${escapeHtml(sub.name)}</option>`;
+        }
+      });
+      if (prefOpts) {
+        html += `<optgroup label="プロフィール登録済みの希望業種">${prefOpts}</optgroup>`;
+      }
+    }
     (data.CATEGORIES || []).forEach(cat => {
       html += `<optgroup label="${escapeHtml(cat.name)}">`;
       (cat.subcategories || []).forEach(sub => {
-        const sel = sub.id === selectedId ? "selected" : "";
+        const sel = !prefSet.has(sub.id) && sub.id === selectedId ? "selected" : "";
         html += `<option value="${escapeHtml(sub.id)}" ${sel}>${escapeHtml(sub.name)}</option>`;
       });
       html += `</optgroup>`;
     });
     return html;
+  }
+
+  function getLiveAnnouncer(announcerId = "r01-live-announcer") {
+    let el = document.getElementById(announcerId);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = announcerId;
+      el.className = "sr-only";
+      el.setAttribute("aria-live", "polite");
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function syncFieldValidationState(field, touchedMap, forceInvalid = false) {
+    if (!field || field.disabled) {
+      if (field) {
+        field.classList.remove("user-invalid-fallback");
+        field.setAttribute("aria-invalid", "false");
+      }
+      return false;
+    }
+    const supportsUserInvalid = CSS.supports("selector(:user-invalid)");
+    const hasCustomErr = Boolean(field.validity && field.validity.customError);
+    let invalid = false;
+    if (supportsUserInvalid) {
+      invalid = field.matches(":user-invalid") || ((forceInvalid || hasCustomErr) && !field.validity.valid);
+      field.classList.toggle("user-invalid-fallback", invalid && !field.matches(":user-invalid"));
+    } else {
+      const touched = Boolean(touchedMap.get(field));
+      invalid = (touched || forceInvalid || hasCustomErr) && !field.validity.valid;
+      field.classList.toggle("user-invalid-fallback", invalid);
+    }
+    field.setAttribute("aria-invalid", String(invalid));
+    const errId = field.dataset ? field.dataset.error : "";
+    if (errId) {
+      const existing = (field.getAttribute("aria-describedby") || "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .filter((id) => id !== errId);
+      if (invalid) existing.push(errId);
+      if (existing.length > 0) {
+        field.setAttribute("aria-describedby", existing.join(" "));
+      } else {
+        field.removeAttribute("aria-describedby");
+      }
+    }
+    return invalid;
+  }
+
+  function initAccessibleFormValidation(formEl, options = {}) {
+    if (!formEl) return null;
+    const announcerId = options.announcerId || "r01-live-announcer";
+    const touched = new WeakMap();
+    const getFields = () => Array.from(formEl.querySelectorAll("select, input, textarea"));
+    let announceTimer = 0;
+
+    const scheduleAnnounce = (field) => {
+      if (!field || !field.dataset?.error) return;
+      clearTimeout(announceTimer);
+      const msgEl = document.getElementById(field.dataset.error);
+      const msgText = msgEl ? msgEl.textContent.replace(/\s+/g, " ").trim() : "";
+      announceTimer = window.setTimeout(() => {
+        const isNowInvalid = field.getAttribute("aria-invalid") === "true";
+        const announcer = getLiveAnnouncer(announcerId);
+        if (isNowInvalid && msgText) {
+          announcer.textContent = "";
+          window.requestAnimationFrame(() => {
+            announcer.textContent = msgText;
+          });
+        } else {
+          announcer.textContent = "";
+        }
+      }, 500);
+    };
+
+    const resetAll = () => {
+      getFields().forEach((f) => {
+        touched.set(f, false);
+        f.classList.remove("user-invalid-fallback");
+        syncFieldValidationState(f, touched);
+      });
+    };
+
+    if (formEl.dataset.ariaValidationInit !== "true") {
+      formEl.dataset.ariaValidationInit = "true";
+      getLiveAnnouncer(announcerId);
+      formEl.addEventListener("invalid", (e) => {
+        const target = e.target;
+        if (!target) return;
+        touched.set(target, true);
+        syncFieldValidationState(target, touched, true);
+      }, true);
+
+      formEl.addEventListener("input", (e) => {
+        const target = e.target;
+        if (!target || !target.matches?.("input, textarea")) return;
+        if (target.hasAttribute("aria-invalid")) {
+          const invalid = syncFieldValidationState(target, touched);
+          if (!invalid) getLiveAnnouncer(announcerId).textContent = "";
+        }
+      });
+
+      formEl.addEventListener("change", (e) => {
+        const target = e.target;
+        if (!target || !target.matches?.("select, input, textarea")) return;
+        touched.set(target, true);
+        const invalid = syncFieldValidationState(target, touched);
+        if (invalid) scheduleAnnounce(target);
+        else getLiveAnnouncer(announcerId).textContent = "";
+      });
+
+      formEl.addEventListener("blur", (e) => {
+        const target = e.target;
+        if (!target || !target.matches?.("select, input, textarea")) return;
+        touched.set(target, true);
+        const invalid = syncFieldValidationState(target, touched);
+        if (invalid) scheduleAnnounce(target);
+      }, true);
+    }
+
+    resetAll();
+    return {
+      markTouched: (field, forceInvalid = false) => {
+        if (field) touched.set(field, true);
+        return syncFieldValidationState(field, touched, forceInvalid);
+      },
+      resetField: (field) => {
+        if (!field) return;
+        touched.set(field, false);
+        field.classList.remove("user-invalid-fallback");
+        syncFieldValidationState(field, touched);
+      },
+      announce: (text) => {
+        const announcer = getLiveAnnouncer(announcerId);
+        announcer.textContent = "";
+        window.requestAnimationFrame(() => {
+          announcer.textContent = text;
+        });
+      },
+      focusFirstInvalid: () => {
+        const firstInvalid = getFields().find(f => !f.disabled && f.offsetParent !== null && f.validity && !f.validity.valid);
+        if (firstInvalid) {
+          touched.set(firstInvalid, true);
+          syncFieldValidationState(firstInvalid, touched, true);
+          firstInvalid.focus();
+          return firstInvalid;
+        }
+        return null;
+      }
+    };
   }
 
   function calcDistanceKm(lat1, lng1, lat2, lng2) {
@@ -183,122 +348,8 @@ window.MachirikuPropertyPages = (function () {
       };
     }
 
-    const getR01Announcer = () => {
-      let el = document.getElementById("r01-live-announcer");
-      if (!el) {
-        el = document.createElement("div");
-        el.id = "r01-live-announcer";
-        el.className = "sr-only";
-        el.setAttribute("aria-live", "polite");
-        document.body.appendChild(el);
-      }
-      return el;
-    };
-
-    const syncFieldValidationState = (field, touchedMap, forceInvalid = false) => {
-      if (!field) return false;
-      const supportsUserInvalid = CSS.supports("selector(:user-invalid)");
-      let invalid = false;
-      if (supportsUserInvalid) {
-        invalid = field.matches(":user-invalid") || (forceInvalid && !field.validity.valid);
-        field.classList.toggle("user-invalid-fallback", invalid && !field.matches(":user-invalid"));
-      } else {
-        const touched = Boolean(touchedMap.get(field));
-        invalid = (touched || forceInvalid) && !field.validity.valid;
-        field.classList.toggle("user-invalid-fallback", invalid);
-      }
-      field.setAttribute("aria-invalid", String(invalid));
-      const errId = field.dataset.error;
-      if (errId) {
-        const existing = (field.getAttribute("aria-describedby") || "")
-          .split(/\s+/)
-          .filter(Boolean)
-          .filter((id) => id !== errId);
-        if (invalid) existing.push(errId);
-        if (existing.length > 0) {
-          field.setAttribute("aria-describedby", existing.join(" "));
-        } else {
-          field.removeAttribute("aria-describedby");
-        }
-      }
-      return invalid;
-    };
-
-    const initR01AccessibleValidation = (formEl) => {
-      if (!formEl) return null;
-      const touched = new WeakMap();
-      const fields = Array.from(formEl.querySelectorAll("select, input, textarea"));
-      let announceTimer = 0;
-
-      const scheduleAnnounce = (field) => {
-        if (!field || !field.dataset.error) return;
-        clearTimeout(announceTimer);
-        const msgEl = document.getElementById(field.dataset.error);
-        const msgText = msgEl ? msgEl.textContent.trim() : "";
-        announceTimer = window.setTimeout(() => {
-          const isNowInvalid = field.getAttribute("aria-invalid") === "true";
-          const announcer = getR01Announcer();
-          if (isNowInvalid && msgText) {
-            announcer.textContent = "";
-            window.requestAnimationFrame(() => {
-              announcer.textContent = msgText;
-            });
-          } else {
-            announcer.textContent = "";
-          }
-        }, 500);
-      };
-
-      const resetState = () => {
-        fields.forEach((f) => {
-          touched.set(f, false);
-          f.classList.remove("user-invalid-fallback");
-          syncFieldValidationState(f, touched);
-        });
-      };
-
-      if (formEl.dataset.r01AriaInit !== "true") {
-        formEl.dataset.r01AriaInit = "true";
-        getR01Announcer();
-        formEl.addEventListener("invalid", (e) => {
-          const target = e.target;
-          if (!target) return;
-          touched.set(target, true);
-          syncFieldValidationState(target, touched, true);
-        }, true);
-
-        fields.forEach((f) => {
-          f.addEventListener("change", () => {
-            touched.set(f, true);
-            const invalid = syncFieldValidationState(f, touched);
-            if (invalid) scheduleAnnounce(f);
-            else getR01Announcer().textContent = "";
-          });
-          f.addEventListener("blur", () => {
-            touched.set(f, true);
-            const invalid = syncFieldValidationState(f, touched);
-            if (invalid) scheduleAnnounce(f);
-          });
-        });
-      }
-
-      resetState();
-      return {
-        markTouched: (field) => {
-          if (field) touched.set(field, true);
-          return syncFieldValidationState(field, touched);
-        },
-        resetField: (field) => {
-          if (!field) return;
-          touched.set(field, false);
-          field.classList.remove("user-invalid-fallback");
-          syncFieldValidationState(field, touched);
-        }
-      };
-    };
-
     const form = document.getElementById("r01-vote-form");
-    const validationCtrl = initR01AccessibleValidation(form);
+    const validationCtrl = initAccessibleFormValidation(form, { announcerId: "r01-live-announcer" });
 
     const syncRankFlow = () => {
       if (!r1 || !r2 || !r3) return;
@@ -384,6 +435,13 @@ window.MachirikuPropertyPages = (function () {
     sectionEl.hidden = false;
 
     showRoleNotice("b01-role-notice", ["business", "admin"], "出店事業主");
+    const switchRoleBtn = document.getElementById("b01-switch-role-btn");
+    if (switchRoleBtn) {
+      switchRoleBtn.onclick = () => {
+        store.setRole("business");
+        hydrateB01(params);
+      };
+    }
 
     const state = store.getState();
     const bizUser = state.users?.business || state.currentUser || {};
@@ -397,37 +455,93 @@ window.MachirikuPropertyPages = (function () {
     setText("b01-prop-title", `【応募対象】${prop.title}`);
     setText("b01-prop-meta", `賃料: ${formatRent(prop.rent)}万円/月 / 面積: ${prop.areaTsubo}坪（${prop.areaSqm}㎡） / ${prop.condition || "業種相談可"}`);
 
-    const storeNameEl = document.getElementById("b01-store-name");
+    const businessNameEl = document.getElementById("b01-business-name");
+    const plannedStoreNameEl = document.getElementById("b01-planned-store-name");
     const genreEl = document.getElementById("b01-genre");
-    const targetRentEl = document.getElementById("b01-target-rent");
+    const longOpenRowEl = document.getElementById("b01-long-open-row");
+    const openDateEl = document.getElementById("b01-target-open-date");
+    const periodRowEl = document.getElementById("b01-popup-period-row");
     const startEl = document.getElementById("b01-start-on");
     const endEl = document.getElementById("b01-end-on");
+    const endErrEl = document.getElementById("b01-end-on-error");
     const messageEl = document.getElementById("b01-message");
     const expEl = document.getElementById("b01-exp-years");
 
-    if (storeNameEl && !storeNameEl.value) storeNameEl.value = bizUser.brand || "";
-    if (genreEl) {
-      const prevVal = genreEl.value || "I0101";
-      genreEl.innerHTML = buildCategoryOptgroupsHtml(prevVal);
+    // 屋号・事業者名はアカウント情報を自動入力（開店予定店舗名は任意の別欄）
+    const accountBusinessName = bizUser.businessName || bizUser.company || bizUser.brand || "";
+    const bizAutofillBadge = document.getElementById("b01-business-name-autofill");
+    if (businessNameEl && !businessNameEl.value) {
+      businessNameEl.value = accountBusinessName;
     }
-    if (targetRentEl && !targetRentEl.value) targetRentEl.value = String(prop.rent || 0);
-    if (startEl && !startEl.value) {
-      startEl.value = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+    if (bizAutofillBadge) {
+      bizAutofillBadge.hidden = !Boolean(accountBusinessName);
     }
-    if (endEl && !endEl.value) {
-      endEl.value = new Date(Date.now() + 395 * 86400000).toISOString().split("T")[0];
-    }
-    if (messageEl && !messageEl.value) messageEl.value = bizUser.story || "";
-    if (expEl) expEl.value = bizUser.experienceYears || "飲食業界経験あり";
 
-    // ポップアップ短期出店条件連動
+    // 出店予定業種もアカウント登録済み希望業種を自動入力（優先選択）
+    const preferredIds = Array.isArray(bizUser.preferredIndustries) ? bizUser.preferredIndustries : [];
+    const allowedList = Array.isArray(prop.allowedIndustries) ? prop.allowedIndustries : [];
+    const matchedPreferred = preferredIds.find(id => allowedList.includes(id)) || preferredIds[0] || "";
+    const defaultGenreId = matchedPreferred
+      || allowedList[0]
+      || "I0101";
+    const genreAutofillBadge = document.getElementById("b01-genre-autofill");
+    if (genreEl) {
+      const selectedGenre = genreEl.value || defaultGenreId;
+      genreEl.innerHTML = buildCategoryOptgroupsHtml(selectedGenre, "", preferredIds);
+    }
+    if (genreAutofillBadge) {
+      genreAutofillBadge.hidden = !Boolean(matchedPreferred);
+    }
+
+    if (openDateEl && !openDateEl.value) {
+      openDateEl.value = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+    }
+    // ストーリー文言・実務経験年数の初期自動入力は行わない（自由入力可）
+
+    const form = document.getElementById("b01-apply-form");
+    const validationCtrl = initAccessibleFormValidation(form, { announcerId: "b01-live-announcer" });
+
+    // 契約形態連動（長期出店は終了日なし・非表示、ポップアップ短期のみ期間入力を表示）
     const popupTerms = prop.contractTerms || { longEnabled: true, popupEnabled: true, minDays: 3, maxDays: 30, dailyRentYen: Math.round((prop.rent || 180000) / 25) };
     const popupBox = document.getElementById("b01-popup-terms-box");
     const longRadio = document.getElementById("b01-contract-long");
     const popupRadio = document.getElementById("b01-contract-popup");
 
+    const validatePopupDates = () => {
+      if (!endEl) return true;
+      const isPopup = Boolean(popupRadio && popupRadio.checked);
+      if (!isPopup) {
+        endEl.setCustomValidity("");
+        return true;
+      }
+      const sVal = startEl?.value;
+      const eVal = endEl.value;
+      if (!sVal || !eVal) {
+        endEl.setCustomValidity("");
+        if (endErrEl) endErrEl.innerHTML = `<span role="img" aria-label="エラー">⚠</span> 利用終了希望日を選択してください。`;
+        return false;
+      }
+      if (eVal < sVal) {
+        const msg = "利用終了希望日は利用開始希望日以降の日付を指定してください。";
+        endEl.setCustomValidity(msg);
+        if (endErrEl) endErrEl.innerHTML = `<span role="img" aria-label="エラー">⚠</span> ${msg}`;
+        return false;
+      }
+      const diffDays = Math.round((new Date(eVal) - new Date(sVal)) / 86400000);
+      const minD = popupTerms.minDays || 1;
+      const maxD = popupTerms.maxDays || 365;
+      if (diffDays < minD || diffDays > maxD) {
+        const msg = `ポップアップ希望日数は ${minD}〜${maxD}日 の範囲で指定してください（現在 ${diffDays}日）。`;
+        endEl.setCustomValidity(msg);
+        if (endErrEl) endErrEl.innerHTML = `<span role="img" aria-label="エラー">⚠</span> ${msg}`;
+        return false;
+      }
+      endEl.setCustomValidity("");
+      return true;
+    };
+
     const syncContractTerms = () => {
-      const isPopup = popupRadio && popupRadio.checked;
+      const isPopup = Boolean(popupRadio && popupRadio.checked);
       if (popupBox) {
         popupBox.hidden = !isPopup;
         if (isPopup) {
@@ -438,23 +552,68 @@ window.MachirikuPropertyPages = (function () {
             <strong>ポップアップ短期出店条件</strong>：利用日数目安 <strong>${minD}日〜${maxD}日</strong> / 日額賃料目安 <strong>${escapeHtml(daily)}</strong>
             ${popupTerms.popupEnabled === false ? `<div class="inline-warn-text">※この物件は通常賃貸中心ですが、オーナーへ短期相談として申請できます。</div>` : ""}
           `;
-          if (startEl && endEl && startEl.value) {
-            const sDate = new Date(startEl.value);
-            const eDate = new Date(sDate.getTime() + minD * 86400000);
-            endEl.value = eDate.toISOString().split("T")[0];
-          }
+        }
+      }
+      if (longOpenRowEl) longOpenRowEl.hidden = isPopup;
+      if (openDateEl) {
+        openDateEl.disabled = isPopup;
+        openDateEl.required = !isPopup;
+        if (isPopup) {
+          openDateEl.setCustomValidity("");
+          validationCtrl?.resetField(openDateEl);
+        }
+      }
+      if (periodRowEl) periodRowEl.hidden = !isPopup;
+      if (startEl) {
+        startEl.disabled = !isPopup;
+        startEl.required = isPopup;
+        if (isPopup && !startEl.value) {
+          startEl.value = openDateEl?.value || new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+        }
+        if (!isPopup) {
+          startEl.setCustomValidity("");
+          validationCtrl?.resetField(startEl);
+        }
+      }
+      if (endEl) {
+        endEl.disabled = !isPopup;
+        endEl.required = isPopup;
+        if (isPopup && startEl?.value && !endEl.value) {
+          const minD = popupTerms.minDays || 3;
+          const sDate = new Date(startEl.value);
+          endEl.value = new Date(sDate.getTime() + minD * 86400000).toISOString().split("T")[0];
+        }
+        if (!isPopup) {
+          endEl.setCustomValidity("");
+          validationCtrl?.resetField(endEl);
+        } else {
+          validatePopupDates();
         }
       }
     };
     if (longRadio) longRadio.onchange = syncContractTerms;
     if (popupRadio) popupRadio.onchange = syncContractTerms;
+    const handlePopupDateChange = () => {
+      if (!endEl) return;
+      const ok = validatePopupDates();
+      validationCtrl?.markTouched(endEl, !ok);
+    };
+    if (startEl) {
+      startEl.oninput = handlePopupDateChange;
+      startEl.onchange = handlePopupDateChange;
+    }
+    if (endEl) {
+      endEl.oninput = handlePopupDateChange;
+      endEl.onchange = handlePopupDateChange;
+    }
     syncContractTerms();
 
-    // 業種別 必要資格・書類チェック描画（企画書 R42〜44 準拠）
+    // 業種別 必要資格・書類チェック描画（Modern Web Guidance準拠：送信ボタンは非活性化しない）
     const reqAlertEl = document.getElementById("b01-req-alert");
     const reqListEl = document.getElementById("b01-req-list");
     const submitBtn = document.getElementById("b01-submit-btn");
     const heldQualNames = (bizUser.qualifications || []).map(q => String(q.name || ""));
+    let missingRequiredQualCount = 0;
 
     const hasHeldQualification = (qualObj) => {
       if (!qualObj) return false;
@@ -468,34 +627,43 @@ window.MachirikuPropertyPages = (function () {
       const qualMap = data.QUALIFICATIONS_MAP || {};
       const reqs = reqMap[subcatId] || reqMap.DEFAULT_NON_FOOD || [];
 
-      let missingRequiredQualCount = 0;
+      missingRequiredQualCount = 0;
 
-      reqListEl.innerHTML = reqs.map(req => {
+      reqListEl.innerHTML = reqs.map((req, idx) => {
         const q = qualMap[req.qualificationId] || { id: req.qualificationId, name: req.qualificationId, kind: "DOCUMENT", kindLabel: "確認" };
         const isQualType = q.kind === "QUALIFICATION" || req.qualificationId === "qual-confectionery-permit";
         const isHeld = hasHeldQualification(q);
         const mustDisable = isQualType && req.isRequired && !isHeld;
         if (mustDisable) missingRequiredQualCount += 1;
 
+        const cbId = `b01-req-cb-${idx}`;
+        const errId = `b01-req-err-${idx}`;
         const badgeClass = isHeld ? "req-badge-ok" : (mustDisable ? "req-badge-missing" : "req-badge-info");
-        const badgeText = isHeld ? "プロフィール登録済 ✓" : (mustDisable ? "未登録（チェック不可）" : (req.isRequired ? "必須確認" : "確認・推奨"));
+        const badgeText = isHeld ? "プロフィール登録済 ✓" : (mustDisable ? "未登録（応募前にプロフィール登録が必要）" : (req.isRequired ? "必須確認" : "確認・推奨"));
 
         return `
           <div class="req-check-card ${mustDisable ? "is-missing" : ""}" data-req-id="${escapeHtml(q.id)}">
-            <label class="req-check-label">
-              <input type="checkbox" class="b01-req-checkbox" value="${escapeHtml(q.id)}"
+            <div class="req-check-main">
+              <input id="${cbId}" type="checkbox" class="b01-req-checkbox" value="${escapeHtml(q.id)}"
                 data-req-name="${escapeHtml(q.name)}"
+                ${(!mustDisable && req.isRequired) ? `data-error="${errId}" required aria-invalid="false"` : ""}
                 ${isHeld ? "checked" : ""}
-                ${mustDisable ? "disabled" : ""}
-                ${req.isRequired && !mustDisable ? "required" : ""}>
-              <span class="req-check-title">${escapeHtml(q.name)}</span>
-              <span class="${badgeClass}">${escapeHtml(badgeText)}</span>
-            </label>
+                ${mustDisable ? "disabled" : ""}>
+              <label for="${cbId}">
+                <span class="req-check-title">${escapeHtml(q.name)}</span>
+                <span class="${badgeClass}">${escapeHtml(badgeText)}</span>
+              </label>
+            </div>
             <p class="req-check-desc">${escapeHtml(req.conditionText || q.guidanceText || "")}</p>
             ${(!isHeld && q.guidanceUrl) ? `
               <div class="req-guidance-row">
                 <span>申請・取得案内：</span>
                 <a href="${escapeHtml(q.guidanceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(q.name)}の取得・申請方法を確認する ↗</a>
+              </div>
+            ` : ""}
+            ${(!mustDisable && req.isRequired) ? `
+              <div id="${errId}" class="form-error-msg">
+                <span role="img" aria-label="エラー">⚠</span> 「${escapeHtml(q.name)}」の確認チェックを入れてください。
               </div>
             ` : ""}
           </div>
@@ -511,9 +679,7 @@ window.MachirikuPropertyPages = (function () {
           reqAlertEl.innerHTML = "";
         }
       }
-      if (submitBtn) {
-        submitBtn.disabled = missingRequiredQualCount > 0;
-      }
+      if (submitBtn) submitBtn.disabled = false;
     };
 
     if (genreEl) {
@@ -521,30 +687,37 @@ window.MachirikuPropertyPages = (function () {
     }
     renderRequirements();
 
-    const form = document.getElementById("b01-apply-form");
     if (form) {
       form.onsubmit = (e) => {
         e.preventDefault();
-        if (submitBtn && submitBtn.disabled) {
-          window.MachirikuApp?.showToast?.("必須資格が不足しているため応募できません");
-          return;
-        }
-        const sVal = startEl?.value;
-        const eVal = endEl?.value;
-        if (sVal && eVal && eVal < sVal) {
-          window.MachirikuApp?.showToast?.("利用終了希望日は開始日以降を指定してください");
-          return;
-        }
-        const isPopup = popupRadio && popupRadio.checked;
-        if (isPopup && sVal && eVal) {
-          const diffDays = Math.round((new Date(eVal) - new Date(sVal)) / 86400000);
-          const minD = popupTerms.minDays || 1;
-          const maxD = popupTerms.maxDays || 365;
-          if (diffDays < minD || diffDays > maxD) {
-            window.MachirikuApp?.showToast?.(`ポップアップ希望日数は ${minD}〜${maxD}日 の範囲で指定してください`);
-            return;
+        if (missingRequiredQualCount > 0) {
+          if (reqAlertEl) {
+            reqAlertEl.hidden = false;
+            reqAlertEl.focus();
           }
+          const msg = "必須資格がプロフィールに未登録のため、資格登録または別業種への変更が必要です。";
+          validationCtrl?.announce(msg);
+          window.MachirikuApp?.showToast?.(msg);
+          return;
         }
+        const isPopup = Boolean(popupRadio && popupRadio.checked);
+        const datesOk = validatePopupDates();
+        if (!datesOk || !form.checkValidity()) {
+          const invalidEl = validationCtrl?.focusFirstInvalid();
+          if (invalidEl) {
+            const errMsg = invalidEl.validationMessage || "入力内容を確認してください";
+            validationCtrl?.announce(errMsg);
+            window.MachirikuApp?.showToast?.(errMsg);
+          }
+          return;
+        }
+
+        if (submitBtn) submitBtn.disabled = true;
+        const bizNameVal = businessNameEl?.value.trim() || accountBusinessName || "事業者";
+        const plannedStoreVal = plannedStoreNameEl?.value.trim() || "";
+        const openDateVal = isPopup ? (startEl?.value || "") : (openDateEl?.value || "");
+        const sVal = isPopup ? (startEl?.value || "") : openDateVal;
+        const eVal = isPopup ? (endEl?.value || "") : "";
 
         const checks = Array.from(form.querySelectorAll(".b01-req-checkbox")).map(cb => ({
           qualificationId: cb.value,
@@ -557,14 +730,17 @@ window.MachirikuPropertyPages = (function () {
         const created = store.submitApplication({
           propId: prop.id,
           propTitle: prop.title,
-          storeName: storeNameEl?.value.trim() || "新規店舗",
-          genreId: genreEl?.value || "I0101",
-          targetRent: targetRentEl?.value || prop.rent,
+          businessName: bizNameVal,
+          plannedStoreName: plannedStoreVal,
+          storeName: plannedStoreVal || bizNameVal,
+          genreId: genreEl?.value || defaultGenreId,
+          targetRent: prop.rent || 0,
           contractKind: isPopup ? "POPUP" : "LONG",
-          requestedStartOn: sVal || "",
-          requestedEndOn: eVal || "",
+          requestedStartOn: sVal,
+          requestedEndOn: eVal,
           viewingRequestedAt: document.getElementById("b01-viewing-at")?.value || "",
-          targetOpenDate: document.getElementById("b01-target-open-date")?.value || sVal || "",
+          targetOpenDate: openDateVal,
+          experienceYears: expEl?.value.trim() || "",
           message: messageEl?.value.trim() || "",
           checks
         });
@@ -574,9 +750,13 @@ window.MachirikuPropertyPages = (function () {
         if (doneBox) {
           form.hidden = true;
           doneBox.hidden = false;
-          setText("b01-complete-summary", `${prop.title} へ「${created.storeName}（${created.genreName}）」として応募を受け付けました。`);
+          const labelName = plannedStoreVal ? `${plannedStoreVal}（${bizNameVal}）` : bizNameVal;
+          setText("b01-complete-summary", `${prop.title} へ「${labelName}（${created.genreName}）」として応募を受け付けました。`);
           const backDetailBtn = document.getElementById("b01-complete-detail-btn");
           if (backDetailBtn) backDetailBtn.setAttribute("href", detailHref);
+          document.title = "応募完了 | 出店応募 | マチリク";
+          validationCtrl?.announce("出店応募を送信しました");
+          doneBox.focus();
         }
       };
     }
@@ -912,7 +1092,7 @@ window.MachirikuPropertyPages = (function () {
               <h3 class="apply-item-title">${escapeHtml(a.storeName)} <small>（応募者: ${escapeHtml(a.applicantName)}）</small></h3>
               <div class="apply-item-prop">
                 対象物件: <a href="${escapeHtml(propUrl("detail.jsp", { id: a.propId }))}">${escapeHtml(a.propTitle)}</a>
-                ／ 契約: ${contractLabel}（${escapeHtml(a.requestedStartOn || "未定")} 〜 ${escapeHtml(a.requestedEndOn || "相談")}）
+                ／ 契約: ${contractLabel}（${a.requestedEndOn ? `${escapeHtml(a.requestedStartOn || "未定")} 〜 ${escapeHtml(a.requestedEndOn)}` : `オープン予定: ${escapeHtml(a.targetOpenDate || a.requestedStartOn || "相談")}`}）
               </div>
             </div>
             <button type="button" class="btn-secondary btn-sm" aria-expanded="${isOpen}" onclick="MachirikuPropertyPages.toggleApplyDetail('${escapeHtml(a.id)}')">

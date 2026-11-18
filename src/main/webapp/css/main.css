@@ -5429,13 +5429,23 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
 .radio-inline-card {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.6rem 0.95rem;
-  border: 1px solid var(--border-color);
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0.5rem 0.95rem;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   background: var(--bg-card);
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: max(1rem, 1em);
+}
+
+.radio-inline-card label {
+  cursor: pointer;
+  margin: 0;
+  font-weight: inherit;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
 }
 
 .radio-inline-card:has(input:checked) {
@@ -5494,15 +5504,32 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
   border-color: var(--danger-border);
 }
 
-.req-check-label {
+.req-check-label,
+.req-check-main {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  min-height: 48px;
+}
+
+.req-check-label {
+  cursor: pointer;
+}
+
+.req-check-main label {
+  display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
   cursor: pointer;
+  margin: 0;
+  min-height: 36px;
+  flex: 1;
 }
 
-.req-check-label input {
+.req-check-label input,
+.req-check-main input {
   accent-color: var(--primary-700);
 }
 
@@ -6219,14 +6246,34 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
 }
 
 /* ==========================================================================
-   R01 Resident Vote — Layout & Modern Web Guidance Compliance
+   R01 & B01 Forms — Layout & Modern Web Guidance Compliance
    ========================================================================== */
 
-.form-fieldset-reset {
+:where(fieldset.form-fieldset-reset) {
   border: 0;
   margin: 0;
   padding: 0;
   min-inline-size: 0;
+}
+
+.form-hint-text {
+  display: block;
+  color: var(--text-sub);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  margin-bottom: 0.35rem;
+}
+
+.opt-mark {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.autofill-badge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  vertical-align: middle;
 }
 
 .form-actions-bar.form-actions-split {
@@ -6265,21 +6312,75 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
   outline-offset: 2px;
 }
 
-.s03-view {
+:is(.s03-view, .s08-view) {
   accent-color: var(--primary-700);
 }
 
-.s03-view .form-select,
-.s03-view .form-control,
-.s03-view .btn-primary,
-.s03-view .btn-secondary {
+:is(.s03-view, .s08-view) :is(.form-select, .form-control, .btn-primary, .btn-secondary) {
   min-height: 48px;
   font-size: max(1rem, 1em);
 }
 
-.s03-view :is(select, input, textarea, button, a):focus-visible {
+@media (pointer: coarse) {
+  :is(.s03-view, .s08-view) :is(.form-select, .form-control, .btn-primary, .btn-secondary) {
+    min-height: 52px;
+  }
+}
+
+:is(.s03-view, .s08-view) :is(select, input, textarea, button, a):focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+
+.s08-view .form-group > label,
+.s08-view .field-label {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.s08-view .form-section-block {
+  margin-block-end: 2.25rem;
+  padding-block-end: 1.75rem;
+}
+
+.s08-view .form-block-title {
+  margin: 0 0 1.35rem 0;
+  padding-bottom: 0.6rem;
+}
+
+.s08-view .form-group {
+  gap: 0.45rem;
+  margin-block-end: 1.5rem;
+}
+
+.s08-view .form-grid-2 {
+  gap: 1.25rem;
+  margin-block-end: 1.5rem;
+}
+
+.s08-view .form-grid-2 > .form-group {
+  margin-block-end: 0;
+}
+
+.s08-view .radio-inline-group {
+  gap: 0.9rem;
+}
+
+.s08-view .req-check-grid {
+  gap: 0.95rem;
+  margin-block-end: 1.5rem;
+}
+
+.s08-view .form-section-block > :last-child {
+  margin-block-end: 0;
+}
+
+.s08-view .form-actions-bar {
+  margin-block-start: 2rem;
+}
+
+.b01-schedule-grid:has(#b01-long-open-row[hidden]) {
+  grid-template-columns: 1fr;
 }
 
 .auto-grow-textarea {
@@ -6304,13 +6405,67 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
   margin-top: 0.35rem;
 }
 
-.s03-view :is(select, input, textarea):is(:user-invalid, .user-invalid-fallback) {
+:is(.s03-view, .s08-view) :is(select, input, textarea):is(:user-invalid, .user-invalid-fallback) {
   border-color: var(--danger-text);
   background-color: var(--danger-bg);
 }
 
-.s03-view :is(select, input, textarea):is(:user-invalid, .user-invalid-fallback) ~ .form-error-msg {
+:is(.s03-view, .s08-view) :is(select, input, textarea):is(:user-invalid, .user-invalid-fallback) ~ .form-error-msg {
   display: block;
+}
+
+.req-check-card:has(input:is(:user-invalid, .user-invalid-fallback)) {
+  border-color: var(--danger-text);
+  background-color: var(--danger-bg);
+}
+
+.req-check-card:has(input:is(:user-invalid, .user-invalid-fallback)) .form-error-msg {
+  display: block;
+}
+
+@supports not (accent-color: var(--primary-700)) {
+  :is(.s03-view, .s08-view) input[type="checkbox"],
+  :is(.s03-view, .s08-view) input[type="radio"] {
+    position: absolute;
+    clip-path: inset(50%);
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+  }
+
+  :is(.s03-view, .s08-view) :is(input[type="checkbox"], input[type="radio"]) + label {
+    position: relative;
+    padding-left: 1.75rem;
+  }
+
+  :is(.s03-view, .s08-view) :is(input[type="checkbox"], input[type="radio"]) + label::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1.15rem;
+    height: 1.15rem;
+    border: 2px solid var(--border-strong);
+    background: var(--bg-card);
+    border-radius: 4px;
+    box-sizing: border-box;
+  }
+
+  :is(.s03-view, .s08-view) input[type="radio"] + label::before {
+    border-radius: 9999px;
+  }
+
+  :is(.s03-view, .s08-view) :is(input[type="checkbox"], input[type="radio"]):focus-visible + label::before {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  :is(.s03-view, .s08-view) :is(input[type="checkbox"], input[type="radio"]):checked + label::before {
+    background-color: var(--primary-700);
+    border-color: var(--primary-700);
+  }
 }
 
 [hidden]:not([hidden="until-found"]) {

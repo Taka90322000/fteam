@@ -23,6 +23,10 @@
   if (userEmail == null) {
     userEmail = "";
   }
+  String sessionBusinessName = (String) session.getAttribute("businessName");
+  if (sessionBusinessName == null) {
+    sessionBusinessName = "";
+  }
 
   boolean isLoggedOut = "1".equals(request.getParameter("logged_out"))
       || "true".equalsIgnoreCase(request.getParameter("logged_out"))
@@ -51,6 +55,7 @@
   String jsonDisplayName = mapper.writeValueAsString(displayName).replace("</", "<\\/");
   String jsonUserRole = mapper.writeValueAsString(userRole).replace("</", "<\\/");
   String jsonUserEmail = mapper.writeValueAsString(userEmail).replace("</", "<\\/");
+  String jsonBusinessName = mapper.writeValueAsString(sessionBusinessName).replace("</", "<\\/");
   String jsonScreenId = mapper.writeValueAsString(pageScreenId).replace("</", "<\\/");
   String jsonId = mapper.writeValueAsString(requestedId).replace("</", "<\\/");
   String jsonPropId = mapper.writeValueAsString(requestedPropId).replace("</", "<\\/");
@@ -98,7 +103,7 @@
   <script defer src="${pageContext.request.contextPath}/js/map.js?v=<%= Html.escape(assetVersion) %>"></script>
   <script defer src="${pageContext.request.contextPath}/js/store.js?v=<%= Html.escape(assetVersion) %>"></script>
   <script defer src="${pageContext.request.contextPath}/js/screens.js?v=<%= Html.escape(assetVersion) %>"></script>
-  <script defer src="${pageContext.request.contextPath}/js/property-pages.js?v=20261117_vote_mwg"></script>
+  <script defer src="${pageContext.request.contextPath}/js/property-pages.js?v=20261118_apply_v4"></script>
   <script defer src="${pageContext.request.contextPath}/js/app.js?v=20261117_demo_nav"></script>
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
@@ -131,12 +136,15 @@
           MachirikuStore.setRole(<%= jsonUserRole %>);
         }
         if (window.MachirikuStore && typeof MachirikuStore.updateUserProfile === 'function') {
-          MachirikuStore.updateUserProfile({
+          var profilePatch = {
             name: <%= jsonDisplayName %>,
             role: <%= jsonUserRole %>,
             email: <%= jsonUserEmail %>,
             isLoggedIn: true
-          });
+          };
+          var sessBizName = <%= jsonBusinessName %>;
+          if (sessBizName) profilePatch.businessName = sessBizName;
+          MachirikuStore.updateUserProfile(profilePatch);
         }
         try {
           if (window.sessionStorage) {
