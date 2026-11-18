@@ -163,7 +163,7 @@
             <label for="s18-living-address" style="font-size:0.8rem; font-weight:700; color:var(--text-sub); display:block; margin-bottom:0.25rem;">
               選択中の居住地住所:
             </label>
-            <input id="s18-living-address" name="livingAddress" type="text" class="form-control" value="<%= Html.escape(formValues.get("livingAddress")) %>" required placeholder="地図をクリックすると自動で住所が設定されます">
+            <input id="s18-living-address" name="livingAddress" type="text" class="form-control" value="<%= Html.escape(formValues.get("livingAddress")) %>" required readonly placeholder="地図をクリックすると自動で住所が設定されます">
             <input id="s18-living-lat" name="livingLat" type="hidden" value="<%= Html.escape(formValues.get("livingLat")) %>">
             <input id="s18-living-lng" name="livingLng" type="hidden" value="<%= Html.escape(formValues.get("livingLng")) %>">
             <div id="s18-map-status" style="font-size:0.75rem; color:var(--primary-700); margin-top:0.35rem; font-weight:600;">
@@ -210,7 +210,7 @@
               <label for="s18-work-address" style="font-size:0.8rem; font-weight:700; color:var(--text-sub); display:block; margin-bottom:0.25rem;">
                 選択中の職場・学校住所:
               </label>
-              <input id="s18-work-address" name="workAddress" type="text" class="form-control" value="<%= Html.escape(formValues.get("workAddress")) %>" placeholder="地図をクリックすると自動で住所が設定されます">
+              <input id="s18-work-address" name="workAddress" type="text" class="form-control" value="<%= Html.escape(formValues.get("workAddress")) %>" readonly placeholder="地図をクリックすると自動で住所が設定されます">
               <input id="s18-work-lat" name="workLat" type="hidden" value="<%= Html.escape(formValues.get("workLat")) %>">
               <input id="s18-work-lng" name="workLng" type="hidden" value="<%= Html.escape(formValues.get("workLng")) %>">
               <div id="s18-work-map-status" style="font-size:0.75rem; color:var(--primary-700); margin-top:0.35rem; font-weight:600;">
@@ -707,7 +707,6 @@
       if (document.getElementById('s18-' + kind + '-address').value.trim() && readResidentCoords(kind)) {
         s18Locations[kind].geocodeState = 'resolved';
       }
-      document.getElementById('s18-' + kind + '-address').addEventListener('input', () => clearResidentCoords(kind));
     });
     residentSelectedIndustries = restoreResidentIndustrySelection(document.getElementById('s18-preferred-industries').value);
     syncResidentIndustryUI();

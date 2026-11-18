@@ -57,11 +57,13 @@ public class LogoutAction extends Action {
             return;
         }
         HttpSession session = req.getSession(false);
-        if (!validCsrf(session, req.getParameter("csrfToken"))) {
-            res.sendError(HttpServletResponse.SC_FORBIDDEN);
-            return;
+        if (session != null) {
+            if (!validCsrf(session, req.getParameter("csrfToken"))) {
+                res.sendError(HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
+            session.invalidate();
         }
-        session.invalidate();
         String next = req.getParameter("next");
         if ("login".equals(next)) {
             res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/Login.action");

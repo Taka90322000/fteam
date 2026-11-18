@@ -90,6 +90,13 @@ public class LineCallbackAction extends Action {
 
             // 確認済みの会員情報でセッションを作り直す。
             LineLoginSupport.signIn(req, member, profile.displayName(), profile.email());
+            if ("ACTIVE".equals(member.getAccountStatus())
+                    && ("BUSINESS".equals(member.getUserRole()) || "OWNER".equals(member.getUserRole()))) {
+                String representativeName = dao.findRepresentativeName(member);
+                if (representativeName != null && !representativeName.isBlank()) {
+                    req.getSession().setAttribute("userName", representativeName);
+                }
+            }
             // 登録経由または未完了(PENDING)なら会員の状態に応じた画面へ、通常ログイン済ならトップへ進む。
             // destinationはアプリのコンテキストパスを除いた遷移先。
             String destination = (registration || "PENDING".equals(member.getAccountStatus()))

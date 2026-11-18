@@ -12,14 +12,25 @@
   // include元の指定を優先し、指定がなければセッションの会員情報や既定値を使う。
   boolean isOnboarding = "true".equalsIgnoreCase(request.getParameter("isOnboarding"));
   String roleLabel = request.getParameter("roleLabel") != null ? request.getParameter("roleLabel") : "地域住民";
-  String userName = request.getParameter("userName") != null ? request.getParameter("userName") : "LINEユーザー";
+  String paramUserName = request.getParameter("userName");
+  String attrDisplayName = request.getAttribute("displayName") instanceof String ? (String) request.getAttribute("displayName") : null;
+  String sessionUserName = session.getAttribute("userName") instanceof String ? (String) session.getAttribute("userName") : null;
   User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
   String rawHeaderRole = session.getAttribute("userRole") instanceof String ? (String) session.getAttribute("userRole") : null;
   boolean isDemoSession = currentUser == null && rawHeaderRole != null
       && java.util.Set.of("resident", "business", "owner", "admin").contains(rawHeaderRole);
   String logoutCsrfToken = LogoutAction.csrfToken(session);
-  if (currentUser != null && (request.getParameter("userName") == null)) {
-    userName = currentUser.getDisplayName();
+  String userName = paramUserName != null ? paramUserName : "LINEユーザー";
+  if (currentUser != null) {
+    if (attrDisplayName != null && !attrDisplayName.isBlank()) {
+      userName = attrDisplayName;
+    } else if (paramUserName != null && !paramUserName.isBlank()) {
+      userName = paramUserName;
+    } else if (sessionUserName != null && !sessionUserName.isBlank()) {
+      userName = sessionUserName;
+    } else if (currentUser.getDisplayName() != null && !currentUser.getDisplayName().isBlank()) {
+      userName = currentUser.getDisplayName();
+    }
   }
 %>
 <!DOCTYPE html>
@@ -28,7 +39,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#1b4332">
-  <title><%= request.getParameter("title") != null ? request.getParameter("title") : "マチリク | 宇都宮の空き店舗と、欲しいお店" %></title>
+  <title><%= escapeHtml(request.getParameter("title") != null ? request.getParameter("title") : "マチリク | 宇都宮の空き店舗と、欲しいお店") %></title>
   <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css">
 </head>
 <body>
@@ -50,8 +61,8 @@
           </span>
           <span class="btn-header-action profile-link" style="cursor:default;"><span id="header-user-name"><%= escapeHtml(userName) %></span></span>
         <% } else if (currentUser != null) { %>
-          <a href="${pageContext.request.contextPath}/index.jsp#s18" class="btn-header-action profile-link">
-            <span id="header-user-name"><%= escapeHtml(currentUser.getDisplayName()) %></span>
+          <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/user/Profile.action" class="btn-header-action profile-link">
+            <span id="header-user-name"><%= escapeHtml(userName) %></span>
           </a>
         <% } else if (isDemoSession) { %>
           <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;">

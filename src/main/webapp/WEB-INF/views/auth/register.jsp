@@ -8,6 +8,7 @@
 %>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="新規会員登録 | マチリク" />
+  <jsp:param name="isOnboarding" value="false" />
   <jsp:param name="activeNav" value="register" />
 </jsp:include>
 

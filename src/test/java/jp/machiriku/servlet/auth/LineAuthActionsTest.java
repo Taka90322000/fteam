@@ -704,6 +704,14 @@ public class LineAuthActionsTest {
             new LogoutAction().execute(demoExit.request, demoExit.response);
             assertTrue(demoSession.invalidated);
             assertEquals(transition[1], demoExit.redirect);
+
+            // セッション期限切れ後のログアウトPOSTも403にせず目的の画面へ案内する。
+            Harness expiredExit = new Harness("POST");
+            expiredExit.session = null;
+            expiredExit.parameters.put("next", transition[0]);
+            new LogoutAction().execute(expiredExit.request, expiredExit.response);
+            assertEquals(0, expiredExit.status);
+            assertEquals(transition[1], expiredExit.redirect);
         }
     }
 
@@ -825,6 +833,7 @@ public class LineAuthActionsTest {
         User afterConflict;
         User inserted;
         User updateResult;
+        String representativeName;
         SQLException insertFailure;
         SQLException updateFailure;
         CountDownLatch roleUpdateEntered;
@@ -839,6 +848,9 @@ public class LineAuthActionsTest {
             assertEquals("verified-line-subject", subject);
             finds++;
             return finds > 1 && afterConflict != null ? afterConflict : existing;
+        }
+        @Override public String findRepresentativeName(User user) {
+            return representativeName;
         }
         @Override public User insert(User value) throws SQLException {
             inserts++;

@@ -45,6 +45,10 @@ final class ProfileSupport {
             res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/" + targetAction + ".action");
             return null;
         }
+        if (!"ACTIVE".equals(user.getAccountStatus())) {
+            res.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return null;
+        }
         return user;
     }
 

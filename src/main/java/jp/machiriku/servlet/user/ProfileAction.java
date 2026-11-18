@@ -203,6 +203,14 @@ public class ProfileAction extends Action {
                 fields = new LinkedHashMap<>(settings.fields());
                 industries = settings.selectedIndustries();
                 qualifications = settings.selectedQualifications();
+                if (fields.get("representativeName") != null && !fields.get("representativeName").isBlank()) {
+                    req.getSession().setAttribute("userName", fields.get("representativeName"));
+                }
+                if (fields.containsKey("email")) {
+                    String latestEmail = fields.get("email");
+                    user.setEmail(latestEmail == null || latestEmail.isEmpty() ? null : latestEmail);
+                    req.getSession().setAttribute("userEmail", latestEmail == null ? "" : latestEmail);
+                }
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
                 // 復元に失敗した空のフォームから、保存済み情報を上書きさせない。
@@ -281,6 +289,14 @@ public class ProfileAction extends Action {
                 }
                 fields = new LinkedHashMap<>(settings.fields());
                 industries = settings.selectedIndustries();
+                if (fields.get("representativeName") != null && !fields.get("representativeName").isBlank()) {
+                    req.getSession().setAttribute("userName", fields.get("representativeName"));
+                }
+                if (fields.containsKey("email")) {
+                    String latestEmail = fields.get("email");
+                    user.setEmail(latestEmail == null || latestEmail.isEmpty() ? null : latestEmail);
+                    req.getSession().setAttribute("userEmail", latestEmail == null ? "" : latestEmail);
+                }
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
                 res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);

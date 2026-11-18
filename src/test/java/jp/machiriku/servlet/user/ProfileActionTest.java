@@ -54,6 +54,18 @@ public class ProfileActionTest {
         new ProfileAction(new FakeDao()).execute(h.request, h.response);
         assertEquals("/machiriku/jp/machiriku/servlet/auth/ResidentSetup.action", h.redirect);
         assertNull(h.forwarded);
+
+        for (String inactiveStatus : List.of("BAN", "WITHDRAWN")) {
+            Harness inactive = new Harness("GET");
+            User inactiveUser = new User();
+            inactiveUser.setUserId(11);
+            inactiveUser.setUserRole("RESIDENT");
+            inactiveUser.setAccountStatus(inactiveStatus);
+            inactive.sessionValues.put("user", inactiveUser);
+            new ProfileAction(new FakeDao()).execute(inactive.request, inactive.response);
+            assertEquals(HttpServletResponse.SC_FORBIDDEN, inactive.status);
+            assertNull(inactive.forwarded);
+        }
     }
 
     @Test
@@ -137,6 +149,7 @@ public class ProfileActionTest {
         dao.profileFields.forEach((name, value) -> assertEquals(value, fields.get(name)));
         assertEquals(Set.of("1"), h.attributes.get("selectedIndustries"));
         assertEquals(Set.of("2"), h.attributes.get("selectedQualifications"));
+        assertEquals("保存済み代表者", h.sessionValues.get("userName"));
     }
 
     @Test
@@ -182,6 +195,7 @@ public class ProfileActionTest {
         assertEquals("028-633-9988", ((Map<?, ?>) h.attributes.get("formValues")).get("phone"));
         assertEquals("090-1234-5678", ((Map<?, ?>) h.attributes.get("formValues")).get("secondaryPhone"));
         assertEquals("保存済み代表者", h.attributes.get("displayName"));
+        assertEquals("保存済み代表者", h.sessionValues.get("userName"));
         assertEquals("保存済み法人", ((Map<?, ?>) h.attributes.get("formValues")).get("company"));
         assertEquals("", ((Map<?, ?>) h.attributes.get("formValues")).get("emailNotify"));
         assertEquals(Set.of("1"), h.attributes.get("selectedIndustries"));
