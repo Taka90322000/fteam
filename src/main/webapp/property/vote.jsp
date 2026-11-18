@@ -3,7 +3,7 @@
   <jsp:param name="title" value="欲しいお店に投票 | マチリク" />
   <jsp:param name="description" value="空き店舗に欲しい業種を順位投票します。" />
   <jsp:param name="pageScreenId" value="r01" />
-  <jsp:param name="assetVersion" value="20261117_vote_mwg" />
+  <jsp:param name="assetVersion" value="20261118_prop_v5" />
 </jsp:include>
 
     <section id="r01-empty-state" class="screen-view empty-state" data-screen="R01" hidden>
@@ -103,5 +103,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="r01" />
-  <jsp:param name="assetVersion" value="20261117_vote_mwg" />
+  <jsp:param name="assetVersion" value="20261118_prop_v5" />
 </jsp:include>

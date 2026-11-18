@@ -605,7 +605,8 @@ window.MachirikuApp = (function() {
       return;
     }
     if (currentScreenId === 's02' || currentScreenId === 'r01' || currentScreenId === 'b01' || currentScreenId === 'o06' || currentScreenId === 'o07' || currentScreenId === 'o08') {
-      const propId = currentParams?.id || store.getProperties()[0]?.id;
+      const allowFallbackFirst = currentScreenId === 's02' || currentScreenId === 'r01' || currentScreenId === 'b01';
+      const propId = currentParams?.id || (allowFallbackFirst ? store.getProperties()[0]?.id : '');
       const prop = propId ? store.getPropertyById(propId) : null;
       if (prop && prop.title) {
         if (currentScreenId === 's02') {

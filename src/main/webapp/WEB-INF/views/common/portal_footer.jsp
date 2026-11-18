@@ -38,7 +38,7 @@
   }
   String assetVersion = request.getParameter("assetVersion");
   if (assetVersion == null || assetVersion.trim().isEmpty()) {
-    assetVersion = "20261117_prop_pages";
+    assetVersion = "20261118_prop_v5";
   }
   boolean enableHashRedirect = "true".equalsIgnoreCase(request.getParameter("enableHashRedirect"));
 
@@ -103,8 +103,8 @@
   <script defer src="${pageContext.request.contextPath}/js/map.js?v=<%= Html.escape(assetVersion) %>"></script>
   <script defer src="${pageContext.request.contextPath}/js/store.js?v=<%= Html.escape(assetVersion) %>"></script>
   <script defer src="${pageContext.request.contextPath}/js/screens.js?v=<%= Html.escape(assetVersion) %>"></script>
-  <script defer src="${pageContext.request.contextPath}/js/property-pages.js?v=20261118_apply_v4"></script>
-  <script defer src="${pageContext.request.contextPath}/js/app.js?v=20261117_demo_nav"></script>
+  <script defer src="${pageContext.request.contextPath}/js/property-pages.js?v=<%= Html.escape(assetVersion) %>"></script>
+  <script defer src="${pageContext.request.contextPath}/js/app.js?v=<%= Html.escape(assetVersion) %>"></script>
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
     window.__MACHIRIKU_FIXED_SCREEN__ = <%= jsonScreenId %>;

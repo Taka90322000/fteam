@@ -3,11 +3,11 @@
   <jsp:param name="title" value="マチリク | 宇都宮の空き店舗と、欲しいお店" />
   <jsp:param name="description" value="宇都宮市の空き店舗を探し、欲しいお店に投票。地域の声を出店につなげるマチリク。" />
   <jsp:param name="pageScreenId" value="" />
-  <jsp:param name="assetVersion" value="20261117_prop_pages" />
+  <jsp:param name="assetVersion" value="20261118_prop_v5" />
 </jsp:include>
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="" />
-  <jsp:param name="assetVersion" value="20261117_prop_pages" />
+  <jsp:param name="assetVersion" value="20261118_prop_v5" />
   <jsp:param name="enableHashRedirect" value="true" />
 </jsp:include>

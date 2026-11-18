@@ -3,7 +3,7 @@
   <jsp:param name="title" value="出店応募 | マチリク" />
   <jsp:param name="description" value="出店計画・契約希望条件・必要資格を確認してオーナーへ応募します。" />
   <jsp:param name="pageScreenId" value="b01" />
-  <jsp:param name="assetVersion" value="20261118_apply_v4" />
+  <jsp:param name="assetVersion" value="20261118_prop_v5" />
 </jsp:include>
 
     <section id="b01-empty-state" class="screen-view empty-state" data-screen="B01" hidden>
@@ -152,5 +152,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="b01" />
-  <jsp:param name="assetVersion" value="20261118_apply_v4" />
+  <jsp:param name="assetVersion" value="20261118_prop_v5" />
 </jsp:include>

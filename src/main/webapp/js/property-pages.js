@@ -1169,12 +1169,58 @@ window.MachirikuPropertyPages = (function () {
   let pickerMap = null;
   let pickerMarker = null;
 
+  function populateSelectOptions(selectEl, items, selectedVal = "", emptyLabel = "選択してください") {
+    if (!selectEl) return;
+    const list = Array.isArray(items) ? [...items] : [];
+    const target = selectedVal != null ? String(selectedVal) : "";
+    if (target && !list.includes(target)) {
+      list.push(target);
+    }
+    let html = emptyLabel ? `<option value="">${escapeHtml(emptyLabel)}</option>` : "";
+    html += list.map(v => `<option value="${escapeHtml(v)}" ${v === target ? "selected" : ""}>${escapeHtml(v)}</option>`).join("");
+    selectEl.innerHTML = html;
+  }
+
+  function extractJapaneseAddressParts(result) {
+    const comps = Array.isArray(result?.address_components) ? result.address_components : [];
+    let pref = "";
+    let locality = "";
+    let ward = "";
+    for (const comp of comps) {
+      const types = comp.types || [];
+      if (!pref && types.includes("administrative_area_level_1")) pref = comp.long_name || "";
+      if (!locality && types.includes("locality")) locality = comp.long_name || "";
+      if (!ward && types.includes("sublocality_level_1")) ward = comp.long_name || "";
+    }
+    const city = (locality && ward && locality.endsWith("市") && ward.endsWith("区"))
+      ? `${locality}${ward}`
+      : (locality || ward || "");
+    let formatted = String(result?.formatted_address || "")
+      .replace(/^日本、\s*/, "")
+      .replace(/^〒\d{3}-?\d{4}\s*/, "")
+      .trim();
+    if (pref && formatted.startsWith(pref)) formatted = formatted.slice(pref.length).trim();
+    if (city && formatted.startsWith(city)) formatted = formatted.slice(city.length).trim();
+    else if (locality && formatted.startsWith(locality)) formatted = formatted.slice(locality.length).trim();
+    const addressLine = formatted
+      .replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+      .replace(/[−―ー‐]/g, "-")
+      .trim();
+    return { prefecture: pref, municipality: city, addressLine };
+  }
+
   function initPropertyForm(mode, params) {
     const isEdit = mode === "edit";
     const sectionEl = document.getElementById(isEdit ? "o06-section" : "o04-section");
     if (!sectionEl) return;
 
     showRoleNotice(isEdit ? "o06-role-notice" : "o04-role-notice", ["owner", "admin"], "物件オーナー");
+    const switchRoleBtn = document.getElementById(isEdit ? "o06-switch-role-btn" : "o04-switch-role-btn");
+    if (switchRoleBtn) {
+      switchRoleBtn.onclick = () => {
+        store.setRole("owner");
+      };
+    }
 
     let baseProp = null;
     if (isEdit) {
@@ -1201,43 +1247,92 @@ window.MachirikuPropertyPages = (function () {
       }
     } catch (_) {}
 
+    const hasInitialRecord = Boolean(isEdit || draft);
     const src = draft || baseProp || {};
     const form = document.getElementById("prop-editor-form");
     if (!form) return;
 
+    const opts = data.PROPERTY_FORM_OPTIONS || {};
     const setVal = (id, val) => {
       const el = document.getElementById(id);
       if (el && val !== undefined && val !== null) el.value = String(val);
     };
 
+    // 基本テキスト＆住所分解（既存データの編集時は address から都道府県・市区町村も補完）
     setVal("prop-title", src.title || "");
-    setVal("prop-pref", src.prefecture || "栃木県");
-    setVal("prop-city", src.municipality || "宇都宮市");
-    const addrLine = src.addressLine || (src.address ? src.address.replace(/^栃木県宇都宮市/, "") : "");
-    setVal("prop-address-line", addrLine);
+    let initPref = src.prefecture || "";
+    let initCity = src.municipality || "";
+    let rawAddr = src.addressLine || "";
+    if ((!initPref || !initCity || !rawAddr) && src.address) {
+      const addrMatch = String(src.address).match(/^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)([^市区町村]+?[市区町村])(.*)$/);
+      if (addrMatch) {
+        if (!initPref) initPref = addrMatch[1];
+        if (!initCity) initCity = addrMatch[2];
+        if (!rawAddr) rawAddr = addrMatch[3].trim();
+      } else if (!rawAddr) {
+        rawAddr = src.address.replace(/^栃木県宇都宮市/, "");
+      }
+    }
+    setVal("prop-address-line", rawAddr);
     setVal("prop-access", src.access || "");
-    setVal("prop-rent", src.rent != null ? src.rent : "180000");
+    setVal("prop-rent", src.rent != null ? src.rent : "");
     setVal("prop-mgmt", src.managementFee != null ? src.managementFee : "");
-    setVal("prop-deposit", src.deposit || "");
-    setVal("prop-key-money", src.keyMoney || "");
-    setVal("prop-security-deposit", src.securityDeposit || "");
-    setVal("prop-area-sqm", src.areaSqm != null ? src.areaSqm : "50");
-    setVal("prop-area-tsubo", src.areaTsubo != null ? src.areaTsubo : "15.13");
-    setVal("prop-floor-num", src.floorNumber || src.floor || "1階");
-    setVal("prop-total-floors", src.totalFloors || "");
-    setVal("prop-structure", src.structure || "鉄骨造");
-    setVal("prop-built-year", src.builtYear || "");
-    setVal("prop-handover", src.handover || "相談");
-    setVal("prop-permit-status", src.permitStatus || "UNKNOWN");
-    setVal("prop-listing-status", src.listingStatus || "OPEN");
+    setVal("prop-area-sqm", src.areaSqm != null ? src.areaSqm : "");
+    setVal("prop-area-tsubo", src.areaTsubo != null ? src.areaTsubo : "");
     setVal("prop-condition", src.condition || "");
     setVal("prop-description", src.description || "");
     setVal("prop-listing-url", src.listingUrl || "");
 
-    const latVal = src.lat != null ? src.lat : (src.location?.lat || 36.5610);
-    const lngVal = src.lng != null ? src.lng : (src.location?.lng || 139.8830);
+    // 都道府県・市区町村テキストボックス（新規時は空・マップピン設置で自動入力）
+    const prefEl = document.getElementById("prop-pref");
+    const cityEl = document.getElementById("prop-city");
+    setVal("prop-pref", initPref);
+    setVal("prop-city", initCity);
+
+    // 敷金・礼金・保証金・建物スペックドロップダウン（新規時はすべて未選択）
+    const cleanOptionalText = (val) => (!hasInitialRecord || val === "掲載なし（要確認）") ? "" : val;
+    populateSelectOptions(document.getElementById("prop-deposit"), opts.deposits || [], cleanOptionalText(src.deposit || ""), "選択してください");
+    populateSelectOptions(document.getElementById("prop-key-money"), opts.keyMonies || [], cleanOptionalText(src.keyMoney || ""), "選択してください");
+    populateSelectOptions(document.getElementById("prop-security-deposit"), opts.securityDeposits || [], cleanOptionalText(src.securityDeposit || ""), "選択してください");
+    populateSelectOptions(document.getElementById("prop-floor-num"), opts.floorNumbers || [], src.floorNumber || src.floor || "", "選択してください");
+    populateSelectOptions(document.getElementById("prop-total-floors"), opts.totalFloors || [], src.totalFloors || "", "選択してください");
+    populateSelectOptions(document.getElementById("prop-structure"), opts.structures || [], src.structure || "", "選択してください");
+    populateSelectOptions(document.getElementById("prop-handover"), opts.handovers || [], src.handover || "", "選択してください");
+
+    // 築年月ドロップダウン（年・月）
+    const currentYear = new Date().getFullYear();
+    const yearItems = [];
+    for (let y = currentYear; y >= 1960; y -= 1) yearItems.push(`${y}年`);
+    yearItems.push("不明");
+    const monthItems = Array.from({ length: 12 }, (_, i) => `${i + 1}月`);
+    let initBuiltY = "";
+    let initBuiltM = "";
+    if (src.builtYear) {
+      if (src.builtYear === "不明") {
+        initBuiltY = "不明";
+      } else {
+        const m = String(src.builtYear).match(/(\d{4}年)(?:(\d{1,2}月))?/);
+        if (m) {
+          initBuiltY = m[1] || "";
+          initBuiltM = m[2] || "";
+        }
+      }
+    }
+    populateSelectOptions(document.getElementById("prop-built-year"), yearItems, initBuiltY, "年");
+    populateSelectOptions(document.getElementById("prop-built-month"), monthItems, initBuiltM, "月");
+
+    // 営業許可・公開ステータス（新規時は未選択、編集・復元時は既存値を保持）
+    const fallbackListing = src.status === "contracted" ? "CONTRACTED" : (src.status === "paused" ? "PAUSED" : "OPEN");
+    setVal("prop-permit-status", src.permitStatus || (hasInitialRecord ? "UNKNOWN" : ""));
+    setVal("prop-listing-status", src.listingStatus || (hasInitialRecord ? fallbackListing : ""));
+
+    const hasSavedCoords = hasInitialRecord && (src.lat != null || src.location?.lat != null) && (src.lng != null || src.location?.lng != null);
+    const latVal = hasSavedCoords ? Number(src.lat ?? src.location?.lat) : "";
+    const lngVal = hasSavedCoords ? Number(src.lng ?? src.location?.lng) : "";
     setVal("prop-lat", latVal);
     setVal("prop-lng", lngVal);
+
+    const validationCtrl = initAccessibleFormValidation(form, { announcerId: isEdit ? "o06-live-announcer" : "o04-live-announcer" });
 
     // ㎡ ↔ 坪 自動換算
     const sqmEl = document.getElementById("prop-area-sqm");
@@ -1245,40 +1340,64 @@ window.MachirikuPropertyPages = (function () {
     if (sqmEl && tsuboEl) {
       sqmEl.oninput = () => {
         const v = parseFloat(sqmEl.value);
-        if (!isNaN(v) && v > 0) tsuboEl.value = String(Math.round((v / 3.30578) * 100) / 100);
+        tsuboEl.value = (!isNaN(v) && v > 0) ? String(Math.round((v / 3.30578) * 100) / 100) : "";
       };
       tsuboEl.oninput = () => {
         const v = parseFloat(tsuboEl.value);
-        if (!isNaN(v) && v > 0) sqmEl.value = String(Math.round((v * 3.30578) * 100) / 100);
+        sqmEl.value = (!isNaN(v) && v > 0) ? String(Math.round((v * 3.30578) * 100) / 100) : "";
       };
     }
 
-    // 契約形態（通常・ポップアップ）
-    const ct = src.contractTerms || { longEnabled: true, popupEnabled: false, minDays: 3, maxDays: 30, dailyRentYen: "" };
+    // 契約形態（通常・ポップアップ：新規時は未チェック）
+    const ct = src.contractTerms || (hasInitialRecord ? { longEnabled: true, popupEnabled: false, minDays: 3, maxDays: 30, dailyRentYen: "" } : { longEnabled: false, popupEnabled: false, minDays: "", maxDays: "", dailyRentYen: "" });
     const longCb = document.getElementById("prop-long-enabled");
     const popupCb = document.getElementById("prop-popup-enabled");
     const popupFields = document.getElementById("prop-popup-fields");
-    if (longCb) longCb.checked = ct.longEnabled !== false;
-    if (popupCb) {
-      popupCb.checked = Boolean(ct.popupEnabled);
-      const syncPopup = () => { if (popupFields) popupFields.hidden = !popupCb.checked; };
-      popupCb.onchange = syncPopup;
-      syncPopup();
-    }
-    setVal("prop-popup-min-days", ct.minDays || 3);
-    setVal("prop-popup-max-days", ct.maxDays || 30);
-    setVal("prop-popup-daily-rent", ct.dailyRentYen || "");
+    const popupMinEl = document.getElementById("prop-popup-min-days");
+    const popupMaxEl = document.getElementById("prop-popup-max-days");
+    const popupDailyEl = document.getElementById("prop-popup-daily-rent");
+    const contractErrEl = document.getElementById("prop-contract-error");
+
+    if (longCb) longCb.checked = Boolean(ct.longEnabled);
+    if (popupCb) popupCb.checked = Boolean(ct.popupEnabled);
+    setVal("prop-popup-min-days", ct.minDays != null ? ct.minDays : "");
+    setVal("prop-popup-max-days", ct.maxDays != null ? ct.maxDays : "");
+    setVal("prop-popup-daily-rent", ct.dailyRentYen != null ? ct.dailyRentYen : "");
+
+    const syncContractPopupFields = () => {
+      const popupOn = Boolean(popupCb && popupCb.checked);
+      if (popupFields) popupFields.hidden = !popupOn;
+      [popupMinEl, popupMaxEl, popupDailyEl].forEach(el => {
+        if (!el) return;
+        el.disabled = !popupOn;
+        if (!popupOn) {
+          el.required = false;
+          el.setCustomValidity("");
+          validationCtrl?.resetField(el);
+        }
+      });
+      if (popupMinEl) popupMinEl.required = popupOn;
+      if (popupMaxEl) popupMaxEl.required = popupOn;
+      if (contractErrEl && ((longCb && longCb.checked) || popupOn)) {
+        contractErrEl.textContent = "";
+        contractErrEl.style.display = "none";
+      }
+    };
+    if (longCb) longCb.onchange = syncContractPopupFields;
+    if (popupCb) popupCb.onchange = syncContractPopupFields;
+    syncContractPopupFields();
 
     // 基本インフラ10項目
     const infraGrid = document.getElementById("prop-infra-checkboxes");
     if (infraGrid) {
       const infraObj = src.infrastructure || {};
       const joined = `${(src.facilities || []).join(" ")} ${src.condition || ""}`;
-      infraGrid.innerHTML = (data.INFRASTRUCTURE_FACILITIES || []).map(item => {
-        const checked = typeof infraObj[item.key] === "boolean"
+      infraGrid.innerHTML = (data.INFRASTRUCTURE_FACILITIES || []).map((item, idx) => {
+        const checked = hasInitialRecord && (typeof infraObj[item.key] === "boolean"
           ? infraObj[item.key]
-          : joined.includes(item.label.replace("あり", ""));
-        return `<label class="check-chip"><input type="checkbox" name="infra_${escapeHtml(item.key)}" value="${escapeHtml(item.key)}" ${checked ? "checked" : ""}> <span>${escapeHtml(item.label)}</span></label>`;
+          : joined.includes(item.label.replace("あり", "")));
+        const cbId = `prop-infra-cb-${idx}`;
+        return `<div class="check-chip"><input id="${cbId}" type="checkbox" name="infra_${escapeHtml(item.key)}" value="${escapeHtml(item.key)}" ${checked ? "checked" : ""}><label for="${cbId}">${escapeHtml(item.label)}</label></div>`;
       }).join("");
     }
 
@@ -1286,25 +1405,34 @@ window.MachirikuPropertyPages = (function () {
     const indContainer = document.getElementById("prop-allowed-industries");
     if (indContainer) {
       const allowedSet = new Set(src.allowedIndustries || []);
-      indContainer.innerHTML = (data.CATEGORIES || []).map(cat => `
+      indContainer.innerHTML = (data.CATEGORIES || []).map((cat, cIdx) => `
         <div class="industry-group-box">
           <div class="industry-group-title">${escapeHtml(cat.name)}</div>
           <div class="industry-group-checks">
-            ${(cat.subcategories || []).map(sub => `
-              <label class="check-chip-sm">
-                <input type="checkbox" name="allowedIndustries" value="${escapeHtml(sub.id)}" ${allowedSet.has(sub.id) ? "checked" : ""}>
-                <span>${escapeHtml(sub.name)}</span>
-              </label>
-            `).join("")}
+            ${(cat.subcategories || []).map((sub, sIdx) => {
+              const cbId = `prop-ind-cb-${cIdx}-${sIdx}`;
+              return `
+                <div class="check-chip-sm">
+                  <input id="${cbId}" type="checkbox" name="allowedIndustries" value="${escapeHtml(sub.id)}" ${allowedSet.has(sub.id) ? "checked" : ""}>
+                  <label for="${cbId}">${escapeHtml(sub.name)}</label>
+                </div>
+              `;
+            }).join("")}
           </div>
         </div>
       `).join("");
     }
 
-    // 写真ギャラリービルダー
-    let galleryState = Array.isArray(src.gallery) && src.gallery.length
-      ? src.gallery.map(g => ({ kind: g.kind || "exterior", label: g.label || "物件写真", url: g.url || PLACEHOLDER_IMG }))
-      : [{ kind: "exterior", label: "外観写真", url: "assets/properties/prop-orion-01/01_exterior.jpg" }];
+    // 写真ギャラリービルダー（新規時は初期写真なし）
+    const isCatalogProp = Boolean(baseProp && Array.isArray(data.PROPERTIES) && data.PROPERTIES.some(p => p.id === baseProp.id));
+    const sanitizeGalleryItems = (items) => (Array.isArray(items) ? items : [])
+      .filter(g => g && g.url && g.url !== PLACEHOLDER_IMG)
+      .filter(g => isCatalogProp || (
+        !(g.url === "assets/properties/prop-orion-01/01_exterior.jpg" && g.label === "外観写真") &&
+        !(g.url === "assets/properties/prop-orion-01/02_interior.jpg" && g.label === "店内サンプル写真")
+      ))
+      .map(g => ({ kind: g.kind || "exterior", label: g.label || "物件写真", url: g.url }));
+    let galleryState = sanitizeGalleryItems(src.gallery);
 
     const galleryListEl = document.getElementById("prop-gallery-list");
     const renderGalleryBuilder = () => {
@@ -1313,22 +1441,22 @@ window.MachirikuPropertyPages = (function () {
         <div class="gallery-builder-row">
           <img class="gallery-builder-thumb" src="${escapeHtml(resolveAssetUrl(item.url))}" alt="" onerror="this.src='${escapeHtml(resolveAssetUrl(PLACEHOLDER_IMG))}'">
           <div class="gallery-builder-fields">
-            <select class="form-select form-select-sm" data-g-kind="${idx}">
+            <select class="form-select form-select-sm" aria-label="写真種別" data-g-kind="${idx}">
               <option value="exterior" ${item.kind === "exterior" ? "selected" : ""}>外観</option>
               <option value="interior" ${item.kind === "interior" ? "selected" : ""}>室内</option>
               <option value="floorplan" ${item.kind === "floorplan" ? "selected" : ""}>間取り</option>
               <option value="facility" ${item.kind === "facility" ? "selected" : ""}>設備</option>
               <option value="surrounding" ${item.kind === "surrounding" ? "selected" : ""}>周辺環境</option>
             </select>
-            <input type="text" class="form-control form-control-sm" data-g-label="${idx}" value="${escapeHtml(item.label)}" placeholder="写真の説明（例: 店舗入口）">
+            <input type="text" class="form-control form-control-sm" aria-label="写真の説明" data-g-label="${idx}" value="${escapeHtml(item.label)}" placeholder="写真の説明（例: 店舗入口）">
           </div>
           <div class="gallery-builder-btns">
-            <button type="button" class="btn-secondary btn-xs" ${idx === 0 ? "disabled" : ""} data-g-up="${idx}">↑</button>
-            <button type="button" class="btn-secondary btn-xs" ${idx === galleryState.length - 1 ? "disabled" : ""} data-g-down="${idx}">↓</button>
+            <button type="button" class="btn-secondary btn-xs" aria-label="写真を上へ移動" ${idx === 0 ? "disabled" : ""} data-g-up="${idx}">↑</button>
+            <button type="button" class="btn-secondary btn-xs" aria-label="写真を下へ移動" ${idx === galleryState.length - 1 ? "disabled" : ""} data-g-down="${idx}">↓</button>
             <button type="button" class="btn-secondary btn-xs btn-danger-outline" data-g-del="${idx}">削除</button>
           </div>
         </div>
-      `).join("") || `<p class="sample-note">写真はまだ追加されていません（保存時はプレースホルダー画像が使われます）。</p>`;
+      `).join("") || `<p class="sample-note">写真はまだ追加されていません。必要に応じて「＋ 写真ファイルを追加」から選択できます。</p>`;
 
       galleryListEl.querySelectorAll("[data-g-kind]").forEach(el => {
         el.onchange = () => { galleryState[Number(el.getAttribute("data-g-kind"))].kind = el.value; };
@@ -1373,46 +1501,99 @@ window.MachirikuPropertyPages = (function () {
       };
     }
 
-    const addSampleBtn = document.getElementById("prop-add-sample-photo");
-    if (addSampleBtn) {
-      addSampleBtn.onclick = () => {
-        galleryState.push({ kind: "interior", label: "店内サンプル写真", url: "assets/properties/prop-orion-01/02_interior.jpg" });
-        renderGalleryBuilder();
-      };
-    }
+    // Google Maps 座標ピッカー（スクロール拡大有効＋ピン設置時に逆ジオコーディングで住所自動入力）
+    const mapStatusEl = document.getElementById("prop-map-status");
+    const addrLineEl = document.getElementById("prop-address-line");
+    let geocodeReqSeq = 0;
 
-    // Google Maps 座標ピッカー
+    const applyResolvedAddress = (resolved) => {
+      if (!resolved) return;
+      if (resolved.prefecture && prefEl) {
+        prefEl.value = resolved.prefecture;
+        validationCtrl?.markTouched(prefEl);
+      }
+      if (resolved.municipality && cityEl) {
+        cityEl.value = resolved.municipality;
+        validationCtrl?.markTouched(cityEl);
+      }
+      if (resolved.addressLine && addrLineEl) {
+        addrLineEl.value = resolved.addressLine;
+        validationCtrl?.markTouched(addrLineEl);
+      }
+      const fullTxt = `${resolved.prefecture || ""}${resolved.municipality || ""}${resolved.addressLine || ""}`;
+      if (mapStatusEl && fullTxt) {
+        mapStatusEl.textContent = `✓ ピン位置の住所を反映しました: ${fullTxt}`;
+      }
+    };
+
+    const reverseGeocodeAndFill = (latLng) => {
+      if (typeof google === "undefined" || !google.maps || !google.maps.Geocoder) {
+        if (mapStatusEl) mapStatusEl.textContent = "ピンを設置しました（住所欄を手動でご入力ください）。";
+        return;
+      }
+      const seq = ++geocodeReqSeq;
+      if (mapStatusEl) mapStatusEl.textContent = "ピン位置の住所を取得しています…";
+      new google.maps.Geocoder().geocode({ location: latLng }, (results, status) => {
+        if (seq !== geocodeReqSeq) return;
+        if (status === "OK" && results && results[0]) {
+          const parts = extractJapaneseAddressParts(results[0]);
+          if (parts.addressLine || parts.municipality || parts.prefecture) {
+            applyResolvedAddress(parts);
+            return;
+          }
+        }
+        if (mapStatusEl) {
+          mapStatusEl.textContent = "この地点の詳細住所を取得できなかったため、住所欄を手動でご確認ください。";
+        }
+      });
+    };
+
+    const placeOrMovePin = (latLng, shouldReverseGeocode = true) => {
+      const lat = typeof latLng.lat === "function" ? latLng.lat() : Number(latLng.lat);
+      const lng = typeof latLng.lng === "function" ? latLng.lng() : Number(latLng.lng);
+      setVal("prop-lat", Math.round(lat * 1000000) / 1000000);
+      setVal("prop-lng", Math.round(lng * 1000000) / 1000000);
+      if (pickerMap) {
+        if (!pickerMarker && typeof google !== "undefined" && google.maps?.Marker) {
+          pickerMarker = new google.maps.Marker({ position: { lat, lng }, map: pickerMap, draggable: true });
+          pickerMarker.addListener("dragend", (ev) => placeOrMovePin(ev.latLng, true));
+        } else if (pickerMarker) {
+          pickerMarker.setPosition({ lat, lng });
+        }
+      }
+      if (shouldReverseGeocode) reverseGeocodeAndFill({ lat, lng });
+    };
+
     const initPickerMap = () => {
       const mapEl = document.getElementById("prop-map-picker");
       if (!mapEl || typeof google === "undefined" || !google.maps || !google.maps.Map) return;
-      const lat = parseFloat(document.getElementById("prop-lat")?.value) || 36.5610;
-      const lng = parseFloat(document.getElementById("prop-lng")?.value) || 139.8830;
-      const pos = { lat, lng };
+      const centerLat = hasSavedCoords ? Number(latVal) : 36.5610;
+      const centerLng = hasSavedCoords ? Number(lngVal) : 139.8830;
+      const pos = { lat: centerLat, lng: centerLng };
       pickerMap = new google.maps.Map(mapEl, {
         center: pos,
-        zoom: 16,
+        zoom: hasSavedCoords ? 16 : 14,
+        gestureHandling: "greedy",
+        scrollwheel: true,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false
       });
-      pickerMarker = new google.maps.Marker({ position: pos, map: pickerMap, draggable: true });
-      const syncCoords = (p) => {
-        setVal("prop-lat", Math.round(p.lat() * 1000000) / 1000000);
-        setVal("prop-lng", Math.round(p.lng() * 1000000) / 1000000);
-      };
+      pickerMarker = null;
+      if (hasSavedCoords) {
+        placeOrMovePin(pos, false);
+      }
       pickerMap.addListener("click", (ev) => {
-        pickerMarker.setPosition(ev.latLng);
-        syncCoords(ev.latLng);
+        placeOrMovePin(ev.latLng, true);
       });
-      pickerMarker.addListener("dragend", (ev) => syncCoords(ev.latLng));
     };
 
     const geocodeBtn = document.getElementById("prop-geocode-btn");
     if (geocodeBtn) {
       geocodeBtn.onclick = () => {
-        const addr = `${document.getElementById("prop-pref")?.value || ""}${document.getElementById("prop-city")?.value || ""}${document.getElementById("prop-address-line")?.value || ""}`;
+        const addr = `${prefEl?.value || ""}${cityEl?.value || ""}${addrLineEl?.value || ""}`;
         if (!addr.trim()) {
-          window.MachirikuApp?.showToast?.("住所を入力してから座標を取得してください");
+          window.MachirikuApp?.showToast?.("住所を入力してから地図ピンを取得してください");
           return;
         }
         if (typeof google === "undefined" || !google.maps || !google.maps.Geocoder) {
@@ -1422,15 +1603,15 @@ window.MachirikuPropertyPages = (function () {
         new google.maps.Geocoder().geocode({ address: addr }, (results, status) => {
           if (status === "OK" && results && results[0]) {
             const loc = results[0].geometry.location;
-            setVal("prop-lat", Math.round(loc.lat() * 1000000) / 1000000);
-            setVal("prop-lng", Math.round(loc.lng() * 1000000) / 1000000);
-            if (pickerMap && pickerMarker) {
+            placeOrMovePin(loc, false);
+            if (pickerMap) {
               pickerMap.setCenter(loc);
-              pickerMarker.setPosition(loc);
+              pickerMap.setZoom(16);
             }
-            window.MachirikuApp?.showToast?.("住所から緯度・経度を取得しました");
+            if (mapStatusEl) mapStatusEl.textContent = `✓ 入力された住所の位置へピンを移動しました: ${addr}`;
+            window.MachirikuApp?.showToast?.("住所から地図ピンの位置を更新しました");
           } else {
-            window.MachirikuApp?.showToast?.("住所から位置を特定できませんでした。地図上をクリックして調整してください");
+            window.MachirikuApp?.showToast?.("住所から位置を特定できませんでした。地図上をクリックして指定してください");
           }
         });
       };
@@ -1457,6 +1638,40 @@ window.MachirikuPropertyPages = (function () {
     form.onsubmit = (e) => {
       e.preventDefault();
       const val = (id) => document.getElementById(id)?.value.trim() || "";
+
+      const hasContract = Boolean((longCb && longCb.checked) || (popupCb && popupCb.checked));
+      if (!hasContract) {
+        const msg = "募集する契約形態を1つ以上選択してください。";
+        if (contractErrEl) {
+          contractErrEl.innerHTML = `<span role="img" aria-label="エラー">⚠</span> ${msg}`;
+          contractErrEl.style.display = "block";
+        }
+        validationCtrl?.announce(msg);
+        window.MachirikuApp?.showToast?.(msg);
+        longCb?.focus();
+        return;
+      }
+
+      if (popupCb && popupCb.checked && popupMinEl && popupMaxEl) {
+        const minVal = Number(popupMinEl.value);
+        const maxVal = Number(popupMaxEl.value);
+        if (!isNaN(minVal) && !isNaN(maxVal) && maxVal < minVal) {
+          popupMaxEl.setCustomValidity("最大利用日数は最低利用日数以上の値を入力してください。");
+        } else {
+          popupMaxEl.setCustomValidity("");
+        }
+      }
+
+      if (!form.checkValidity()) {
+        const invalidEl = validationCtrl?.focusFirstInvalid();
+        if (invalidEl) {
+          const msg = invalidEl.validationMessage || "入力内容を確認してください";
+          validationCtrl?.announce(msg);
+          window.MachirikuApp?.showToast?.(msg);
+        }
+        return;
+      }
+
       const infra = {};
       (data.INFRASTRUCTURE_FACILITIES || []).forEach(item => {
         const cb = form.querySelector(`input[name="infra_${item.key}"]`);
@@ -1464,9 +1679,21 @@ window.MachirikuPropertyPages = (function () {
       });
       const allowedIndustries = Array.from(form.querySelectorAll('input[name="allowedIndustries"]:checked')).map(cb => cb.value);
 
-      const prefecture = val("prop-pref") || "栃木県";
-      const municipality = val("prop-city") || "宇都宮市";
+      const prefecture = val("prop-pref");
+      const municipality = val("prop-city");
       const addressLine = val("prop-address-line");
+      const bYear = val("prop-built-year");
+      const bMonth = val("prop-built-month");
+      const builtYear = bYear ? (bYear === "不明" ? "不明" : (bMonth ? `${bYear}${bMonth}` : bYear)) : "";
+
+      const rawLat = parseFloat(val("prop-lat"));
+      const rawLng = parseFloat(val("prop-lng"));
+
+      const rawSqm = parseFloat(val("prop-area-sqm")) || 0;
+      const rawTsubo = parseFloat(val("prop-area-tsubo"));
+      const areaTsubo = (!isNaN(rawTsubo) && rawTsubo > 0)
+        ? rawTsubo
+        : (rawSqm > 0 ? Math.round((rawSqm / 3.30578) * 100) / 100 : 0);
 
       const payload = {
         title: val("prop-title"),
@@ -1480,20 +1707,20 @@ window.MachirikuPropertyPages = (function () {
         deposit: val("prop-deposit") || "掲載なし（要確認）",
         keyMoney: val("prop-key-money") || "掲載なし（要確認）",
         securityDeposit: val("prop-security-deposit") || "掲載なし（要確認）",
-        areaSqm: parseFloat(val("prop-area-sqm")) || 0,
-        areaTsubo: parseFloat(val("prop-area-tsubo")) || 0,
+        areaSqm: rawSqm,
+        areaTsubo,
         floorNumber: val("prop-floor-num"),
         totalFloors: val("prop-total-floors"),
         structure: val("prop-structure"),
-        builtYear: val("prop-built-year"),
+        builtYear,
         handover: val("prop-handover"),
         permitStatus: val("prop-permit-status") || "UNKNOWN",
         listingStatus: val("prop-listing-status") || "OPEN",
         condition: val("prop-condition") || "業種相談可",
         description: val("prop-description"),
         listingUrl: val("prop-listing-url"),
-        lat: parseFloat(val("prop-lat")) || 36.5610,
-        lng: parseFloat(val("prop-lng")) || 139.8830,
+        lat: !isNaN(rawLat) ? rawLat : 36.5610,
+        lng: !isNaN(rawLng) ? rawLng : 139.8830,
         infrastructure: infra,
         allowedIndustries,
         contractTerms: {
@@ -1506,10 +1733,8 @@ window.MachirikuPropertyPages = (function () {
         gallery: galleryState
       };
 
-      if (payload.areaSqm <= 0) {
-        window.MachirikuApp?.showToast?.("使用部分面積は0より大きい値を入力してください");
-        return;
-      }
+      const submitBtn = document.getElementById("prop-submit-btn");
+      if (submitBtn) submitBtn.disabled = true;
 
       if (isEdit) {
         window.sessionStorage.setItem(DRAFT_EDIT_KEY, JSON.stringify({
@@ -1534,11 +1759,17 @@ window.MachirikuPropertyPages = (function () {
       ? `可（${d.contractTerms.minDays || 3}〜${d.contractTerms.maxDays || 30}日 / 日額 ${d.contractTerms.dailyRentYen ? formatMoney(d.contractTerms.dailyRentYen) + "円" : "相談"}）`
       : "不可";
 
+    const kindMap = { exterior: "外観", interior: "室内", floorplan: "間取り", facility: "設備", surrounding: "周辺環境" };
+    const photos = (Array.isArray(d.gallery) ? d.gallery : []).filter(g => g && g.url && g.url !== PLACEHOLDER_IMG);
+    const photosLabel = photos.length
+      ? `${photos.length}枚（${photos.map(g => `${kindMap[g.kind] || "写真"}: ${g.label || "物件写真"}`).join("、")}）`
+      : "なし";
+    const photosSig = photos.map(g => `${g.kind || "exterior"}|${g.label || ""}|${g.url}`).join("||");
+
     return [
       { key: "title", label: "物件名称", value: d.title || "" },
       { key: "address", label: "所在地", value: d.address || "" },
       { key: "access", label: "交通・最寄駅", value: d.access || "" },
-      { key: "coords", label: "地図座標（緯度・経度）", value: `${d.lat ?? d.location?.lat ?? "-"} , ${d.lng ?? d.location?.lng ?? "-"}` },
       { key: "rent", label: "月額賃料 / 共益費", value: `${formatMoney(d.rent)}円 / 共益費 ${d.managementFee == null ? "なし" : formatMoney(d.managementFee) + "円"}` },
       { key: "deposits", label: "敷金 / 礼金 / 保証金", value: `${d.deposit || "なし"} / ${d.keyMoney || "なし"} / ${d.securityDeposit || "なし"}` },
       { key: "area", label: "使用部分面積", value: `${d.areaSqm}㎡（${d.areaTsubo}坪）` },
@@ -1549,6 +1780,7 @@ window.MachirikuPropertyPages = (function () {
       { key: "permit", label: "飲食店営業許可", value: permitMap[d.permitStatus] || "要確認" },
       { key: "status", label: "公開状態", value: statusMap[d.listingStatus] || "公開中" },
       { key: "condition", label: "募集条件・メモ", value: d.condition || "" },
+      { key: "photos", label: "物件写真", value: photosLabel, sig: photosSig },
       { key: "description", label: "物件アピール説明", value: d.description || "" }
     ];
   }
@@ -1579,12 +1811,15 @@ window.MachirikuPropertyPages = (function () {
     }
     const galleryPrev = document.getElementById("o05-gallery-preview");
     if (galleryPrev) {
-      galleryPrev.innerHTML = (draft.gallery || []).map(g => `
-        <div class="confirm-photo-item">
-          <img src="${escapeHtml(resolveAssetUrl(g.url))}" alt="${escapeHtml(g.label)}">
-          <span>${escapeHtml(g.label)}</span>
-        </div>
-      `).join("");
+      const photos = (draft.gallery || []).filter(g => g && g.url && g.url !== PLACEHOLDER_IMG);
+      galleryPrev.innerHTML = photos.length
+        ? photos.map(g => `
+          <div class="confirm-photo-item">
+            <img src="${escapeHtml(resolveAssetUrl(g.url))}" alt="${escapeHtml(g.label)}">
+            <span>${escapeHtml(g.label)}</span>
+          </div>
+        `).join("")
+        : `<p class="sample-note">写真は登録されていません。</p>`;
     }
 
     const backBtn = document.getElementById("o05-back-btn");
@@ -1628,7 +1863,7 @@ window.MachirikuPropertyPages = (function () {
     if (tbody) {
       tbody.innerHTML = afterRows.map((ar, idx) => {
         const br = beforeRows[idx] || { value: "" };
-        const changed = br.value !== ar.value;
+        const changed = br.value !== ar.value || (ar.sig !== undefined && br.sig !== ar.sig);
         if (changed) diffCount += 1;
         return `
           <tr class="${changed ? "diff-changed-row" : ""}">

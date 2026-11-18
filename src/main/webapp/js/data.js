@@ -2547,11 +2547,22 @@ window.MACHIRIKU_DATA = (function() {
     { id: "s33", num: "S33", name: "物件PR広告", role: "owner", roleLabel: "物件オーナー", desc: "オーナー向け収益プラン、検索トップ注目枠への掲載申込・シミュレーション", refExcel: "企画書 A170-176" }
   ];
 
+  const PROPERTY_FORM_OPTIONS = {
+    deposits: ["なし", "1ヶ月", "2ヶ月", "3ヶ月", "4ヶ月", "5ヶ月", "6ヶ月", "相談"],
+    keyMonies: ["なし", "1ヶ月", "2ヶ月", "3ヶ月", "相談"],
+    securityDeposits: ["なし", "1ヶ月", "2ヶ月", "3ヶ月", "6ヶ月", "10万円", "20万円", "30万円", "50万円", "100万円", "相談"],
+    floorNumbers: ["地下2階", "地下1階", "1階", "2階", "3階", "4階", "5階", "6階", "7階", "8階", "9階", "10階以上", "一棟貸し", "その他"],
+    totalFloors: ["1階建（平屋）", "2階建", "3階建", "4階建", "5階建", "6階建", "7階建", "8階建", "9階建", "10階建", "11階建以上"],
+    structures: ["木造", "軽量鉄骨造", "鉄骨造", "S造(鉄骨造)", "RC(鉄筋コンクリート造)", "SRC(鉄骨鉄筋コンクリート造)", "ALC", "その他"],
+    handovers: ["即時", "相談（即時可）", "相談", "1ヶ月後", "2ヶ月後", "3ヶ月後", "要相談"]
+  };
+
   return {
     DATASET_VERSION,
     CATEGORIES,
     SUBCATS,
     INFRASTRUCTURE_FACILITIES,
+    PROPERTY_FORM_OPTIONS,
     PROPERTIES,
     USERS,
     INITIAL_APPLICATIONS,

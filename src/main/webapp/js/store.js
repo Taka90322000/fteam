@@ -62,19 +62,40 @@ window.MachirikuStore = (function() {
       for (const prop of saved.properties) {
         const source = data.PROPERTIES.find(item => item.id === prop.id);
         if (source) {
-          // Photo-only catalog updates must reach saved previews without losing interaction data.
-          if (source.galleryVersion && prop.galleryVersion !== source.galleryVersion) {
+          // Photo-only catalog updates must reach saved previews without losing interaction data,
+          // unless the owner has explicitly customized/cleared photos for this property.
+          if (source.galleryVersion && prop.galleryVersion !== source.galleryVersion && !prop.photosEdited) {
             prop.gallery = JSON.parse(JSON.stringify(source.gallery));
             prop.galleryVersion = source.galleryVersion;
           }
+          if (Array.isArray(prop.gallery)) {
+            prop.gallery = prop.gallery.filter(g => g && g.url && g.url !== 'assets/property-placeholder.svg');
+          }
+          const ownerClearedPhotos = Boolean(
+            (prop.photosEdited || prop.ownerId || prop.coverImage === 'assets/property-placeholder.svg') &&
+            Array.isArray(prop.gallery) &&
+            prop.gallery.length === 0
+          );
           // If the property is not an owner-created custom listing, synchronize coverImage and access with the catalog master.
-          if (!prop.ownerId || !prop.coverImage || prop.coverImage === 'assets/property-placeholder.svg') {
+          if (!ownerClearedPhotos && !prop.photosEdited && (!prop.ownerId || !prop.coverImage || prop.coverImage === 'assets/property-placeholder.svg')) {
             prop.coverImage = source.coverImage;
             prop.imageCaption = source.imageCaption;
           }
           if (source.access) {
             prop.access = source.access;
           }
+        } else {
+          if (Array.isArray(prop.gallery)) {
+            prop.gallery = prop.gallery.filter(g => (
+              g && g.url && g.url !== 'assets/property-placeholder.svg' &&
+              !(g.url === 'assets/properties/prop-orion-01/01_exterior.jpg' && g.label === '外観写真') &&
+              !(g.url === 'assets/properties/prop-orion-01/02_interior.jpg' && g.label === '店内サンプル写真')
+            ));
+          } else {
+            prop.gallery = [];
+          }
+          const firstExt = prop.gallery.find(g => g.kind === 'exterior') || prop.gallery[0];
+          prop.coverImage = (firstExt && firstExt.url) || 'assets/property-placeholder.svg';
         }
       }
       // マスタに追加された新規物件（仮想物件など）を saved.properties にマージ
@@ -753,12 +774,13 @@ window.MachirikuStore = (function() {
       ? `${propData.floorNumber}/${propData.totalFloors}`
       : (propData.floor || existing.floor || "1階");
 
-    const galleryInput = Array.isArray(propData.gallery) && propData.gallery.length
+    const rawGallery = Array.isArray(propData.gallery)
       ? propData.gallery
-      : (existing.gallery && existing.gallery.length ? existing.gallery : [{ kind: "exterior", label: `${propData.title || existing.title || "物件"}の外観`, url: "assets/property-placeholder.svg" }]);
+      : (Array.isArray(existing.gallery) ? existing.gallery : []);
+    const galleryInput = rawGallery.filter(g => g && g.url && g.url !== "assets/property-placeholder.svg");
 
     const firstExt = galleryInput.find(g => g.kind === "exterior") || galleryInput[0];
-    const coverImage = propData.coverImage || (firstExt && firstExt.url) || existing.coverImage || "assets/property-placeholder.svg";
+    const coverImage = propData.coverImage || (firstExt && firstExt.url) || "assets/property-placeholder.svg";
 
     const infra = propData.infrastructure || existing.infrastructure || {};
     const facLabels = [];
@@ -809,7 +831,9 @@ window.MachirikuStore = (function() {
       location: { lat, lng },
       mapCoords: { x: 420, y: 280, lat, lng },
       coverImage,
-      gallery: galleryInput.map((g, i) => ({ ...g, index: i }))
+      gallery: galleryInput.map((g, i) => ({ ...g, index: i })),
+      photosEdited: Array.isArray(propData.gallery) ? true : Boolean(existing.photosEdited),
+      ...(existing.galleryVersion ? { galleryVersion: existing.galleryVersion } : {})
     };
   }
 

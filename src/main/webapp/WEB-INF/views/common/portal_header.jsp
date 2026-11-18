@@ -31,7 +31,7 @@
   }
   String assetVersion = request.getParameter("assetVersion");
   if (assetVersion == null || assetVersion.trim().isEmpty()) {
-    assetVersion = "20261117_prop_pages";
+    assetVersion = "20261118_prop_v5";
   }
   String profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/user/Profile.action";
 %>

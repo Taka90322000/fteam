@@ -3,7 +3,7 @@
   <jsp:param name="title" value="物件需要分析 | マチリク" />
   <jsp:param name="description" value="登録物件・中心市街地の住民需要スコアと7大分類別分布を分析します。" />
   <jsp:param name="pageScreenId" value="o02" />
-  <jsp:param name="assetVersion" value="20261117_prop_pages" />
+  <jsp:param name="assetVersion" value="20261118_prop_v5" />
 </jsp:include>
 
     <section id="o02-section" class="screen-view s07-view" data-screen="O02">
@@ -81,5 +81,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o02" />
-  <jsp:param name="assetVersion" value="20261117_prop_pages" />
+  <jsp:param name="assetVersion" value="20261118_prop_v5" />
 </jsp:include>

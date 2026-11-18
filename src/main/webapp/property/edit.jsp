@@ -3,7 +3,7 @@
   <jsp:param name="title" value="物件編集 | マチリク" />
   <jsp:param name="description" value="登録済み物件の賃料・設備・募集条件を変更します。" />
   <jsp:param name="pageScreenId" value="o06" />
-  <jsp:param name="assetVersion" value="20261117_prop_pages" />
+  <jsp:param name="assetVersion" value="20261118_prop_v5" />
 </jsp:include>
 
     <section id="o06-empty-state" class="screen-view empty-state" data-screen="O06" hidden>
@@ -18,10 +18,11 @@
           <a href="${pageContext.request.contextPath}/index.jsp#s01">ホーム</a>
           <span aria-hidden="true">/</span>
           <a href="${pageContext.request.contextPath}/property/manage.jsp">登録物件管理</a>
-          <span class="sep">/</span>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">物件編集</span>
         </nav>
         <div class="page-title-row">
-          <h1 class="page-title">物件編集画面</h1>
+          <h1 id="o06-form-heading" class="page-title">物件編集画面</h1>
           <span class="badge-status status-voting">オーナー</span>
         </div>
         <p class="page-description">登録済み物件の賃料・設備・契約条件・公開ステータスを更新し、確認画面へ進みます。</p>
@@ -29,17 +30,18 @@
 
       <div id="o06-role-notice" class="role-switch-notice" hidden>
         <span data-role-notice-text></span>
-        <button type="button" class="btn-primary btn-sm" onclick="MachirikuStore.setRole('owner')">物件オーナーに切り替える</button>
+        <button type="button" id="o06-switch-role-btn" class="btn-primary btn-sm">物件オーナーに切り替える</button>
       </div>
 
       <div class="form-stepper-box form-stepper-wide">
         <jsp:include page="/WEB-INF/views/property/_property_form.jsp">
           <jsp:param name="isEdit" value="true" />
+          <jsp:param name="headingId" value="o06-form-heading" />
         </jsp:include>
       </div>
     </section>
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o06" />
-  <jsp:param name="assetVersion" value="20261117_prop_pages" />
+  <jsp:param name="assetVersion" value="20261118_prop_v5" />
 </jsp:include>
