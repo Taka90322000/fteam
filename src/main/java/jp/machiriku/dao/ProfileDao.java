@@ -308,24 +308,49 @@ public class ProfileDao extends Dao {
             // 住民が欲しい業種も、業種コードをDBの有効なIDへ変換して同じトランザクションで保存する。
             saveIndustryPreferences(connection, userId, resolveIndustryCodes(connection, input.preferredIndustryCodes()));
             saveNotifications(connection, userId, input.emailNotify() && nullable(input.email()) != null);
-        });
+            // 住民プロフィールではアイコンの参照先を扱わない。
+            return null;
+        }).user();
     }
 
-    /** オーナーの連絡先・プロフィール・誘致希望業種・通知設定をまとめて登録する。 */
+    /**
+     * オーナーのプロフィールを、入力に含まれるアイコン参照先で更新する。
+     * @param userId 更新する会員ID
+     * @param input 検証済みのプロフィール
+     * @return 保存後の会員情報
+     * @throws SQLException 会員が更新できない状態か、DB操作に失敗した場合
+     */
     public User saveOwner(int userId, OwnerProfileInput input) throws SQLException {
-        return saveOwner(userId, input, false);
+        return saveOwner(userId, input, false, new IconChange(false, input == null ? null : input.iconImageUrl())).user();
     }
 
-    /** オーナーの初期設定を完了する。DBでも本登録前であることを確認する。 */
+    /**
+     * オーナーの初期設定を完了し、入力に含まれるアイコン参照先を登録する。
+     * @param userId 本登録前の会員ID
+     * @param input 検証済みのプロフィール
+     * @return 保存後の会員情報
+     * @throws SQLException 会員が本登録前でないか、DB操作に失敗した場合
+     */
     public User completeOwnerSetup(int userId, OwnerProfileInput input) throws SQLException {
-        return saveOwner(userId, input, true);
+        return saveOwner(userId, input, true, new IconChange(false, input == null ? null : input.iconImageUrl())).user();
     }
 
-    private User saveOwner(int userId, OwnerProfileInput input, boolean pendingOnly) throws SQLException {
+    /**
+     * オーナーの各設定とアイコン参照先を同じトランザクションで保存する。
+     * @param userId 更新する会員ID
+     * @param input 検証済みのプロフィール
+     * @param pendingOnly 初期設定からの送信ならtrue
+     * @param iconChange アイコンの保持・差し替え・解除の指定
+     * @return 会員情報と更新前後のアイコン参照先
+     * @throws SQLException 会員の状態が更新を許可しないか、DB操作に失敗した場合
+     */
+    public SavedProfile saveOwner(int userId, OwnerProfileInput input, boolean pendingOnly, IconChange iconChange) throws SQLException {
         if (input == null || input.industryTypeIds() == null || input.industryTypeIds().isEmpty()) {
             throw new IllegalArgumentException("誘致希望業種を少なくとも1つ選択してください。");
         }
         return save(userId, "OWNER", pendingOnly, (connection, user) -> {
+            // 同じ会員の更新を直列化した後に、現在のアイコンと今回の保存先を確定する。
+            IconReferences icons = iconReferences(connection, "owner_profiles", userId, iconChange);
             List<Integer> industries = uniqueIds(input.industryTypeIds());
             validateMasterIds(connection, industries, true);
             // LINE表示名は保持し、編集したオーナー氏名は専用プロフィールへ保存する。
@@ -344,29 +369,54 @@ public class ProfileDao extends Dao {
                 statement.setString(2, input.representativeName());
                 statement.setString(3, nullable(input.company()));
                 statement.setString(4, input.phoneE164());
-                statement.setString(5, nullable(input.iconImageUrl()));
+                statement.setString(5, icons.current());
                 statement.setString(6, nullable(input.secondaryPhoneE164()));
                 statement.executeUpdate();
             }
             saveIndustryPreferences(connection, userId, industries);
             saveNotifications(connection, userId, input.emailNotify() && nullable(input.email()) != null);
+            return icons;
         });
     }
 
+    /**
+     * 事業主のプロフィールを、入力に含まれるアイコン参照先で更新する。
+     * @param userId 更新する会員ID
+     * @param input 検証済みのプロフィール
+     * @return 保存後の会員情報
+     * @throws SQLException 会員が更新できない状態か、DB操作に失敗した場合
+     */
     public User saveBusiness(int userId, BusinessProfileInput input) throws SQLException {
-        return saveBusiness(userId, input, false);
+        return saveBusiness(userId, input, false, new IconChange(false, input == null ? null : input.iconImageUrl())).user();
     }
 
-    /** 事業主の初期設定を完了する。DBでも本登録前であることを確認する。 */
+    /**
+     * 事業主の初期設定を完了し、入力に含まれるアイコン参照先を登録する。
+     * @param userId 本登録前の会員ID
+     * @param input 検証済みのプロフィール
+     * @return 保存後の会員情報
+     * @throws SQLException 会員が本登録前でないか、DB操作に失敗した場合
+     */
     public User completeBusinessSetup(int userId, BusinessProfileInput input) throws SQLException {
-        return saveBusiness(userId, input, true);
+        return saveBusiness(userId, input, true, new IconChange(false, input == null ? null : input.iconImageUrl())).user();
     }
 
-    private User saveBusiness(int userId, BusinessProfileInput input, boolean pendingOnly) throws SQLException {
+    /**
+     * 事業主の各設定とアイコン参照先を同じトランザクションで保存する。
+     * @param userId 更新する会員ID
+     * @param input 検証済みのプロフィール
+     * @param pendingOnly 初期設定からの送信ならtrue
+     * @param iconChange アイコンの保持・差し替え・解除の指定
+     * @return 会員情報と更新前後のアイコン参照先
+     * @throws SQLException 会員の状態が更新を許可しないか、DB操作に失敗した場合
+     */
+    public SavedProfile saveBusiness(int userId, BusinessProfileInput input, boolean pendingOnly, IconChange iconChange) throws SQLException {
         if (input == null || input.industryTypeIds() == null || input.industryTypeIds().isEmpty()) {
             throw new IllegalArgumentException("希望業種を指定してください。");
         }
         return save(userId, "BUSINESS", pendingOnly, (connection, user) -> {
+            // 会員の行ロックで他の保存と順序をそろえ、直前のアイコンを取得する。
+            IconReferences icons = iconReferences(connection, "business_profiles", userId, iconChange);
             List<Integer> industries = uniqueIds(input.industryTypeIds());
             List<Integer> qualifications = uniqueIds(input.qualificationIds());
             validateMasterIds(connection, industries, true);
@@ -399,7 +449,7 @@ public class ProfileDao extends Dao {
                 statement.setString(6, input.industryExperience());
                 statement.setString(7, input.managementExperience());
                 statement.setString(8, input.phoneE164());
-                statement.setString(9, nullable(input.iconImageUrl()));
+                statement.setString(9, icons.current());
                 statement.setString(10, areaGeoJson);
                 statement.setString(11, nullable(input.secondaryPhoneE164()));
                 statement.executeUpdate();
@@ -434,11 +484,42 @@ public class ProfileDao extends Dao {
                 if (!qualifications.isEmpty()) { statement.executeBatch(); }
             }
             saveNotifications(connection, userId, input.emailNotify() && nullable(input.email()) != null);
+            return icons;
         });
     }
 
-    /** 同じ会員の同時送信を直列化し、権限をDBでも再確認してから関連情報を保存する。 */
-    private User save(int userId, String requiredRole, boolean pendingOnly, SaveWork work) throws SQLException {
+    /**
+     * 同じ会員の保存を直列化し、保存済みのアイコンを保持または更新するための参照先を返す。
+     * @param connection 会員行をロックしたトランザクションの接続
+     * @param table コード側で指定する事業主・オーナーのプロフィールテーブル
+     * @param userId 対象の会員ID
+     * @param change アイコンの変更内容
+     * @return 既存の参照先と今回保存する参照先
+     * @throws SQLException 既存の参照先を読み取れなかった場合
+     */
+    private static IconReferences iconReferences(Connection connection, String table, int userId, IconChange change) throws SQLException {
+        // 差し替えや解除後に旧ファイルを片付けられるよう、更新前の参照先を記録する。
+        String previous = null;
+        // テーブル名は呼び出し元の定数に限定し、検索する会員IDはパラメーターで渡す。
+        try (PreparedStatement statement = connection.prepareStatement("SELECT icon_image_url FROM " + table + " WHERE user_id=?")) {
+            statement.setInt(1, userId);
+            try (ResultSet rows = statement.executeQuery()) {
+                if (rows.next()) { previous = rows.getString("icon_image_url"); }
+            }
+        }
+        return new IconReferences(previous, change.keepExisting() ? previous : nullable(change.replacement()));
+    }
+
+    /**
+     * 会員の権限をDBで再確認し、会員と各プロフィールを一括保存する。
+     * @param userId 更新する会員ID
+     * @param requiredRole 画面に対応する会員区分
+     * @param pendingOnly 初期設定のときだけtrue
+     * @param work 区分別の保存処理
+     * @return 保存後の会員情報とアイコン参照先
+     * @throws SQLException 会員が更新できない状態か、DB操作に失敗した場合
+     */
+    private SavedProfile save(int userId, String requiredRole, boolean pendingOnly, SaveWork work) throws SQLException {
         try (Connection connection = openConnection()) {
             boolean autoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
@@ -455,7 +536,8 @@ public class ProfileDao extends Dao {
                         || (pendingOnly && !"PENDING".equals(current.getAccountStatus()))) {
                     throw new SQLException("This account cannot complete the requested registration.", "28000");
                 }
-                work.run(connection, current);
+                // DBの確定後にファイルを整理するため、区分別の更新結果を保持する。
+                IconReferences icons = work.run(connection, current);
                 try (PreparedStatement statement = connection.prepareStatement(
                         "UPDATE users SET account_status='ACTIVE',updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
                     statement.setInt(1, userId);
@@ -470,7 +552,7 @@ public class ProfileDao extends Dao {
                     }
                 }
                 connection.commit();
-                return saved;
+                return new SavedProfile(saved, icons == null ? null : icons.current(), icons == null ? null : icons.previous());
             } catch (SQLException | RuntimeException error) {
                 try { connection.rollback(); } catch (SQLException rollbackError) { error.addSuppressed(rollbackError); }
                 throw error;
@@ -582,6 +664,38 @@ public class ProfileDao extends Dao {
 
     private static String emptyIfNull(String value) { return value == null ? "" : value; }
 
+    /**
+     * 画像の選択がない保存では既存の参照先を保持し、解除と差し替えを区別する。
+     * @param keepExisting trueなら既存の参照先を保持する
+     * @param replacement 差し替え先。keepExistingがfalseでnullなら解除する
+     */
+    public record IconChange(boolean keepExisting, String replacement) { }
+
+    /**
+     * 会員情報とアイコンの保存結果。旧ファイルの削除はこの結果を受け取ってから行う。
+     * @param user 保存後の会員情報
+     * @param iconImageUrl 保存されたアイコン参照先。未設定ならnull
+     * @param previousIconImageUrl 保存前のアイコン参照先。未設定ならnull
+     */
+    public record SavedProfile(User user, String iconImageUrl, String previousIconImageUrl) { }
+
+    /**
+     * トランザクション内で確定するアイコンの参照先。
+     * @param previous 更新前の参照先
+     * @param current 今回保存する参照先
+     */
+    private record IconReferences(String previous, String current) { }
+
+    /** 会員区分に応じたプロフィールの保存処理。 */
     @FunctionalInterface
-    private interface SaveWork { void run(Connection connection, User current) throws SQLException; }
+    private interface SaveWork {
+        /**
+         * ロック済みの会員に関連するプロフィールを更新する。
+         * @param connection 保存先のトランザクション接続
+         * @param current ロック後に取得した会員情報
+         * @return アイコン参照先の更新結果。アイコンを扱わない区分はnull
+         * @throws SQLException 関連データの読み書きに失敗した場合
+         */
+        IconReferences run(Connection connection, User current) throws SQLException;
+    }
 }

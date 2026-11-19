@@ -60,7 +60,7 @@
     </div>
 
     <%-- 事業者情報と希望条件を送信する。なぞった座標はpreferredAreaPointsのJSON文字列にまとめる。 --%>
-    <form id="business-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/BusinessSetup.action" method="POST" onsubmit="return validateBusinessForm();">
+    <form id="business-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/BusinessSetup.action" method="POST" enctype="multipart/form-data" onsubmit="return validateBusinessForm();">
       <input type="hidden" name="csrfToken" value="<%= Html.escape(request.getAttribute("csrfToken")) %>">
       <!-- 事業者名 / 屋号 -->
       <div class="form-group" style="margin-bottom:1.25rem;">
@@ -81,12 +81,7 @@
       </div>
 
       <%-- 画像の参照先は任意入力とし、エラー時も入力値を保持する。 --%>
-      <div class="form-group" style="margin-bottom:1.25rem;">
-        <label for="s18-biz-icon" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
-          アイコン画像のURL・パス <span style="font-size:0.78rem; color:var(--text-sub);">(任意)</span>
-        </label>
-        <input id="s18-biz-icon" name="iconImageUrl" type="text" class="form-control" value="<%= Html.escape(formValues.get("iconImageUrl")) %>" maxlength="2048" placeholder="例: https://example.com/icon.png、/assets/icon.png">
-      </div>
+      <jsp:include page="/WEB-INF/views/common/profile_icon.jsp" />
 
       <!-- メールアドレス -->
       <div class="form-group" style="margin-bottom:1.25rem;">

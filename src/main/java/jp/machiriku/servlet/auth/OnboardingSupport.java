@@ -3,7 +3,6 @@ package jp.machiriku.servlet.auth;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -19,6 +18,7 @@ import jakarta.servlet.http.HttpSession;
 import jp.machiriku.bean.User;
 import jp.machiriku.dao.ProfileDao;
 import jp.machiriku.servlet.MemberSession;
+import jp.machiriku.servlet.ProfileIconSupport;
 
 /** 初期設定の本人確認・CSRF対策と、フォーム表示に必要な共通処理をまとめる。 */
 final class OnboardingSupport {
@@ -78,10 +78,13 @@ final class OnboardingSupport {
         return fields;
     }
 
-    static List<String> values(HttpServletRequest req, String name) {
-        String[] values = req.getParameterValues(name);
-        return values == null ? List.of() : Arrays.asList(values);
-    }
+    /**
+     * 業種・資格の選択値を保存処理へ渡す。
+     * @param req フォームのリクエスト
+     * @param name 選択欄の名前
+     * @return 選択されたIDの文字列
+     */
+    static List<String> values(HttpServletRequest req, String name) { return ProfileIconSupport.selectionValues(req, name); }
 
     static Set<String> selection(HttpServletRequest req, String name) { return new LinkedHashSet<>(values(req, name)); }
 

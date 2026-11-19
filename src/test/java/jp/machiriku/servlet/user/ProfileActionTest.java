@@ -439,8 +439,17 @@ public class ProfileActionTest {
             return u;
         }
 
+        /**
+         * 編集中の事業主プロフィールの保存内容をテストへ戻す。
+         * @param userId 保存対象の会員ID
+         * @param input 検証済みの事業主プロフィール
+         * @param pendingOnly 初期登録ならtrue
+         * @param iconChange アイコンの変更内容
+         * @return 保存後の会員とアイコン参照先
+         */
         @Override
-        public User saveBusiness(int userId, BusinessProfileInput input) {
+        public SavedProfile saveBusiness(int userId, BusinessProfileInput input, boolean pendingOnly, IconChange iconChange) {
+            assertFalse(pendingOnly);
             businessSaves++;
             savedUserId = userId;
             businessInput = input;
@@ -450,11 +459,22 @@ public class ProfileActionTest {
             u.setAccountStatus("ACTIVE");
             u.setDisplayName(input.businessName());
             u.setEmail(input.email());
-            return u;
+            // 選択のない保存に備え、直前のアイコン参照先を保持する。
+            String previous = profileContact.get("iconImageUrl");
+            return new SavedProfile(u, iconChange.keepExisting() ? previous : iconChange.replacement(), previous);
         }
 
+        /**
+         * 編集中のオーナープロフィールの保存内容をテストへ戻す。
+         * @param userId 保存対象の会員ID
+         * @param input 検証済みのオーナープロフィール
+         * @param pendingOnly 初期登録ならtrue
+         * @param iconChange アイコンの変更内容
+         * @return 保存後の会員とアイコン参照先
+         */
         @Override
-        public User saveOwner(int userId, OwnerProfileInput input) {
+        public SavedProfile saveOwner(int userId, OwnerProfileInput input, boolean pendingOnly, IconChange iconChange) {
+            assertFalse(pendingOnly);
             ownerSaves++;
             savedUserId = userId;
             ownerInput = input;
@@ -465,7 +485,9 @@ public class ProfileActionTest {
             u.setDisplayName(input.representativeName());
             u.setEmail(input.email());
             afterOwnerSave.run();
-            return u;
+            // 選択のない保存に備え、直前のアイコン参照先を保持する。
+            String previous = profileContact.get("iconImageUrl");
+            return new SavedProfile(u, iconChange.keepExisting() ? previous : iconChange.replacement(), previous);
         }
     }
 

@@ -1,5 +1,6 @@
 package jp.machiriku.servlet.user;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -18,6 +19,7 @@ import jp.machiriku.bean.ResidentProfileInput;
 import jp.machiriku.bean.User;
 import jp.machiriku.dao.ProfileDao;
 import jp.machiriku.registration.RegistrationForms;
+import jp.machiriku.servlet.ProfileIconSupport;
 import jp.machiriku.tool.Action;
 
 /** 登録済み会員のプロフィール・基本情報設定画面の表示および更新を行う専用Action。 */
@@ -130,6 +132,14 @@ public class ProfileAction extends Action {
         }
     }
 
+    /**
+     * 事業主の編集フォームを表示し、送信時は画像と各設定を保存する。
+     * @param req 編集画面のリクエスト
+     * @param res 画面表示または保存結果のレスポンス
+     * @param session 処理開始時の認証済みセッション
+     * @param user DBで状態を確認した会員情報
+     * @throws Exception 画面転送を続行できなかった場合
+     */
     private void handleBusiness(HttpServletRequest req, HttpServletResponse res, HttpSession session, User user) throws Exception {
         boolean posting = "POST".equalsIgnoreCase(req.getMethod());
         Map<String, String> fields = null;
@@ -144,25 +154,31 @@ public class ProfileAction extends Action {
             }
             fields = ProfileSupport.fields(req, "businessName", "representativeName", "email", "phone", "secondaryPhone",
                     "preferredArea", "preferredAreaPoints", "employeeCount", "mgmtExperience",
-                    "industryExperience", "iconImageUrl", "emailNotify");
+                    "industryExperience", "emailNotify");
             industries = ProfileSupport.selection(req, "preferredIndustry");
             qualifications = ProfileSupport.selection(req, "qualification");
             try {
                 BusinessProfileInput input = RegistrationForms.business(fields,
                         ProfileSupport.values(req, "preferredIndustry"),
                         ProfileSupport.values(req, "qualification"));
-                User saved = createProfileDao().saveBusiness(user.getUserId(), input);
+                // 画像の差し替えや解除は、プロフィールの保存が成功したときに反映する。
+                ProfileDao.SavedProfile savedProfile = ProfileIconSupport.save(req, user,
+                        icon -> createProfileDao().saveBusiness(user.getUserId(), input, false, icon));
                 String preferredAreaPoints = fields.get("preferredAreaPoints");
-                ProfileSupport.saved(req, res, session, saved, input.representativeName(), current -> {
+                ProfileSupport.saved(req, res, session, savedProfile.user(), input.representativeName(), current -> {
                     current.setAttribute("businessName", input.businessName());
                     current.setAttribute("phone", input.phoneE164());
-                    current.setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
+                    current.setAttribute("iconImageUrl", savedProfile.iconImageUrl() == null ? "" : savedProfile.iconImageUrl());
                     current.setAttribute("preferredArea", input.preferredArea());
                     current.setAttribute("preferredAreaPoints", preferredAreaPoints);
                 });
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());
+            } catch (IOException e) {
+                // ファイルの読み書きに失敗したら、保存済みのアイコンを復元してフォームへ戻す。
+                req.getServletContext().log("Could not save a business profile icon.");
+                req.setAttribute("errorMessage", "アイコン画像を保存できませんでした。時間をおいて再度お試しください。");
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
                 if ("28000".equals(e.getSQLState())) {
@@ -173,6 +189,7 @@ public class ProfileAction extends Action {
                         ? "このメールアドレスは既に登録されています。入力内容を確認してください。"
                         : "設定内容を保存できませんでした。入力内容をご確認の上、もう一度お試しください。");
             }
+            ProfileIconSupport.restorePreview(req, createProfileDao(), user, fields);
         }
 
         List<RegistrationChoice> industryChoices = Collections.emptyList();
@@ -219,6 +236,14 @@ public class ProfileAction extends Action {
         }
     }
 
+    /**
+     * オーナーの編集フォームを表示し、送信時は画像と各設定を保存する。
+     * @param req 編集画面のリクエスト
+     * @param res 画面表示または保存結果のレスポンス
+     * @param session 処理開始時の認証済みセッション
+     * @param user DBで状態を確認した会員情報
+     * @throws Exception 画面転送を続行できなかった場合
+     */
     private void handleOwner(HttpServletRequest req, HttpServletResponse res, HttpSession session, User user) throws Exception {
         boolean posting = "POST".equalsIgnoreCase(req.getMethod());
         Map<String, String> fields = null;
@@ -230,21 +255,29 @@ public class ProfileAction extends Action {
                 res.sendError(HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
-            fields = ProfileSupport.fields(req, "representativeName", "company", "email", "phone", "secondaryPhone", "iconImageUrl", "emailNotify");
+            fields = ProfileSupport.fields(req, "representativeName", "company", "email", "phone", "secondaryPhone", "emailNotify");
             industries = ProfileSupport.selection(req, "preferredIndustry");
             try {
                 OwnerProfileInput input = RegistrationForms.owner(fields, ProfileSupport.values(req, "preferredIndustry"));
-                User saved = createProfileDao().saveOwner(user.getUserId(), input);
+                // 画像の差し替えや解除は、プロフィールの保存が成功したときに反映する。
+                ProfileDao.SavedProfile savedProfile = ProfileIconSupport.save(req, user,
+                        icon -> createProfileDao().saveOwner(user.getUserId(), input, false, icon));
+                // セッションの表示名と通知設定に使うコミット済みの会員情報。
+                User saved = savedProfile.user();
                 ProfileSupport.saved(req, res, session, saved, input.representativeName(), current -> {
                     current.setAttribute("company", input.company() == null ? "" : input.company());
                     current.setAttribute("phone", input.phoneE164());
-                    current.setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
+                    current.setAttribute("iconImageUrl", savedProfile.iconImageUrl() == null ? "" : savedProfile.iconImageUrl());
                     current.setAttribute("preferredIndustries", input.industryTypeIds());
                     current.setAttribute("emailNotify", input.emailNotify() && saved.getEmail() != null);
                 });
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());
+            } catch (IOException e) {
+                // ファイルの読み書きに失敗したら、保存済みのアイコンを復元してフォームへ戻す。
+                req.getServletContext().log("Could not save an owner profile icon.");
+                req.setAttribute("errorMessage", "アイコン画像を保存できませんでした。時間をおいて再度お試しください。");
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
                 if ("28000".equals(e.getSQLState())) {
@@ -255,6 +288,7 @@ public class ProfileAction extends Action {
                         ? "このメールアドレスは既に登録されています。入力内容を確認してください。"
                         : "設定内容を保存できませんでした。入力内容をご確認の上、もう一度お試しください。");
             }
+            ProfileIconSupport.restorePreview(req, createProfileDao(), user, fields);
         }
 
         List<RegistrationChoice> industryChoices = Collections.emptyList();
