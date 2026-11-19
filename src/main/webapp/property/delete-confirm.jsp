@@ -3,7 +3,7 @@
   <jsp:param name="title" value="物件削除確認 | マチリク" />
   <jsp:param name="description" value="登録済み物件の削除意図と影響件数を再確認します。" />
   <jsp:param name="pageScreenId" value="o08" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261119_o08_v19" />
 </jsp:include>
 
     <section id="o08-empty-state" class="screen-view empty-state" data-screen="O08" hidden>
@@ -12,19 +12,19 @@
       <a class="btn-primary" href="${pageContext.request.contextPath}/property/manage.jsp">登録物件管理へ戻る</a>
     </section>
 
-    <section id="o08-section" class="screen-view" data-screen="O08">
+    <section id="o08-section" class="screen-view o08-view" data-screen="O08">
       <div class="page-header-banner" data-screen="O08">
         <nav class="breadcrumb-trail" aria-label="現在の位置">
           <a href="${pageContext.request.contextPath}/index.jsp#s01">ホーム</a>
           <span aria-hidden="true">/</span>
           <a href="${pageContext.request.contextPath}/property/manage.jsp">登録物件管理</a>
-          <span class="sep">/</span>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">物件削除確認</span>
         </nav>
         <div class="page-title-row">
           <h1 class="page-title">物件削除確認画面</h1>
           <span class="badge-status status-paused">削除確認</span>
         </div>
-        <p class="page-description">対象物件を削除する前に、現在の需要投票や出店応募への影響をご確認ください。</p>
       </div>
 
       <div id="o08-role-notice" class="role-switch-notice" hidden>
@@ -67,5 +67,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o08" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261119_o08_v19" />
 </jsp:include>

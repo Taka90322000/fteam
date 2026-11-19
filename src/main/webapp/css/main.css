@@ -5108,22 +5108,22 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
     height: 260px;
   }
 
-  :is(.s02-view, .o05-view) .specs-table,
-  :is(.s02-view, .o05-view) .specs-table tbody,
-  :is(.s02-view, .o05-view) .specs-table tr,
-  :is(.s02-view, .o05-view) .specs-table th,
-  :is(.s02-view, .o05-view) .specs-table td {
+  :is(.s02-view, .o05-view, .o08-view) .specs-table,
+  :is(.s02-view, .o05-view, .o08-view) .specs-table tbody,
+  :is(.s02-view, .o05-view, .o08-view) .specs-table tr,
+  :is(.s02-view, .o05-view, .o08-view) .specs-table th,
+  :is(.s02-view, .o05-view, .o08-view) .specs-table td {
     display: block;
     width: 100%;
   }
 
-  :is(.s02-view, .o05-view) .specs-table th {
+  :is(.s02-view, .o05-view, .o08-view) .specs-table th {
     padding: var(--space-2) var(--space-3);
     border-bottom: none;
     font-size: 0.85rem;
   }
 
-  :is(.s02-view, .o05-view) .specs-table td {
+  :is(.s02-view, .o05-view, .o08-view) .specs-table td {
     padding: var(--space-2) var(--space-3) var(--space-3);
     font-size: 0.9375rem;
     overflow-wrap: anywhere;
