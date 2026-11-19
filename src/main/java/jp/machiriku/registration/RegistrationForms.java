@@ -120,11 +120,18 @@ public final class RegistrationForms {
                 iconImageUrl(fields.get("iconImageUrl")), secondaryPhone);
     }
 
-    /** アイコンの参照先として、HTTP(S)のURLとWeb用の相対パスを受け付ける。 */
-    private static String iconImageUrl(String value) {
+    /**
+     * 保存済みのアイコン参照先を、HTTP(S)のURLまたはWeb用の相対パスとして検証する。
+     * @param value 検証する参照先。空欄の場合は未設定として扱う
+     * @return 空白を取り除いた参照先。未設定ならnull
+     * @throws IllegalArgumentException URLの形式やパスの範囲が不正な場合
+     */
+    public static String iconImageUrl(String value) {
+        // 既存データと新しい画像URLのどちらも表示に使えることを確認する。
         String image = optional(value, 2048, "アイコン画像のURL・パス");
         if (image == null) { return null; }
         try {
+            // 絶対URLとアプリ内のパスを、URIの構造に従って区別する。
             URI uri = new URI(image);
             if (value.codePoints().anyMatch(Character::isISOControl) || image.indexOf('\\') >= 0) {
                 throw new URISyntaxException(image, "Invalid image reference");
@@ -135,6 +142,7 @@ public final class RegistrationForms {
                     throw new URISyntaxException(image, "Invalid image URL");
                 }
             } else {
+                // エンコードで隠された親ディレクトリの指定も除外する。
                 String path = uri.getPath();
                 if (uri.getRawAuthority() != null || path == null || path.isEmpty() || path.startsWith("//")
                         || path.indexOf('\\') >= 0 || path.codePoints().anyMatch(Character::isISOControl)

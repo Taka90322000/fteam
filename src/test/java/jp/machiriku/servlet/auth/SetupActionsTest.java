@@ -401,7 +401,10 @@ public class SetupActionsTest {
         request.parameters.put("userId", "1");
         request.parameters.put("userRole", "admin");
         request.parameters.put("email", " ");
+        // 旧フォームのURL項目が送られても、DBのアイコンを保持する。
+        request.parameters.put("iconImageUrl", "https://example.invalid/submitted.png");
         FakeDao dao = new FakeDao();
+        dao.profileContact = Map.of("iconImageUrl", "https://example.com/owner.png");
         User previous = (User) request.sessionValues.get("user");
         execute(new OwnerAction(dao), request);
         assertEquals(1, dao.saves);
@@ -411,7 +414,7 @@ public class SetupActionsTest {
         assertNull(dao.ownerInput.email());
         assertEquals("+81286339988", dao.ownerInput.phoneE164());
         assertEquals("+819012345678", dao.ownerInput.secondaryPhoneE164());
-        assertEquals("https://example.com/owner.png", dao.ownerInput.iconImageUrl());
+        assertNull(dao.ownerInput.iconImageUrl());
         assertEquals("https://example.com/owner.png", request.sessionValues.get("iconImageUrl"));
         assertEquals("+81286339988", request.sessionValues.get("phone"));
         assertEquals(List.of(1, 2), dao.ownerInput.industryTypeIds());
@@ -431,6 +434,7 @@ public class SetupActionsTest {
         Harness request = businessPost();
         request.parameters.put("secondaryPhone", "+81 28 633 9988");
         FakeDao dao = new FakeDao();
+        dao.profileContact = Map.of("iconImageUrl", "/assets/business.png");
         execute(new BusinessAction(dao), request);
         assertEquals(1, dao.saves);
         assertEquals(42, dao.savedUserId);
@@ -438,7 +442,7 @@ public class SetupActionsTest {
         assertEquals("代表者氏名", dao.businessInput.representativeName());
         assertEquals("+819012345678", dao.businessInput.phoneE164());
         assertEquals("+81286339988", dao.businessInput.secondaryPhoneE164());
-        assertEquals("/assets/business.png", dao.businessInput.iconImageUrl());
+        assertNull(dao.businessInput.iconImageUrl());
         assertEquals("/assets/business.png", request.sessionValues.get("iconImageUrl"));
         assertEquals("+819012345678", request.sessionValues.get("phone"));
         assertEquals(List.of(1), dao.businessInput.industryTypeIds());
@@ -535,6 +539,7 @@ public class SetupActionsTest {
         request.parameters.put("company", "入力中の会社名");
         request.parameters.remove("emailNotify");
         FakeDao dao = new FakeDao();
+        dao.profileContact = Map.of("iconImageUrl", "https://example.com/owner.png");
         User previous = (User) request.sessionValues.get("user");
         execute(new OwnerAction(dao), request);
         assertEquals(OWNER_VIEW, request.forwarded);
@@ -553,6 +558,7 @@ public class SetupActionsTest {
     public void ownerSqlErrorPreservesInputsAndDoesNotExposeDatabaseDetails() throws Exception {
         Harness request = ownerPost();
         FakeDao dao = new FakeDao();
+        dao.profileContact = Map.of("iconImageUrl", "https://example.com/owner.png");
         dao.failure = new SQLException("private connection and email details", "23505");
         User previous = (User) request.sessionValues.get("user");
         execute(new OwnerAction(dao), request);
@@ -574,6 +580,7 @@ public class SetupActionsTest {
         request.parameters.remove("emailNotify");
         User previous = (User) request.sessionValues.get("user");
         FakeDao dao = new FakeDao();
+        dao.profileContact = Map.of("iconImageUrl", "/assets/business.png");
         dao.failure = new SQLException("private email and database details", "23505");
         execute(new BusinessAction(dao), request);
         assertEquals(BUSINESS_VIEW, request.forwarded);
@@ -642,7 +649,6 @@ public class SetupActionsTest {
         request.parameters.put("representativeName", "代表者氏名");
         request.parameters.put("email", "new-business@example.com");
         request.parameters.put("phone", "090-1234-5678");
-        request.parameters.put("iconImageUrl", "/assets/business.png");
         request.parameters.put("preferredArea", "宇都宮市本町周辺");
         request.parameters.put("preferredAreaPoints", TRIANGLE);
         request.parameters.put("employeeCount", "3");
@@ -661,7 +667,6 @@ public class SetupActionsTest {
         request.parameters.put("company", "テスト不動産");
         request.parameters.put("email", "owner@example.invalid");
         request.parameters.put("phone", "028-633-9988");
-        request.parameters.put("iconImageUrl", "https://example.com/owner.png");
         request.parameters.put("emailNotify", "on");
         request.multiple.put("preferredIndustry", new String[] { "1", "2" });
         return request;
@@ -766,15 +771,41 @@ public class SetupActionsTest {
             if (failure != null) { throw failure; }
             return saved(userId, "RESIDENT", input.displayName(), input.email());
         }
-        @Override public User completeBusinessSetup(int userId, BusinessProfileInput input) throws SQLException {
+        /**
+         * 事業主の初期登録で選択されたアイコンの扱いを、DBを使わず確認する。
+         * @param userId 保存対象の会員ID
+         * @param input 検証済みの事業主プロフィール
+         * @param pendingOnly 初期登録ならtrue
+         * @param iconChange アイコンの変更内容
+         * @return 保存後の会員とアイコン参照先
+         * @throws SQLException DBエラーの検証用に例外を指定した場合
+         */
+        @Override public SavedProfile saveBusiness(int userId, BusinessProfileInput input, boolean pendingOnly, IconChange iconChange) throws SQLException {
+            assertTrue(pendingOnly);
             saves++; savedUserId = userId; businessInput = input;
             if (failure != null) { throw failure; }
-            return saved(userId, "BUSINESS", input.businessName(), input.email());
+            // アイコンを未選択のときは保存済みの値を返す。
+            String previous = profileContact.get("iconImageUrl");
+            return new SavedProfile(saved(userId, "BUSINESS", input.businessName(), input.email()),
+                    iconChange.keepExisting() ? previous : iconChange.replacement(), previous);
         }
-        @Override public User completeOwnerSetup(int userId, OwnerProfileInput input) throws SQLException {
+        /**
+         * オーナーの初期登録で選択されたアイコンの扱いを、DBを使わず確認する。
+         * @param userId 保存対象の会員ID
+         * @param input 検証済みのオーナープロフィール
+         * @param pendingOnly 初期登録ならtrue
+         * @param iconChange アイコンの変更内容
+         * @return 保存後の会員とアイコン参照先
+         * @throws SQLException DBエラーの検証用に例外を指定した場合
+         */
+        @Override public SavedProfile saveOwner(int userId, OwnerProfileInput input, boolean pendingOnly, IconChange iconChange) throws SQLException {
+            assertTrue(pendingOnly);
             saves++; savedUserId = userId; ownerInput = input;
             if (failure != null) { throw failure; }
-            return saved(userId, "OWNER", "保存済み表示名", input.email());
+            // アイコンを未選択のときは保存済みの値を返す。
+            String previous = profileContact.get("iconImageUrl");
+            return new SavedProfile(saved(userId, "OWNER", "保存済み表示名", input.email()),
+                    iconChange.keepExisting() ? previous : iconChange.replacement(), previous);
         }
         private User saved(int id, String role, String name, String email) {
             savedUser = new User();

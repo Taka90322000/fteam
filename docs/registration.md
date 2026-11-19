@@ -16,7 +16,7 @@ LINE認証が成功すると、今回取得した表示名とメールを認証�
 | 住民の居住地、任意の職場・学校の住所と座標 | `user_locations` の `HOME`・`WORK` |
 | 住民の近くに欲しい店舗・施設ジャンル | `user_industry_preferences`（画面の業種コードをマスターIDへ変換） |
 | 事業主の任意メール | `users.email` |
-| 事業主の必須電話番号・任意のアイコン画像URL／パス | `business_profiles.phone_e164`・`business_profiles.icon_image_url` |
+| 事業主の必須電話番号・任意のアイコン画像 | `business_profiles.phone_e164`・`business_profiles.icon_image_url`（画像ファイルの参照先） |
 | 事業主の任意の追加電話番号 | `business_profiles.secondary_phone_e164` |
 | 事業者名・代表者名・従業員数・経験・希望エリア名 | `business_profiles` |
 | 地図上で囲んだ出店希望範囲 | `business_profiles.area`（PostGISのPolygon、SRID 4326） |
@@ -25,7 +25,7 @@ LINE認証が成功すると、今回取得した表示名とメールを認証�
 | メール通知の希望 | `notification_settings.email_enabled` |
 | オーナーの氏名・法人名 | `owner_profiles` |
 | オーナーの任意メール | `users.email` |
-| オーナーの必須電話番号・任意のアイコン画像URL／パス | `owner_profiles.phone_e164`・`owner_profiles.icon_image_url` |
+| オーナーの必須電話番号・任意のアイコン画像 | `owner_profiles.phone_e164`・`owner_profiles.icon_image_url`（画像ファイルの参照先） |
 | オーナーの任意の追加電話番号 | `owner_profiles.secondary_phone_e164` |
 | オーナーの誘致希望業種 | `user_industry_preferences` |
 
@@ -57,7 +57,13 @@ psql <管理者用の接続オプション> -d machiriku -f database/grant-user-
 
 LINE認証では表示名・任意メール・利用区分・LINEの識別子を会員に保存します。事業主とオーナーの電話番号は、認証後の初期設定で必須入力します。保存済みの電話番号とアイコン参照先は、各プロフィールから再表示します。
 
-アイコン画像の参照先は任意です。HTTP(S)のURLまたはWeb用パスを2048文字まで入力でき、空欄はSQLの `NULL` として保存します。例として `https://example.com/icon.png`、`/assets/icons/owner.png` を利用できます。
+## アイコン画像の登録と保存先
+
+事業主・オーナーの初期設定とプロフィール編集で、任意のアイコン画像を登録できます。30MBまでのJPEG、PNG、WebP、HEIC／HEIFなどを選び、切り抜き画面で位置・拡大率・向きを調整します。「この画像を使う」で確定した画像は、フォームの保存時に512×512のPNGとして送信します。画像を選ばずに保存した場合は既存のアイコンを保持します。以前に登録したURLやパスも、画像を差し替えるまで引き続き表示します。
+
+HEIC／HEIFの読み込みと切り抜きはブラウザー内で行います。サーバーは画像の形式・寸法・容量を検証し、メタデータを含まないPNGとして保存します。画像ファイルは `CATALINA_BASE/machiriku-data/profile-icons` に保存します。別の永続ボリュームを使う場合は、`.env` の `MACHIRIKU_ICON_DIRECTORY` に公開ディレクトリ外の絶対パスを指定し、Tomcatの実行ユーザーに読み書き権限を付与してください。バックアップやサーバー移行の際には、DBと画像ディレクトリを一緒に扱います。
+
+画像の参照先には既存の `icon_image_url` 列を使用します。アプリにアップロードした画像の配信は、ログイン中の会員本人に限ります。ブラウザー用のHEICデコーダーは同梱しています。[heic-to の配布元とライセンス](../src/main/webapp/js/vendor/heic-to/README.md)
 
 住民画面の `?preview=1` はGETの表示確認専用です。POSTではプレビュー用IDを利用せず、必ずログイン中の住民のIDで保存します。
 

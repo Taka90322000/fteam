@@ -353,6 +353,17 @@ public class ProfileDaoTest {
                 dao.findProfileContact(6, "OWNER"));
         assertEquals(Map.of("phone", "090-2222-2222", "secondaryPhone", "", "iconImageUrl", "/assets/business.png"),
                 dao.findProfileContact(2, "BUSINESS"));
+        // 画像を選ばない編集では、既存のオーナー・事業主アイコンをそのまま保持する。
+        var keepIcon = new ProfileDao.IconChange(true, null);
+        assertEquals("https://example.invalid/owner.png", dao.saveOwner(6, owner(null, null, List.of(10), false),
+                false, keepIcon).iconImageUrl());
+        assertEquals("/assets/business.png", dao.saveBusiness(2, business(null, List.of(10), List.of(), AREA, false),
+                false, keepIcon).iconImageUrl());
+        // 差し替え後の削除処理へ、同じトランザクションで判明した旧参照先を返す。
+        String replacement = "/profile-icons/12345678-1234-1234-1234-123456789abc.png";
+        var saved = dao.saveOwner(6, owner(null, null, List.of(10), false), false, new ProfileDao.IconChange(false, replacement));
+        assertEquals("https://example.invalid/owner.png", saved.previousIconImageUrl());
+        assertEquals(replacement, dao.findProfileContact(6, "OWNER").get("iconImageUrl"));
         assertEquals(0, count("SELECT count(*) FROM pg_attribute WHERE attrelid='pg_temp.users'::regclass AND attname='phone_e164' AND NOT attisdropped"));
         dao.saveOwner(6, owner(null, null, List.of(10), false));
         dao.saveBusiness(2, business(null, List.of(10), List.of(), AREA, false));
