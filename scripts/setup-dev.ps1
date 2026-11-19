@@ -1,9 +1,11 @@
 ﻿# -*- coding: utf-8 -*-
-# Local Tomcat configuration generator for Machiriku.
-# This file is UTF-8 with BOM so Windows PowerShell 5.1 can read Japanese if added.
+# マチリクのローカル開発用に、Tomcatのコンテキスト設定を作成する。
+# Windows PowerShell 5.1でも日本語を読み取れるよう、UTF-8（BOM付き）で保存する。
 
+# Tomcat・Maven・Javaとプロジェクト構成を確認し、不備があれば設定を作成しない。
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'dev-context.ps1')
 $tomcatHome = $env:CATALINA_HOME
 
 if ([string]::IsNullOrWhiteSpace($tomcatHome)) {
@@ -25,30 +27,20 @@ if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
     throw 'java not found. Install JDK 21 and check JAVA_HOME / PATH.'
 }
 
+# 初回配備で更新するコンテキストを用意する。
 $docBase = (Join-Path $projectRoot 'target\machiriku').Replace('\', '/')
-$webSource = (Join-Path $projectRoot 'src\main\webapp').Replace('\', '/')
 $contextFile = Join-Path $tomcatHome 'conf\Catalina\localhost\machiriku.xml'
 
+# 既存の設定は内容が一致する場合だけ再利用し、別プロジェクトの設定を上書きしない。
 if (Test-Path $contextFile) {
-    try {
-        [xml]$existing = Get-Content -LiteralPath $contextFile -Raw -Encoding UTF8
-    }
-    catch {
-        throw "Existing machiriku.xml is invalid. Correct or back it up first: $contextFile`n$($_.Exception.Message)"
-    }
-    $currentDocBase = $existing.DocumentElement.GetAttribute('docBase').Replace('\', '/')
-    $preNode = $existing.SelectSingleNode('/Context/Resources/PreResources')
-    $currentWebSource = if ($null -ne $preNode) { $preNode.GetAttribute('base').Replace('\', '/') } else { '' }
-    if (($currentDocBase -ne $docBase) -or ($currentWebSource -ne $webSource)) {
-        throw "Existing machiriku.xml points somewhere else or lacks PreResources. Not overwritten. Back it up or remove it while Tomcat is stopped, then run setup again: $contextFile"
-    }
+    Read-MachirikuContext -ContextFile $contextFile -ProjectRoot $projectRoot | Out-Null
     Write-Host "Tomcat context already configured: $contextFile" -ForegroundColor Green
 }
 else {
     $contextDir = Split-Path -Path $contextFile -Parent
     New-Item -ItemType Directory -Path $contextDir -Force | Out-Null
 
-    # Construct XML using XmlDocument/XmlWriter. XML declaration will be first.
+    # XML宣言が先頭に来るよう、XmlDocumentとXmlWriterで設定ファイルを組み立てる。
     $doc = New-Object System.Xml.XmlDocument
     [void]$doc.AppendChild($doc.CreateXmlDeclaration('1.0', 'UTF-8', $null))
 
@@ -56,18 +48,6 @@ else {
     $context.SetAttribute('docBase', $docBase)
     $context.SetAttribute('reloadable', 'true')
     [void]$doc.AppendChild($context)
-
-    $resources = $doc.CreateElement('Resources')
-    $resources.SetAttribute('className', 'org.apache.catalina.webresources.StandardRoot')
-    [void]$context.AppendChild($resources)
-
-    $preResources = $doc.CreateElement('PreResources')
-    $preResources.SetAttribute('className', 'org.apache.catalina.webresources.DirResourceSet')
-    $preResources.SetAttribute('base', $webSource)
-    $preResources.SetAttribute('webAppMount', '/')
-    $preResources.SetAttribute('internalPath', '/')
-    $preResources.SetAttribute('readOnly', 'true')
-    [void]$resources.AppendChild($preResources)
 
     $settings = [System.Xml.XmlWriterSettings]::new()
     $settings.Encoding = [System.Text.UTF8Encoding]::new($false)
@@ -82,6 +62,7 @@ else {
     Write-Host "Tomcat context created: $contextFile" -ForegroundColor Green
 }
 
+# 古いWARや展開済みアプリが残っている場合は、配置先の競合を避けるため案内する。
 $oldWar = Join-Path $tomcatHome 'webapps\machiriku.war'
 $oldExpanded = Join-Path $tomcatHome 'webapps\machiriku'
 foreach ($item in @($oldWar, $oldExpanded)) {

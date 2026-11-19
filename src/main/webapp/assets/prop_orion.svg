@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e0e7ff"/>
+      <stop offset="100%" stop-color="#f8fafc"/>
+    </linearGradient>
+    <linearGradient id="wall" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0.5"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="400" fill="url(#sky)"/>
+  
+  <!-- Arcade Roof Structure (Orion Street) -->
+  <path d="M 0 50 Q 300 20 600 50 L 600 90 Q 300 60 0 90 Z" fill="#64748b" opacity="0.3"/>
+  <line x1="50" y1="90" x2="50" y2="400" stroke="#94a3b8" stroke-width="4"/>
+  <line x1="550" y1="90" x2="550" y2="400" stroke="#94a3b8" stroke-width="4"/>
+  
+  <!-- Building Base (4 floors) -->
+  <rect x="80" y="70" width="440" height="330" fill="url(#wall)" stroke="#94a3b8" stroke-width="2"/>
+  
+  <!-- Upper Floors Windows -->
+  <g fill="#94a3b8" opacity="0.7">
+    <rect x="120" y="100" width="70" height="45" rx="3"/>
+    <rect x="220" y="100" width="70" height="45" rx="3"/>
+    <rect x="320" y="100" width="70" height="45" rx="3"/>
+    <rect x="420" y="100" width="70" height="45" rx="3"/>
+    
+    <rect x="120" y="165" width="70" height="45" rx="3"/>
+    <rect x="220" y="165" width="70" height="45" rx="3"/>
+    <rect x="320" y="165" width="70" height="45" rx="3"/>
+    <rect x="420" y="165" width="70" height="45" rx="3"/>
+  </g>
+  
+  <!-- 1F Storefront Canopy & Glass (Ground Floor Retail) -->
+  <rect x="70" y="240" width="460" height="20" fill="#1b4332" rx="3"/>
+  <text x="300" y="254" font-family="sans-serif" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="3">ORION ARCADE COMMERCIAL BUILDING 1F</text>
+  
+  <!-- 1F Glass Facade -->
+  <rect x="100" y="260" width="400" height="140" fill="url(#glass)" stroke="#475569" stroke-width="3"/>
+  <line x1="200" y1="260" x2="200" y2="400" stroke="#475569" stroke-width="3"/>
+  <line x1="300" y1="260" x2="300" y2="400" stroke="#475569" stroke-width="4"/>
+  <line x1="400" y1="260" x2="400" y2="400" stroke="#475569" stroke-width="3"/>
+  
+  <!-- Tenant Signboard Frame (Now Empty / For Lease) -->
+  <rect x="220" y="280" width="160" height="45" rx="4" fill="#ffffff" stroke="#e11d48" stroke-width="2" stroke-dasharray="4 2"/>
+  <text x="300" y="300" font-family="sans-serif" font-size="12" font-weight="800" fill="#e11d48" text-anchor="middle">テナント募集中</text>
+  <text x="300" y="316" font-family="sans-serif" font-size="9" font-weight="600" fill="#475569" text-anchor="middle">カフェ・ベーカリー需要急上昇！</text>
+  
+  <!-- Orion Arcade Floor Pattern -->
+  <rect x="0" y="375" width="600" height="25" fill="#e2e8f0"/>
+  <line x1="0" y1="375" x2="600" y2="375" stroke="#cbd5e1" stroke-width="2"/>
+</svg>
