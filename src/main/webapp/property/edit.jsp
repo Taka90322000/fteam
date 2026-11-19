@@ -3,7 +3,7 @@
   <jsp:param name="title" value="物件編集 | マチリク" />
   <jsp:param name="description" value="登録済み物件の賃料・設備・募集条件を変更します。" />
   <jsp:param name="pageScreenId" value="o06" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261119_prop_v14" />
 </jsp:include>
 
     <section id="o06-empty-state" class="screen-view empty-state" data-screen="O06" hidden>
@@ -43,5 +43,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o06" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261119_prop_v14" />
 </jsp:include>

@@ -1435,10 +1435,61 @@ window.MachirikuPropertyPages = (function () {
     let galleryState = sanitizeGalleryItems(src.gallery);
 
     const galleryListEl = document.getElementById("prop-gallery-list");
+    const syncGalleryDomIndices = () => {
+      if (!galleryListEl) return;
+      Array.from(galleryListEl.querySelectorAll(".gallery-builder-row")).forEach((row, idx) => {
+        row.dataset.gIdx = String(idx);
+        const kindEl = row.querySelector("[data-g-kind]");
+        const labelEl = row.querySelector("[data-g-label]");
+        const delEl = row.querySelector("[data-g-del]");
+        if (kindEl) kindEl.setAttribute("data-g-kind", String(idx));
+        if (labelEl) labelEl.setAttribute("data-g-label", String(idx));
+        if (delEl) delEl.setAttribute("data-g-del", String(idx));
+      });
+    };
+
+    const reorderGalleryByIndices = (fromIdx, toIdx) => {
+      if (!galleryListEl) return;
+      const rows = Array.from(galleryListEl.querySelectorAll(".gallery-builder-row"));
+      const movingRow = rows[fromIdx];
+      const targetRow = rows[toIdx];
+      if (!movingRow || !targetRow || fromIdx === toIdx) return;
+
+      const beforeTops = new Map(rows.map(r => [r, r.getBoundingClientRect().top]));
+      const [moved] = galleryState.splice(fromIdx, 1);
+      galleryState.splice(toIdx, 0, moved);
+
+      if (fromIdx < toIdx) {
+        galleryListEl.insertBefore(movingRow, targetRow.nextSibling);
+      } else {
+        galleryListEl.insertBefore(movingRow, targetRow);
+      }
+      syncGalleryDomIndices();
+
+      Array.from(galleryListEl.querySelectorAll(".gallery-builder-row")).forEach((r) => {
+        const prevTop = beforeTops.get(r);
+        if (prevTop == null) return;
+        const delta = prevTop - r.getBoundingClientRect().top;
+        if (!delta) return;
+        r.style.transition = "none";
+        r.style.transform = `translate3d(0, ${delta}px, 0)`;
+        void r.offsetHeight;
+        r.style.transition = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+        r.style.transform = "";
+      });
+    };
+
     const renderGalleryBuilder = () => {
       if (!galleryListEl) return;
       galleryListEl.innerHTML = galleryState.map((item, idx) => `
-        <div class="gallery-builder-row">
+        <div class="gallery-builder-row" data-g-idx="${idx}">
+          <button type="button" class="gallery-drag-handle" aria-label="上下にドラッグして順番を入れ替え" title="掴んで上下に動かすと順番を入れ替えられます">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <circle cx="5.5" cy="3.5" r="1.3"/><circle cx="10.5" cy="3.5" r="1.3"/>
+              <circle cx="5.5" cy="8" r="1.3"/><circle cx="10.5" cy="8" r="1.3"/>
+              <circle cx="5.5" cy="12.5" r="1.3"/><circle cx="10.5" cy="12.5" r="1.3"/>
+            </svg>
+          </button>
           <img class="gallery-builder-thumb" src="${escapeHtml(resolveAssetUrl(item.url))}" alt="" onerror="this.src='${escapeHtml(resolveAssetUrl(PLACEHOLDER_IMG))}'">
           <div class="gallery-builder-fields">
             <select class="form-select form-select-sm" aria-label="写真種別" data-g-kind="${idx}">
@@ -1451,53 +1502,203 @@ window.MachirikuPropertyPages = (function () {
             <input type="text" class="form-control form-control-sm" aria-label="写真の説明" data-g-label="${idx}" value="${escapeHtml(item.label)}" placeholder="写真の説明（例: 店舗入口）">
           </div>
           <div class="gallery-builder-btns">
-            <button type="button" class="btn-secondary btn-xs" aria-label="写真を上へ移動" ${idx === 0 ? "disabled" : ""} data-g-up="${idx}">↑</button>
-            <button type="button" class="btn-secondary btn-xs" aria-label="写真を下へ移動" ${idx === galleryState.length - 1 ? "disabled" : ""} data-g-down="${idx}">↓</button>
             <button type="button" class="btn-secondary btn-xs btn-danger-outline" data-g-del="${idx}">削除</button>
           </div>
         </div>
       `).join("") || `<p class="sample-note">写真はまだ追加されていません。必要に応じて「＋ 写真ファイルを追加」から選択できます。</p>`;
 
       galleryListEl.querySelectorAll("[data-g-kind]").forEach(el => {
-        el.onchange = () => { galleryState[Number(el.getAttribute("data-g-kind"))].kind = el.value; };
-      });
-      galleryListEl.querySelectorAll("[data-g-label]").forEach(el => {
-        el.oninput = () => { galleryState[Number(el.getAttribute("data-g-label"))].label = el.value; };
-      });
-      galleryListEl.querySelectorAll("[data-g-up]").forEach(el => {
-        el.onclick = () => {
-          const i = Number(el.getAttribute("data-g-up"));
-          if (i > 0) { [galleryState[i - 1], galleryState[i]] = [galleryState[i], galleryState[i - 1]]; renderGalleryBuilder(); }
+        el.onchange = () => {
+          const idx = Number(el.getAttribute("data-g-kind"));
+          if (galleryState[idx]) galleryState[idx].kind = el.value;
         };
       });
-      galleryListEl.querySelectorAll("[data-g-down]").forEach(el => {
-        el.onclick = () => {
-          const i = Number(el.getAttribute("data-g-down"));
-          if (i < galleryState.length - 1) { [galleryState[i + 1], galleryState[i]] = [galleryState[i], galleryState[i + 1]]; renderGalleryBuilder(); }
+      galleryListEl.querySelectorAll("[data-g-label]").forEach(el => {
+        el.oninput = () => {
+          const idx = Number(el.getAttribute("data-g-label"));
+          if (galleryState[idx]) galleryState[idx].label = el.value;
         };
       });
       galleryListEl.querySelectorAll("[data-g-del]").forEach(el => {
         el.onclick = () => {
           const i = Number(el.getAttribute("data-g-del"));
+          if (!Number.isInteger(i) || i < 0 || i >= galleryState.length) return;
           galleryState.splice(i, 1);
           renderGalleryBuilder();
         };
       });
+
+      galleryListEl.querySelectorAll(".gallery-drag-handle").forEach(handle => {
+        handle.addEventListener("keydown", (e) => {
+          const row = handle.closest(".gallery-builder-row");
+          const rows = Array.from(galleryListEl.querySelectorAll(".gallery-builder-row"));
+          const idx = rows.indexOf(row);
+          if (idx === -1) return;
+          if (e.key === "ArrowUp" && idx > 0) {
+            e.preventDefault();
+            reorderGalleryByIndices(idx, idx - 1);
+            handle.focus();
+          } else if (e.key === "ArrowDown" && idx < rows.length - 1) {
+            e.preventDefault();
+            reorderGalleryByIndices(idx, idx + 1);
+            handle.focus();
+          }
+        });
+
+        handle.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0 && e.pointerType === "mouse") return;
+          const dragRow = handle.closest(".gallery-builder-row");
+          if (!dragRow || galleryState.length < 2) return;
+          e.preventDefault();
+          try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+
+          const pointerY0 = e.clientY;
+          let baseShift = 0;
+          let currentTy = 0;
+          dragRow.classList.add("is-dragging");
+          dragRow.style.transition = "none";
+
+          const swapDuringDrag = (fromIdx, toIdx) => {
+            const rows = Array.from(galleryListEl.querySelectorAll(".gallery-builder-row"));
+            const targetRow = rows[toIdx];
+            if (!targetRow) return;
+            const beforeTops = new Map(rows.map(r => [r, r.getBoundingClientRect().top]));
+            const oldOffsetTop = dragRow.offsetTop;
+
+            const [moved] = galleryState.splice(fromIdx, 1);
+            galleryState.splice(toIdx, 0, moved);
+            if (fromIdx < toIdx) {
+              galleryListEl.insertBefore(dragRow, targetRow.nextSibling);
+            } else {
+              galleryListEl.insertBefore(dragRow, targetRow);
+            }
+            syncGalleryDomIndices();
+
+            baseShift -= (dragRow.offsetTop - oldOffsetTop);
+            Array.from(galleryListEl.querySelectorAll(".gallery-builder-row")).forEach((r) => {
+              if (r === dragRow) return;
+              const prevTop = beforeTops.get(r);
+              if (prevTop == null) return;
+              const delta = prevTop - r.getBoundingClientRect().top;
+              if (!delta) return;
+              r.style.transition = "none";
+              r.style.transform = `translate3d(0, ${delta}px, 0)`;
+              void r.offsetHeight;
+              r.style.transition = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+              r.style.transform = "";
+            });
+          };
+
+          const onPointerMove = (moveEv) => {
+            if (moveEv.pointerId !== e.pointerId) return;
+            currentTy = (moveEv.clientY - pointerY0) + baseShift;
+            dragRow.style.transform = `translate3d(0, ${currentTy}px, 0)`;
+
+            let guard = 0;
+            while (guard < galleryState.length) {
+              guard += 1;
+              const rows = Array.from(galleryListEl.querySelectorAll(".gallery-builder-row"));
+              const curIdx = rows.indexOf(dragRow);
+              if (curIdx === -1) break;
+              const dragCenterY = dragRow.offsetTop + currentTy + dragRow.offsetHeight / 2;
+
+              if (curIdx > 0) {
+                const prevRow = rows[curIdx - 1];
+                if (dragCenterY < prevRow.offsetTop + prevRow.offsetHeight / 2) {
+                  swapDuringDrag(curIdx, curIdx - 1);
+                  currentTy = (moveEv.clientY - pointerY0) + baseShift;
+                  dragRow.style.transform = `translate3d(0, ${currentTy}px, 0)`;
+                  continue;
+                }
+              }
+              if (curIdx < rows.length - 1) {
+                const nextRow = rows[curIdx + 1];
+                if (dragCenterY > nextRow.offsetTop + nextRow.offsetHeight / 2) {
+                  swapDuringDrag(curIdx, curIdx + 1);
+                  currentTy = (moveEv.clientY - pointerY0) + baseShift;
+                  dragRow.style.transform = `translate3d(0, ${currentTy}px, 0)`;
+                  continue;
+                }
+              }
+              break;
+            }
+          };
+
+          const finishDrag = (endEv) => {
+            if (endEv.pointerId !== e.pointerId) return;
+            window.removeEventListener("pointermove", onPointerMove);
+            window.removeEventListener("pointerup", finishDrag);
+            window.removeEventListener("pointercancel", finishDrag);
+            try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+
+            dragRow.style.transition = "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)";
+            dragRow.style.transform = "";
+            window.setTimeout(() => {
+              dragRow.classList.remove("is-dragging");
+              dragRow.style.transition = "";
+              dragRow.style.transform = "";
+            }, 190);
+          };
+
+          window.addEventListener("pointermove", onPointerMove);
+          window.addEventListener("pointerup", finishDrag);
+          window.addEventListener("pointercancel", finishDrag);
+        });
+      });
     };
     renderGalleryBuilder();
 
+    const readOptimizedImageDataUrl = (file) => new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const rawUrl = String(ev.target?.result || "");
+        if (!rawUrl || rawUrl.length <= 350000) {
+          resolve(rawUrl);
+          return;
+        }
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const maxDim = 1280;
+            const scale = Math.min(1, maxDim / Math.max(img.width || 1, img.height || 1));
+            const w = Math.max(1, Math.round((img.width || 1) * scale));
+            const h = Math.max(1, Math.round((img.height || 1) * scale));
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) { resolve(rawUrl); return; }
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            const compressed = canvas.toDataURL("image/jpeg", 0.82);
+            resolve(compressed && compressed.length < rawUrl.length ? compressed : rawUrl);
+          } catch (_) {
+            resolve(rawUrl);
+          }
+        };
+        img.onerror = () => resolve(rawUrl);
+        img.src = rawUrl;
+      };
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(file);
+    });
+
     const fileInput = document.getElementById("prop-photo-file");
     if (fileInput) {
-      fileInput.onchange = () => {
-        Array.from(fileInput.files || []).forEach(file => {
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            galleryState.push({ kind: "interior", label: file.name.replace(/\.[^.]+$/, ""), url: ev.target.result });
-            renderGalleryBuilder();
-          };
-          reader.readAsDataURL(file);
-        });
+      fileInput.onchange = async () => {
+        const files = Array.from(fileInput.files || []);
         fileInput.value = "";
+        if (!files.length) return;
+        const urls = await Promise.all(files.map(readOptimizedImageDataUrl));
+        let added = 0;
+        files.forEach((file, idx) => {
+          const url = urls[idx];
+          if (!url) return;
+          galleryState.push({ kind: "interior", label: file.name.replace(/\.[^.]+$/, ""), url });
+          added += 1;
+        });
+        if (added > 0) renderGalleryBuilder();
       };
     }
 
@@ -1668,6 +1869,12 @@ window.MachirikuPropertyPages = (function () {
           const msg = invalidEl.validationMessage || "入力内容を確認してください";
           validationCtrl?.announce(msg);
           window.MachirikuApp?.showToast?.(msg);
+        } else {
+          const hiddenInvalid = Array.from(form.elements).find(el => !el.disabled && el.validity && !el.validity.valid);
+          const msg = hiddenInvalid?.validationMessage || "入力内容に不備があります。必須項目や数値形式をご確認ください。";
+          validationCtrl?.announce(msg);
+          window.MachirikuApp?.showToast?.(msg);
+          hiddenInvalid?.scrollIntoView?.({ block: "center", behavior: "smooth" });
         }
         return;
       }
@@ -1734,21 +1941,34 @@ window.MachirikuPropertyPages = (function () {
       };
 
       const submitBtn = document.getElementById("prop-submit-btn");
-      if (submitBtn) submitBtn.disabled = true;
+      const targetKey = isEdit ? DRAFT_EDIT_KEY : DRAFT_ADD_KEY;
+      const draftData = isEdit
+        ? { propId: baseProp.id, after: payload }
+        : payload;
 
-      if (isEdit) {
-        window.sessionStorage.setItem(DRAFT_EDIT_KEY, JSON.stringify({
-          propId: baseProp.id,
-          before: baseProp,
-          after: payload
-        }));
-        window.location.href = propUrl("edit-confirm.jsp", { id: baseProp.id });
-      } else {
-        window.sessionStorage.setItem(DRAFT_ADD_KEY, JSON.stringify(payload));
-        window.location.href = propUrl("add-confirm.jsp");
+      try {
+        window.sessionStorage.removeItem(targetKey);
+        window.sessionStorage.setItem(targetKey, JSON.stringify(draftData));
+        if (submitBtn) submitBtn.disabled = true;
+        window.location.href = isEdit
+          ? propUrl("edit-confirm.jsp", { id: baseProp.id })
+          : propUrl("add-confirm.jsp");
+      } catch (_) {
+        if (submitBtn) submitBtn.disabled = false;
+        const msg = "画像の容量が大きいため確認画面へ進めませんでした。写真の枚数を減らして再度お試しください。";
+        validationCtrl?.announce(msg);
+        window.MachirikuApp?.showToast?.(msg);
       }
     };
   }
+
+  const PHOTO_KIND_LABELS = {
+    exterior: "外観",
+    interior: "室内",
+    floorplan: "間取り",
+    facility: "設備",
+    surrounding: "周辺環境"
+  };
 
   function formatConfirmRows(d) {
     const infraOn = (data.INFRASTRUCTURE_FACILITIES || []).filter(i => d.infrastructure?.[i.key]).map(i => i.label).join("・") || "なし";
@@ -1759,10 +1979,9 @@ window.MachirikuPropertyPages = (function () {
       ? `可（${d.contractTerms.minDays || 3}〜${d.contractTerms.maxDays || 30}日 / 日額 ${d.contractTerms.dailyRentYen ? formatMoney(d.contractTerms.dailyRentYen) + "円" : "相談"}）`
       : "不可";
 
-    const kindMap = { exterior: "外観", interior: "室内", floorplan: "間取り", facility: "設備", surrounding: "周辺環境" };
     const photos = (Array.isArray(d.gallery) ? d.gallery : []).filter(g => g && g.url && g.url !== PLACEHOLDER_IMG);
     const photosLabel = photos.length
-      ? `${photos.length}枚（${photos.map(g => `${kindMap[g.kind] || "写真"}: ${g.label || "物件写真"}`).join("、")}）`
+      ? `${photos.length}枚（${photos.map(g => `${PHOTO_KIND_LABELS[g.kind] || "写真"}: ${g.label || "物件写真"}`).join("、")}）`
       : "なし";
     const photosSig = photos.map(g => `${g.kind || "exterior"}|${g.label || ""}|${g.url}`).join("||");
 
@@ -1783,6 +2002,128 @@ window.MachirikuPropertyPages = (function () {
       { key: "photos", label: "物件写真", value: photosLabel, sig: photosSig },
       { key: "description", label: "物件アピール説明", value: d.description || "" }
     ];
+  }
+
+  function openConfirmPhotoLightbox(photos, startIndex) {
+    if (!photos || !photos.length) return;
+    const prev = document.getElementById("o05-photo-lightbox");
+    if (prev) prev.remove();
+
+    let current = ((Number(startIndex) || 0) % photos.length + photos.length) % photos.length;
+    const hasMany = photos.length > 1;
+
+    const dialog = document.createElement("dialog");
+    dialog.id = "o05-photo-lightbox";
+    dialog.className = "confirm-lightbox-dialog";
+    dialog.setAttribute("closedby", "any");
+    dialog.setAttribute("aria-label", "登録写真の拡大表示");
+    dialog.innerHTML = `
+      <div class="confirm-lightbox-frame">
+        <div class="confirm-lightbox-stage">
+          <img class="confirm-lightbox-img" alt="">
+        </div>
+        <div class="confirm-lightbox-meta">
+          <span class="confirm-lightbox-tag"></span>
+          <span class="confirm-lightbox-caption"></span>
+          <span class="confirm-lightbox-counter"></span>
+        </div>
+        <div class="confirm-lightbox-toolbar">
+          <button type="button" class="confirm-lightbox-btn confirm-lightbox-arrow-btn" data-dir="-1" aria-label="前の写真" title="前の写真"${hasMany ? "" : " hidden"}>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button type="button" class="confirm-lightbox-btn confirm-lightbox-close" autofocus aria-label="拡大表示を閉じる">閉じる</button>
+          <button type="button" class="confirm-lightbox-btn confirm-lightbox-arrow-btn" data-dir="1" aria-label="次の写真" title="次の写真"${hasMany ? "" : " hidden"}>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+      </div>
+    `;
+
+    const imgEl = dialog.querySelector(".confirm-lightbox-img");
+    const tagEl = dialog.querySelector(".confirm-lightbox-tag");
+    const captionEl = dialog.querySelector(".confirm-lightbox-caption");
+    const counterEl = dialog.querySelector(".confirm-lightbox-counter");
+
+    const renderPhoto = (nextIdx) => {
+      current = ((nextIdx % photos.length) + photos.length) % photos.length;
+      const item = photos[current];
+      const kindLabel = PHOTO_KIND_LABELS[item.kind] || "写真";
+      const label = item.label || `物件写真 ${current + 1}`;
+      imgEl.src = resolveAssetUrl(item.url);
+      imgEl.alt = `${kindLabel}：${label}`;
+      tagEl.textContent = kindLabel;
+      captionEl.textContent = label;
+      counterEl.textContent = `${current + 1} / ${photos.length}`;
+    };
+
+    const isPointInsideVisibleImage = (e) => {
+      const r = imgEl.getBoundingClientRect();
+      const natW = imgEl.naturalWidth;
+      const natH = imgEl.naturalHeight;
+      if (!natW || !natH || !r.width || !r.height) {
+        return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      }
+      const scale = Math.min(r.width / natW, r.height / natH);
+      const drawnW = natW * scale;
+      const drawnH = natH * scale;
+      const left = r.left + (r.width - drawnW) / 2;
+      const top = r.top + (r.height - drawnH) / 2;
+      return e.clientX >= left && e.clientX <= left + drawnW && e.clientY >= top && e.clientY <= top + drawnH;
+    };
+
+    dialog.addEventListener("click", (e) => {
+      const dirBtn = e.target.closest("[data-dir]");
+      if (dirBtn) {
+        renderPhoto(current + Number(dirBtn.dataset.dir));
+        return;
+      }
+      if (e.target.closest(".confirm-lightbox-close")) {
+        dialog.close();
+        return;
+      }
+      if (e.detail === 0) return;
+      if (e.target === imgEl) {
+        if (!isPointInsideVisibleImage(e)) dialog.close();
+        return;
+      }
+      if (!e.target.closest(".confirm-lightbox-btn, .confirm-lightbox-tag, .confirm-lightbox-caption, .confirm-lightbox-counter")) {
+        dialog.close();
+      }
+    });
+
+    if (!("closedBy" in HTMLDialogElement.prototype)) {
+      const isOutside = (e) => {
+        const r = dialog.getBoundingClientRect();
+        return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+      };
+      let startedOutside = false;
+      dialog.addEventListener("pointerdown", (e) => { startedOutside = isOutside(e); });
+      dialog.addEventListener("pointerup", (e) => {
+        if (startedOutside && isOutside(e)) dialog.close();
+        startedOutside = false;
+      });
+    }
+
+    const onKeyDown = (e) => {
+      if (!hasMany) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        renderPhoto(current - 1);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        renderPhoto(current + 1);
+      }
+    };
+
+    dialog.addEventListener("close", () => {
+      document.removeEventListener("keydown", onKeyDown);
+      dialog.remove();
+    }, { once: true });
+
+    renderPhoto(current);
+    document.body.appendChild(dialog);
+    document.addEventListener("keydown", onKeyDown);
+    dialog.showModal();
   }
 
   function hydrateO05() {
@@ -1813,13 +2154,26 @@ window.MachirikuPropertyPages = (function () {
     if (galleryPrev) {
       const photos = (draft.gallery || []).filter(g => g && g.url && g.url !== PLACEHOLDER_IMG);
       galleryPrev.innerHTML = photos.length
-        ? photos.map(g => `
-          <div class="confirm-photo-item">
-            <img src="${escapeHtml(resolveAssetUrl(g.url))}" alt="${escapeHtml(g.label)}">
-            <span>${escapeHtml(g.label)}</span>
-          </div>
-        `).join("")
+        ? photos.map((g, idx) => {
+          const kindLabel = PHOTO_KIND_LABELS[g.kind] || "写真";
+          const label = g.label || `物件写真 ${idx + 1}`;
+          return `
+          <button type="button" class="confirm-photo-item confirm-photo-btn" data-photo-idx="${idx}" title="クリックして拡大表示" aria-label="${escapeHtml(kindLabel)}：${escapeHtml(label)}を拡大表示">
+            <img src="${escapeHtml(resolveAssetUrl(g.url))}" alt="">
+            <span class="confirm-photo-label">${escapeHtml(label)}</span>
+            <span class="confirm-photo-tag">${escapeHtml(kindLabel)}</span>
+          </button>
+        `;
+        }).join("")
         : `<p class="sample-note">写真は登録されていません。</p>`;
+
+      galleryPrev.onclick = photos.length
+        ? (e) => {
+          const btn = e.target.closest(".confirm-photo-btn");
+          if (!btn || !galleryPrev.contains(btn)) return;
+          openConfirmPhotoLightbox(photos, Number(btn.dataset.photoIdx || 0));
+        }
+        : null;
     }
 
     const backBtn = document.getElementById("o05-back-btn");
@@ -1847,7 +2201,8 @@ window.MachirikuPropertyPages = (function () {
       if (raw) payload = JSON.parse(raw);
     } catch (_) {}
 
-    if (!payload || !payload.before || !payload.after) {
+    const beforeProp = payload?.before || (payload?.propId ? store.getPropertyById(payload.propId) : null);
+    if (!payload || !beforeProp || !payload.after) {
       sectionEl.hidden = true;
       if (emptyEl) emptyEl.hidden = false;
       return;
@@ -1855,7 +2210,7 @@ window.MachirikuPropertyPages = (function () {
     sectionEl.hidden = false;
     if (emptyEl) emptyEl.hidden = true;
 
-    const beforeRows = formatConfirmRows(payload.before);
+    const beforeRows = formatConfirmRows(beforeProp);
     const afterRows = formatConfirmRows(payload.after);
     const tbody = document.getElementById("o07-confirm-tbody");
     let diffCount = 0;

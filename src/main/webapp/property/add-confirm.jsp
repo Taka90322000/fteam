@@ -3,7 +3,7 @@
   <jsp:param name="title" value="物件登録確認 | マチリク" />
   <jsp:param name="description" value="新規登録する空き店舗の入力内容を確認し、登録を確定します。" />
   <jsp:param name="pageScreenId" value="o05" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261119_o05_v9" />
 </jsp:include>
 
     <section id="o05-empty-state" class="screen-view empty-state" data-screen="O05" hidden>
@@ -12,7 +12,7 @@
       <a class="btn-primary" href="${pageContext.request.contextPath}/property/add.jsp">物件登録へ戻る</a>
     </section>
 
-    <section id="o05-section" class="screen-view" data-screen="O05">
+    <section id="o05-section" class="screen-view o05-view" data-screen="O05">
       <div class="page-header-banner" data-screen="O05">
         <nav class="breadcrumb-trail" aria-label="現在の位置">
           <a href="${pageContext.request.contextPath}/index.jsp#s01">ホーム</a>
@@ -20,7 +20,8 @@
           <a href="${pageContext.request.contextPath}/property/manage.jsp">登録物件管理</a>
           <span aria-hidden="true">/</span>
           <a href="${pageContext.request.contextPath}/property/add.jsp?restore=1">物件登録</a>
-          <span class="sep">/</span>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">物件登録確認</span>
         </nav>
         <div class="page-title-row">
           <h1 class="page-title">物件登録確認</h1>
@@ -47,5 +48,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o05" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261119_o05_v9" />
 </jsp:include>
