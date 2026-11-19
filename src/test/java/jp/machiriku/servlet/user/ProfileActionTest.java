@@ -37,7 +37,7 @@ public class ProfileActionTest {
     public void loggedOutUserRedirectsToLogin() throws Exception {
         Harness h = new Harness("GET");
         h.hasSession = false;
-        new ProfileAction(new FakeDao()).execute(h.request, h.response);
+        execute(h, new FakeDao());
         assertEquals("/machiriku/jp/machiriku/servlet/auth/Login.action", h.redirect);
         assertNull(h.forwarded);
     }
@@ -51,7 +51,7 @@ public class ProfileActionTest {
         user.setAccountStatus("PENDING");
         h.sessionValues.put("user", user);
 
-        new ProfileAction(new FakeDao()).execute(h.request, h.response);
+        execute(h, new FakeDao());
         assertEquals("/machiriku/jp/machiriku/servlet/auth/ResidentSetup.action", h.redirect);
         assertNull(h.forwarded);
 
@@ -62,9 +62,36 @@ public class ProfileActionTest {
             inactiveUser.setUserRole("RESIDENT");
             inactiveUser.setAccountStatus(inactiveStatus);
             inactive.sessionValues.put("user", inactiveUser);
-            new ProfileAction(new FakeDao()).execute(inactive.request, inactive.response);
+            execute(inactive, new FakeDao());
             assertEquals(HttpServletResponse.SC_FORBIDDEN, inactive.status);
             assertNull(inactive.forwarded);
+        }
+    }
+
+    @Test
+    public void databaseStatusDeterminesWhetherTheProfileCanBeOpened() throws Exception {
+        Harness stalePending = authenticated("GET", "RESIDENT");
+        member(stalePending).setAccountStatus("PENDING");
+        FakeDao dao = new FakeDao();
+        dao.currentMember = member(authenticated("GET", "RESIDENT"));
+
+        execute(stalePending, dao);
+
+        assertEquals(RESIDENT_VIEW, stalePending.forwarded);
+        assertNull(stalePending.redirect);
+        assertEquals("ACTIVE", member(stalePending).getAccountStatus());
+
+        for (String status : List.of("BAN", "WITHDRAWN")) {
+            Harness staleActive = authenticated("GET", "OWNER");
+            FakeDao restrictedDao = new FakeDao();
+            restrictedDao.currentMember = member(authenticated("GET", "OWNER"));
+            restrictedDao.currentMember.setAccountStatus(status);
+
+            execute(staleActive, restrictedDao);
+
+            assertEquals(HttpServletResponse.SC_FORBIDDEN, staleActive.status);
+            assertNull(staleActive.forwarded);
+            assertEquals(0, restrictedDao.settingsReads);
         }
     }
 
@@ -80,7 +107,7 @@ public class ProfileActionTest {
             "livingAddress", "栃木県宇都宮市中央1-1"
         );
 
-        new ProfileAction(dao).execute(h.request, h.response);
+        execute(h, dao);
         assertEquals(RESIDENT_VIEW, h.forwarded);
         assertNull(h.redirect);
         assertEquals("別端末で更新済みの名前", h.attributes.get("displayName"));
@@ -116,7 +143,7 @@ public class ProfileActionTest {
         h.parameters.put("emailNotify", "on");
 
         FakeDao dao = new FakeDao();
-        new ProfileAction(dao).execute(h.request, h.response);
+        execute(h, dao);
 
         assertEquals(1, dao.residentSaves);
         assertEquals(42, dao.savedUserId);
@@ -137,7 +164,7 @@ public class ProfileActionTest {
         dao.selectedIndustries = Set.of("1");
         dao.selectedQualifications = Set.of("2");
 
-        new ProfileAction(dao).execute(h.request, h.response);
+        execute(h, dao);
         assertEquals(BUSINESS_VIEW, h.forwarded);
         assertNull(h.redirect);
         assertEquals("business", h.attributes.get("role"));
@@ -170,7 +197,7 @@ public class ProfileActionTest {
         h.multiple.put("qualification", new String[] { "2" });
 
         FakeDao dao = new FakeDao();
-        new ProfileAction(dao).execute(h.request, h.response);
+        execute(h, dao);
 
         assertEquals(1, dao.businessSaves);
         assertEquals("+819012345678", dao.businessInput.phoneE164());
@@ -188,7 +215,7 @@ public class ProfileActionTest {
         dao.profileFields = Map.of("representativeName", "保存済み代表者", "company", "保存済み法人", "emailNotify", "");
         dao.selectedIndustries = Set.of("1");
 
-        new ProfileAction(dao).execute(h.request, h.response);
+        execute(h, dao);
         assertEquals(OWNER_VIEW, h.forwarded);
         assertNull(h.redirect);
         assertEquals("owner", h.attributes.get("role"));
@@ -214,7 +241,7 @@ public class ProfileActionTest {
         h.multiple.put("preferredIndustry", new String[] { "1" });
 
         FakeDao dao = new FakeDao();
-        new ProfileAction(dao).execute(h.request, h.response);
+        execute(h, dao);
 
         assertEquals(1, dao.ownerSaves);
         assertEquals("+81286339988", dao.ownerInput.phoneE164());
@@ -225,10 +252,29 @@ public class ProfileActionTest {
     }
 
     @Test
+    public void loggingOutDuringProfileSaveDoesNotCreateAnotherSession() throws Exception {
+        Harness h = authenticated("POST", "OWNER");
+        prepareCsrf(h);
+        h.parameters.put("representativeName", "更新名");
+        h.parameters.put("phone", "028-633-9988");
+        h.multiple.put("preferredIndustry", new String[] { "1" });
+        FakeDao dao = new FakeDao();
+        dao.afterOwnerSave = h.session::invalidate;
+
+        execute(h, dao);
+
+        assertEquals(1, dao.ownerSaves);
+        assertFalse(h.hasSession);
+        assertTrue(h.sessionValues.isEmpty());
+        assertEquals(0, h.sessionCreations);
+        assertEquals("/machiriku/jp/machiriku/servlet/auth/Login.action", h.redirect);
+    }
+
+    @Test
     public void postWithoutCsrfTokenReturnsForbidden() throws Exception {
         Harness h = authenticated("POST", "RESIDENT");
         h.parameters.put("csrfToken", "invalid-token");
-        new ProfileAction(new FakeDao()).execute(h.request, h.response);
+        execute(h, new FakeDao());
         assertEquals(HttpServletResponse.SC_FORBIDDEN, h.status);
     }
 
@@ -241,7 +287,7 @@ public class ProfileActionTest {
         h.parameters.put("secondaryPhone", "+81 28 633 9988");
         User previous = (User) h.sessionValues.get("user");
         FakeDao dao = new FakeDao();
-        new ProfileAction(dao).execute(h.request, h.response);
+        execute(h, dao);
         assertEquals(OWNER_VIEW, h.forwarded);
         assertEquals(0, dao.ownerSaves);
         Map<?, ?> fields = (Map<?, ?>) h.attributes.get("formValues");
@@ -258,7 +304,7 @@ public class ProfileActionTest {
             Harness h = authenticated("GET", role);
             FakeDao dao = new FakeDao();
             dao.fieldsFailure = new SQLException("private database failure", "08006");
-            new ProfileAction(dao).execute(h.request, h.response);
+            execute(h, dao);
             assertEquals(HttpServletResponse.SC_SERVICE_UNAVAILABLE, h.status);
             assertNull(h.forwarded);
             assertNull(h.attributes.get("formValues"));
@@ -271,7 +317,7 @@ public class ProfileActionTest {
             Harness h = authenticated("GET", role);
             FakeDao dao = new FakeDao();
             dao.profileMissing = true;
-            new ProfileAction(dao).execute(h.request, h.response);
+            execute(h, dao);
             assertEquals(HttpServletResponse.SC_NOT_FOUND, h.status);
             assertNull(h.forwarded);
         }
@@ -285,7 +331,7 @@ public class ProfileActionTest {
                 FakeDao dao = new FakeDao();
                 dao.residentFields = Map.of("emailNotify", notification);
                 dao.profileFields = Map.of("emailNotify", notification);
-                new ProfileAction(dao).execute(h.request, h.response);
+                execute(h, dao);
                 assertEquals(notification, ((Map<?, ?>) h.attributes.get("formValues")).get("emailNotify"));
             }
         }
@@ -309,6 +355,15 @@ public class ProfileActionTest {
         h.parameters.put("csrfToken", CSRF_TOKEN);
     }
 
+    private static User member(Harness h) {
+        return (User) h.sessionValues.get("user");
+    }
+
+    private static void execute(Harness h, FakeDao dao) throws Exception {
+        if (dao.currentMember == null) { dao.currentMember = member(h); }
+        new ProfileAction(dao).execute(h.request, h.response);
+    }
+
     private static final class FakeDao extends ProfileDao {
         int residentSaves;
         int businessSaves;
@@ -325,6 +380,14 @@ public class ProfileActionTest {
         SQLException fieldsFailure;
         boolean profileMissing;
         int settingsReads;
+        User currentMember;
+        Runnable afterOwnerSave = () -> { };
+
+        @Override
+        public User findUserById(int userId) {
+            assertEquals(currentMember.getUserId(), userId);
+            return currentMember;
+        }
 
         @Override
         public Map<String, String> findResidentFields(int userId) throws SQLException {
@@ -401,6 +464,7 @@ public class ProfileActionTest {
             u.setAccountStatus("ACTIVE");
             u.setDisplayName(input.representativeName());
             u.setEmail(input.email());
+            afterOwnerSave.run();
             return u;
         }
     }
@@ -411,6 +475,7 @@ public class ProfileActionTest {
         final Map<String, Object> attributes = new HashMap<>();
         final Map<String, Object> sessionValues = new HashMap<>();
         boolean hasSession = true;
+        int sessionCreations;
         String redirect;
         String forwarded;
         int status;
@@ -421,6 +486,8 @@ public class ProfileActionTest {
         Harness(String method) {
             session = proxy(HttpSession.class, (ignored, call, arguments) -> {
                 String name = call.getName();
+                if (!hasSession) { throw new IllegalStateException("Session was invalidated"); }
+                if ("invalidate".equals(name)) { hasSession = false; sessionValues.clear(); return null; }
                 if ("getAttribute".equals(name)) return sessionValues.get(arguments[0]);
                 if ("setAttribute".equals(name)) { sessionValues.put((String) arguments[0], arguments[1]); return null; }
                 if ("removeAttribute".equals(name)) { sessionValues.remove(arguments[0]); return null; }
@@ -441,6 +508,10 @@ public class ProfileActionTest {
                 if ("getAttribute".equals(name)) return attributes.get(arguments[0]);
                 if ("setAttribute".equals(name)) { attributes.put((String) arguments[0], arguments[1]); return null; }
                 if ("getSession".equals(name)) {
+                    if (!hasSession && (arguments == null || Boolean.TRUE.equals(arguments[0]))) {
+                        sessionCreations++;
+                        hasSession = true;
+                    }
                     return hasSession ? session : null;
                 }
                 if ("setCharacterEncoding".equals(name)) return null;

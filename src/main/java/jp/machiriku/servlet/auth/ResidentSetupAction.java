@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpSession;
 import jp.machiriku.bean.User;
 import jp.machiriku.dao.ProfileDao;
 import jp.machiriku.registration.RegistrationForms;
+import jp.machiriku.servlet.MemberSession;
 import jp.machiriku.tool.Action;
 
 /** LINE取得値を初期表示し、住民の入力をプロフィール・住所・通知設定へまとめて保存する。 */
@@ -20,7 +21,7 @@ public class ResidentSetupAction extends Action {
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
         User user;
         HttpSession session = req.getSession(false); // すでに認証済みの会員がいるかを確認するセッション。
-        boolean authenticated = session != null && session.getAttribute("user") instanceof User;
+        boolean authenticated = MemberSession.signedInUser(session) != null;
         // プレビューはGET表示だけに限定する。POSTはクエリに関係なく本物のログイン会員で処理する。
         boolean preview = !authenticated && "GET".equalsIgnoreCase(req.getMethod())
                 && ("1".equals(req.getParameter("preview")) || "true".equalsIgnoreCase(req.getParameter("preview")));
@@ -32,7 +33,7 @@ public class ResidentSetupAction extends Action {
             user.setUserRole("RESIDENT");
             user.setAccountStatus("PENDING");
         } else {
-            user = OnboardingSupport.requireUser(req, res, "RESIDENT");
+            user = OnboardingSupport.requireUser(req, res, session, "RESIDENT", this::createProfileDao);
             if (user == null) { return; }
         }
         if (!"GET".equalsIgnoreCase(req.getMethod()) && !"POST".equalsIgnoreCase(req.getMethod())) {
@@ -43,18 +44,18 @@ public class ResidentSetupAction extends Action {
         Map<String, String> fields;
         if (posting) {
             req.setCharacterEncoding("UTF-8");
-            if (!OnboardingSupport.validCsrf(req)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
+            if (!OnboardingSupport.validCsrf(req, session)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
             fields = OnboardingSupport.fields(req, "name", "email", "ageGroup", "gender", "industry", "preferredIndustries", "livingAddress", "livingLat",
                     "livingLng", "workAddress", "workLat", "workLng", "emailNotify");
             try {
                 var input = RegistrationForms.resident(fields);
                 User saved = createProfileDao().completeResidentSetup(user.getUserId(), input);
-                // 選択した欲しい業種・施設ジャンルをセッションにも保存
-                req.getSession().setAttribute("userIndustry", fields.get("industry"));
-                req.getSession().setAttribute("userPreferredIndustries", input.preferredIndustryCodes());
                 // DBのcommitが成功してから、画面用の会員情報と初期設定完了状態を更新する。
-                OnboardingSupport.completed(req, saved, saved.getDisplayName());
-                res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+                String industry = fields.get("industry");
+                OnboardingSupport.completed(req, res, session, saved, saved.getDisplayName(), current -> {
+                    current.setAttribute("userIndustry", industry);
+                    current.setAttribute("userPreferredIndustries", input.preferredIndustryCodes());
+                });
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());
@@ -68,8 +69,8 @@ public class ResidentSetupAction extends Action {
         } else {
             // クエリの表示名やメールを信用せず、認証済みセッション内のLINE取得値を使う。
             fields = new LinkedHashMap<>();
-            fields.put("name", OnboardingSupport.lineValue(req.getSession(), "lineDisplayName", user.getDisplayName()));
-            fields.put("email", OnboardingSupport.lineValue(req.getSession(), "lineEmail", user.getEmail()));
+            fields.put("name", OnboardingSupport.lineValue(session, "lineDisplayName", user.getDisplayName()));
+            fields.put("email", OnboardingSupport.lineValue(session, "lineEmail", user.getEmail()));
             fields.put("ageGroup", "未設定");
             fields.put("gender", "回答しない");
             fields.put("industry", "");
@@ -93,7 +94,8 @@ public class ResidentSetupAction extends Action {
         req.setAttribute("role", "resident");
         req.setAttribute("roleLabel", "地域住民");
         req.setAttribute("residentTaxonomy", residentTaxonomy);
-        req.setAttribute("csrfToken", OnboardingSupport.csrfToken(req.getSession()));
-        req.getRequestDispatcher("/WEB-INF/views/auth/resident_setup.jsp").forward(req, res);
+        if (OnboardingSupport.prepareView(req, res, preview ? req.getSession() : session)) {
+            req.getRequestDispatcher("/WEB-INF/views/auth/resident_setup.jsp").forward(req, res);
+        }
     }
 }

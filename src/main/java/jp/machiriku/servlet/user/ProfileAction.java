@@ -9,6 +9,7 @@ import java.util.Set;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import jp.machiriku.bean.BusinessProfileInput;
 import jp.machiriku.bean.OwnerProfileInput;
 import jp.machiriku.bean.ProfileSettings;
@@ -37,7 +38,8 @@ public class ProfileAction extends Action {
 
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        User user = ProfileSupport.requireActiveUser(req, res);
+        HttpSession session = req.getSession(false);
+        User user = ProfileSupport.requireActiveUser(req, res, session, this::createProfileDao);
         if (user == null) { return; }
 
         if (!"GET".equalsIgnoreCase(req.getMethod()) && !"POST".equalsIgnoreCase(req.getMethod())) {
@@ -47,20 +49,20 @@ public class ProfileAction extends Action {
 
         String role = user.getUserRole();
         if ("BUSINESS".equals(role)) {
-            handleBusiness(req, res, user);
+            handleBusiness(req, res, session, user);
         } else if ("OWNER".equals(role)) {
-            handleOwner(req, res, user);
+            handleOwner(req, res, session, user);
         } else {
-            handleResident(req, res, user);
+            handleResident(req, res, session, user);
         }
     }
 
-    private void handleResident(HttpServletRequest req, HttpServletResponse res, User user) throws Exception {
+    private void handleResident(HttpServletRequest req, HttpServletResponse res, HttpSession session, User user) throws Exception {
         boolean posting = "POST".equalsIgnoreCase(req.getMethod());
         Map<String, String> fields = null;
         if (posting) {
             req.setCharacterEncoding("UTF-8");
-            if (!ProfileSupport.validCsrf(req)) {
+            if (!ProfileSupport.validCsrf(req, session)) {
                 res.sendError(HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
@@ -70,10 +72,11 @@ public class ProfileAction extends Action {
             try {
                 ResidentProfileInput input = RegistrationForms.resident(fields);
                 User saved = createProfileDao().saveResident(user.getUserId(), input);
-                ProfileSupport.updateSession(req, saved, saved.getDisplayName());
-                req.getSession().setAttribute("userIndustry", fields.get("industry"));
-                req.getSession().setAttribute("userPreferredIndustries", input.preferredIndustryCodes());
-                res.sendRedirect(req.getContextPath() + "/index.jsp?profile_saved=1");
+                String industry = fields.get("industry");
+                ProfileSupport.saved(req, res, session, saved, saved.getDisplayName(), current -> {
+                    current.setAttribute("userIndustry", industry);
+                    current.setAttribute("userPreferredIndustries", input.preferredIndustryCodes());
+                });
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());
@@ -108,18 +111,7 @@ public class ProfileAction extends Action {
             fields.put("preferredIndustries", "[]");
             fields.put("emailNotify", "");
             try {
-                Map<String, String> savedFields = createProfileDao().findResidentFields(user.getUserId());
-                fields.putAll(savedFields);
-                // 別端末で氏名・メールが更新されていた場合、セッション内の会員情報も現在のDB保存値に揃える。
-                if (savedFields.containsKey("name")) {
-                    user.setDisplayName(savedFields.get("name"));
-                    req.getSession().setAttribute("userName", savedFields.get("name"));
-                }
-                if (savedFields.containsKey("email")) {
-                    String latestEmail = savedFields.get("email");
-                    user.setEmail(latestEmail == null || latestEmail.isEmpty() ? null : latestEmail);
-                    req.getSession().setAttribute("userEmail", latestEmail == null ? "" : latestEmail);
-                }
+                fields.putAll(createProfileDao().findResidentFields(user.getUserId()));
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
                 res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
@@ -133,11 +125,12 @@ public class ProfileAction extends Action {
         req.setAttribute("role", "resident");
         req.setAttribute("roleLabel", "地域住民");
         req.setAttribute("residentTaxonomy", residentTaxonomy);
-        req.setAttribute("csrfToken", ProfileSupport.csrfToken(req.getSession()));
-        req.getRequestDispatcher("/WEB-INF/views/user/resident_profile.jsp").forward(req, res);
+        if (ProfileSupport.prepareView(req, res, session, user)) {
+            req.getRequestDispatcher("/WEB-INF/views/user/resident_profile.jsp").forward(req, res);
+        }
     }
 
-    private void handleBusiness(HttpServletRequest req, HttpServletResponse res, User user) throws Exception {
+    private void handleBusiness(HttpServletRequest req, HttpServletResponse res, HttpSession session, User user) throws Exception {
         boolean posting = "POST".equalsIgnoreCase(req.getMethod());
         Map<String, String> fields = null;
         Set<String> industries = Collections.emptySet();
@@ -145,7 +138,7 @@ public class ProfileAction extends Action {
 
         if (posting) {
             req.setCharacterEncoding("UTF-8");
-            if (!ProfileSupport.validCsrf(req)) {
+            if (!ProfileSupport.validCsrf(req, session)) {
                 res.sendError(HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
@@ -159,13 +152,14 @@ public class ProfileAction extends Action {
                         ProfileSupport.values(req, "preferredIndustry"),
                         ProfileSupport.values(req, "qualification"));
                 User saved = createProfileDao().saveBusiness(user.getUserId(), input);
-                ProfileSupport.updateSession(req, saved, input.representativeName());
-                req.getSession().setAttribute("businessName", input.businessName());
-                req.getSession().setAttribute("phone", input.phoneE164());
-                req.getSession().setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
-                req.getSession().setAttribute("preferredArea", input.preferredArea());
-                req.getSession().setAttribute("preferredAreaPoints", fields.get("preferredAreaPoints"));
-                res.sendRedirect(req.getContextPath() + "/index.jsp?profile_saved=1");
+                String preferredAreaPoints = fields.get("preferredAreaPoints");
+                ProfileSupport.saved(req, res, session, saved, input.representativeName(), current -> {
+                    current.setAttribute("businessName", input.businessName());
+                    current.setAttribute("phone", input.phoneE164());
+                    current.setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
+                    current.setAttribute("preferredArea", input.preferredArea());
+                    current.setAttribute("preferredAreaPoints", preferredAreaPoints);
+                });
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());
@@ -203,14 +197,6 @@ public class ProfileAction extends Action {
                 fields = new LinkedHashMap<>(settings.fields());
                 industries = settings.selectedIndustries();
                 qualifications = settings.selectedQualifications();
-                if (fields.get("representativeName") != null && !fields.get("representativeName").isBlank()) {
-                    req.getSession().setAttribute("userName", fields.get("representativeName"));
-                }
-                if (fields.containsKey("email")) {
-                    String latestEmail = fields.get("email");
-                    user.setEmail(latestEmail == null || latestEmail.isEmpty() ? null : latestEmail);
-                    req.getSession().setAttribute("userEmail", latestEmail == null ? "" : latestEmail);
-                }
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
                 // 復元に失敗した空のフォームから、保存済み情報を上書きさせない。
@@ -228,18 +214,19 @@ public class ProfileAction extends Action {
         req.setAttribute("qualificationChoices", qualificationChoices);
         req.setAttribute("selectedIndustries", industries);
         req.setAttribute("selectedQualifications", qualifications);
-        req.setAttribute("csrfToken", ProfileSupport.csrfToken(req.getSession()));
-        req.getRequestDispatcher("/WEB-INF/views/user/business_profile.jsp").forward(req, res);
+        if (ProfileSupport.prepareView(req, res, session, user)) {
+            req.getRequestDispatcher("/WEB-INF/views/user/business_profile.jsp").forward(req, res);
+        }
     }
 
-    private void handleOwner(HttpServletRequest req, HttpServletResponse res, User user) throws Exception {
+    private void handleOwner(HttpServletRequest req, HttpServletResponse res, HttpSession session, User user) throws Exception {
         boolean posting = "POST".equalsIgnoreCase(req.getMethod());
         Map<String, String> fields = null;
         Set<String> industries = Collections.emptySet();
 
         if (posting) {
             req.setCharacterEncoding("UTF-8");
-            if (!ProfileSupport.validCsrf(req)) {
+            if (!ProfileSupport.validCsrf(req, session)) {
                 res.sendError(HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
@@ -248,13 +235,13 @@ public class ProfileAction extends Action {
             try {
                 OwnerProfileInput input = RegistrationForms.owner(fields, ProfileSupport.values(req, "preferredIndustry"));
                 User saved = createProfileDao().saveOwner(user.getUserId(), input);
-                ProfileSupport.updateSession(req, saved, input.representativeName());
-                req.getSession().setAttribute("company", input.company() == null ? "" : input.company());
-                req.getSession().setAttribute("phone", input.phoneE164());
-                req.getSession().setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
-                req.getSession().setAttribute("preferredIndustries", input.industryTypeIds());
-                req.getSession().setAttribute("emailNotify", input.emailNotify() && saved.getEmail() != null);
-                res.sendRedirect(req.getContextPath() + "/index.jsp?profile_saved=1");
+                ProfileSupport.saved(req, res, session, saved, input.representativeName(), current -> {
+                    current.setAttribute("company", input.company() == null ? "" : input.company());
+                    current.setAttribute("phone", input.phoneE164());
+                    current.setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
+                    current.setAttribute("preferredIndustries", input.industryTypeIds());
+                    current.setAttribute("emailNotify", input.emailNotify() && saved.getEmail() != null);
+                });
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());
@@ -289,14 +276,6 @@ public class ProfileAction extends Action {
                 }
                 fields = new LinkedHashMap<>(settings.fields());
                 industries = settings.selectedIndustries();
-                if (fields.get("representativeName") != null && !fields.get("representativeName").isBlank()) {
-                    req.getSession().setAttribute("userName", fields.get("representativeName"));
-                }
-                if (fields.containsKey("email")) {
-                    String latestEmail = fields.get("email");
-                    user.setEmail(latestEmail == null || latestEmail.isEmpty() ? null : latestEmail);
-                    req.getSession().setAttribute("userEmail", latestEmail == null ? "" : latestEmail);
-                }
             } catch (SQLException e) {
                 ProfileSupport.logDatabaseError(req, e);
                 res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
@@ -311,7 +290,8 @@ public class ProfileAction extends Action {
         req.setAttribute("roleLabel", "物件オーナー");
         req.setAttribute("industryChoices", industryChoices);
         req.setAttribute("selectedIndustries", industries);
-        req.setAttribute("csrfToken", ProfileSupport.csrfToken(req.getSession()));
-        req.getRequestDispatcher("/WEB-INF/views/user/owner_profile.jsp").forward(req, res);
+        if (ProfileSupport.prepareView(req, res, session, user)) {
+            req.getRequestDispatcher("/WEB-INF/views/user/owner_profile.jsp").forward(req, res);
+        }
     }
 }

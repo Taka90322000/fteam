@@ -27,7 +27,7 @@ http://localhost:8080/machiriku/jp/machiriku/servlet/auth/LineCallback.action
 
 公開環境ではHTTPSを使います。`.env` を変更したらTomcatを再起動し、VS Codeで `Ctrl+Shift+B`（`scripts/deploy.ps1`）を実行してください。VS Codeの再起動は不要です。
 
-旧版をビルドした環境を更新配備する際は、削除済みのサーブレット（旧 `DbCheckServlet` 等）の `.class` ファイルが `target` や展開先に残らないよう、必ずビルド先と展開先のクラスディレクトリをクリーンにしてから更新してください（`scripts/deploy.ps1` は展開前に `target/classes` と `target/machiriku/WEB-INF/classes` を自動削除します。手動でMavenを実行する場合は `mvn clean compile war:exploded` または `mvn clean package` を使用し、Tomcat の旧展開先を削除してから配備してください）。
+`scripts/deploy.ps1` は毎回新しいディレクトリへビルドし、Tomcatの参照先を切り替えます。手動配備では、Tomcatを停止してから `mvn clean compile war:exploded` または `mvn clean package` を実行し、旧展開先を差し替えてください。`mvn clean` は `target` 内の配備済みファイルも削除します。
 
 `.env` にある項目はOSの環境変数より優先します。項目がなければ従来のOS環境変数を使用します。`KEY=` のような空欄は空の設定として扱うため、古いOSの値では補いません。
 

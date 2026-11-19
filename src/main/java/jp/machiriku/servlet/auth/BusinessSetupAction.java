@@ -8,6 +8,7 @@ import java.util.Set;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import jp.machiriku.bean.User;
 import jp.machiriku.dao.ProfileDao;
 import jp.machiriku.registration.RegistrationForms;
@@ -19,7 +20,8 @@ public class BusinessSetupAction extends Action {
 
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        User user = OnboardingSupport.requireUser(req, res, "BUSINESS");
+        HttpSession session = req.getSession(false);
+        User user = OnboardingSupport.requireUser(req, res, session, "BUSINESS", this::createProfileDao);
         if (user == null) { return; }
         if (!"GET".equalsIgnoreCase(req.getMethod()) && !"POST".equalsIgnoreCase(req.getMethod())) {
             res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
@@ -30,7 +32,7 @@ public class BusinessSetupAction extends Action {
         Set<String> industries = Set.of(), qualifications = Set.of();
         if (posting) {
             req.setCharacterEncoding("UTF-8");
-            if (!OnboardingSupport.validCsrf(req)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
+            if (!OnboardingSupport.validCsrf(req, session)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
             fields = OnboardingSupport.fields(req, "businessName", "representativeName", "email", "phone", "secondaryPhone", "preferredArea", "preferredAreaPoints",
                     "employeeCount", "mgmtExperience", "industryExperience", "iconImageUrl", "emailNotify");
             industries = OnboardingSupport.selection(req, "preferredIndustry");
@@ -39,13 +41,14 @@ public class BusinessSetupAction extends Action {
                 var input = RegistrationForms.business(fields, OnboardingSupport.values(req, "preferredIndustry"),
                         OnboardingSupport.values(req, "qualification"));
                 User saved = createProfileDao().completeBusinessSetup(user.getUserId(), input);
-                OnboardingSupport.completed(req, saved, input.representativeName());
-                req.getSession().setAttribute("businessName", input.businessName());
-                req.getSession().setAttribute("phone", input.phoneE164());
-                req.getSession().setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
-                req.getSession().setAttribute("preferredArea", input.preferredArea());
-                req.getSession().setAttribute("preferredAreaPoints", fields.get("preferredAreaPoints"));
-                res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+                String preferredAreaPoints = fields.get("preferredAreaPoints");
+                OnboardingSupport.completed(req, res, session, saved, input.representativeName(), current -> {
+                    current.setAttribute("businessName", input.businessName());
+                    current.setAttribute("phone", input.phoneE164());
+                    current.setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
+                    current.setAttribute("preferredArea", input.preferredArea());
+                    current.setAttribute("preferredAreaPoints", preferredAreaPoints);
+                });
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());
@@ -58,7 +61,7 @@ public class BusinessSetupAction extends Action {
             }
         } else {
             fields = new LinkedHashMap<>();
-            fields.put("email", OnboardingSupport.lineValue(req.getSession(), "lineEmail", user.getEmail()));
+            fields.put("email", OnboardingSupport.lineValue(session, "lineEmail", user.getEmail()));
             fields.put("businessName", "");
             fields.put("representativeName", "");
             fields.put("phone", "");
@@ -83,7 +86,6 @@ public class BusinessSetupAction extends Action {
         req.setAttribute("roleLabel", "出店事業主");
         req.setAttribute("selectedIndustries", industries);
         req.setAttribute("selectedQualifications", qualifications);
-        req.setAttribute("csrfToken", OnboardingSupport.csrfToken(req.getSession()));
         // 選択肢のIDを固定配列で推測せず、実際の業種・資格マスターから取得する。
         try {
             ProfileDao dao = createProfileDao();
@@ -97,6 +99,8 @@ public class BusinessSetupAction extends Action {
                 req.setAttribute("errorMessage", "業種・資格の選択肢を取得できませんでした。時間をおいて画面を開き直してください。");
             }
         }
-        req.getRequestDispatcher("/WEB-INF/views/auth/business_setup.jsp").forward(req, res);
+        if (OnboardingSupport.prepareView(req, res, session)) {
+            req.getRequestDispatcher("/WEB-INF/views/auth/business_setup.jsp").forward(req, res);
+        }
     }
 }

@@ -8,6 +8,7 @@ import java.util.Set;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import jp.machiriku.bean.User;
 import jp.machiriku.dao.ProfileDao;
 import jp.machiriku.registration.RegistrationForms;
@@ -19,7 +20,8 @@ public class OwnerSetupAction extends Action {
 
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        User user = OnboardingSupport.requireUser(req, res, "OWNER");
+        HttpSession session = req.getSession(false);
+        User user = OnboardingSupport.requireUser(req, res, session, "OWNER", this::createProfileDao);
         if (user == null) { return; }
         if (!"GET".equalsIgnoreCase(req.getMethod()) && !"POST".equalsIgnoreCase(req.getMethod())) {
             res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
@@ -29,20 +31,20 @@ public class OwnerSetupAction extends Action {
         Set<String> industries = Set.of();
         if ("POST".equalsIgnoreCase(req.getMethod())) {
             req.setCharacterEncoding("UTF-8");
-            if (!OnboardingSupport.validCsrf(req)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
+            if (!OnboardingSupport.validCsrf(req, session)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
             fields = OnboardingSupport.fields(req, "representativeName", "company", "email", "phone", "secondaryPhone", "iconImageUrl", "emailNotify");
             industries = OnboardingSupport.selection(req, "preferredIndustry");
             try {
                 var input = RegistrationForms.owner(fields, OnboardingSupport.values(req, "preferredIndustry"));
                 User saved = createProfileDao().completeOwnerSetup(user.getUserId(), input);
                 // DBのcommit後にだけ、画面用の名前と初期設定完了状態を更新する。
-                OnboardingSupport.completed(req, saved, input.representativeName());
-                req.getSession().setAttribute("company", input.company() == null ? "" : input.company());
-                req.getSession().setAttribute("phone", input.phoneE164());
-                req.getSession().setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
-                req.getSession().setAttribute("preferredIndustries", input.industryTypeIds());
-                req.getSession().setAttribute("emailNotify", input.emailNotify() && saved.getEmail() != null);
-                res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+                OnboardingSupport.completed(req, res, session, saved, input.representativeName(), current -> {
+                    current.setAttribute("company", input.company() == null ? "" : input.company());
+                    current.setAttribute("phone", input.phoneE164());
+                    current.setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
+                    current.setAttribute("preferredIndustries", input.industryTypeIds());
+                    current.setAttribute("emailNotify", input.emailNotify() && saved.getEmail() != null);
+                });
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());
@@ -61,8 +63,8 @@ public class OwnerSetupAction extends Action {
             }
         } else {
             fields = new LinkedHashMap<>();
-            fields.put("representativeName", OnboardingSupport.lineValue(req.getSession(), "lineDisplayName", user.getDisplayName()));
-            fields.put("email", OnboardingSupport.lineValue(req.getSession(), "lineEmail", user.getEmail()));
+            fields.put("representativeName", OnboardingSupport.lineValue(session, "lineDisplayName", user.getDisplayName()));
+            fields.put("email", OnboardingSupport.lineValue(session, "lineEmail", user.getEmail()));
             fields.put("phone", "");
             fields.put("secondaryPhone", "");
             fields.put("iconImageUrl", "");
@@ -81,7 +83,6 @@ public class OwnerSetupAction extends Action {
         req.setAttribute("email", fields.get("email"));
         req.setAttribute("role", "owner");
         req.setAttribute("roleLabel", "物件オーナー");
-        req.setAttribute("csrfToken", OnboardingSupport.csrfToken(req.getSession()));
         req.setAttribute("selectedIndustries", industries);
         try {
             req.setAttribute("industryChoices", createProfileDao().listIndustries());
@@ -92,6 +93,8 @@ public class OwnerSetupAction extends Action {
                 req.setAttribute("errorMessage", "誘致希望業種を取得できませんでした。時間をおいて画面を開き直してください。");
             }
         }
-        req.getRequestDispatcher("/WEB-INF/views/auth/owner_setup.jsp").forward(req, res);
+        if (OnboardingSupport.prepareView(req, res, session)) {
+            req.getRequestDispatcher("/WEB-INF/views/auth/owner_setup.jsp").forward(req, res);
+        }
     }
 }

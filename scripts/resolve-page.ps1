@@ -16,12 +16,12 @@ function Get-ServletPagePath {
         }
     }
 
+    $package = [regex]::Match($source, '(?m)^\s*package\s+([\w.]+)\s*;').Groups[1].Value
+    $className = [System.IO.Path]::GetFileNameWithoutExtension($JavaFile)
     # アノテーションで判定できない場合は、名前空間付きのweb.xmlに定義された対応も確認する。
     $webXml = Join-Path $ProjectRoot 'src\main\webapp\WEB-INF\web.xml'
     if (Test-Path -LiteralPath $webXml) {
         [xml]$descriptor = Get-Content -LiteralPath $webXml -Raw -Encoding UTF8
-        $package = [regex]::Match($source, '(?m)^\s*package\s+([\w.]+)\s*;').Groups[1].Value
-        $className = [System.IO.Path]::GetFileNameWithoutExtension($JavaFile)
         $qualifiedName = if ($package) { "$package.$className" } else { $className }
         foreach ($servlet in $descriptor.SelectNodes('/*[local-name()="web-app"]/*[local-name()="servlet"]')) {
             if ($servlet.'servlet-class' -ne $qualifiedName) { continue }
@@ -32,6 +32,13 @@ function Get-ServletPagePath {
                 }
             }
         }
+    }
+
+    # FrontControllerは、対象パッケージ内の *Action クラスを *.action に対応付ける。
+    if ($package -cmatch '^jp\.machiriku\.servlet\.[\w.]+$' -and $className -cmatch '^\w+Action$' -and
+        $source -cmatch ('\bpublic\s+(?:final\s+)?class\s+' + [regex]::Escape($className) + '\s+extends\s+(?:jp\.machiriku\.tool\.)?Action\b')) {
+        $actionName = $className.Substring(0, $className.Length - 'Action'.Length)
+        return '/' + $package.Replace('.', '/') + '/' + $actionName + '.action'
     }
 }
 

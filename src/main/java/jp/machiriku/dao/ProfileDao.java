@@ -28,6 +28,17 @@ public class ProfileDao extends Dao {
 
     protected Connection openConnection() throws SQLException { return getConnection(); }
 
+    /** プロフィールへのアクセス時に、会員の現在の状態を取得する。 */
+    public User findUserById(int userId) throws SQLException {
+        try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(
+                "SELECT " + USER_COLUMNS + " FROM users WHERE user_id=?")) {
+            statement.setInt(1, userId);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next() ? UserDao.readUser(rows) : null;
+            }
+        }
+    }
+
     /** プロフィールに移した電話番号とアイコンの保存先を、再表示用に取得する。 */
     public Map<String, String> findProfileContact(int userId, String role) throws SQLException {
         String table = switch (role) {
