@@ -5676,16 +5676,26 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
 
 .manage-prop-card {
   display: grid;
-  grid-template-columns: 180px 1fr auto;
-  gap: 1.25rem;
-  align-items: center;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 0.9rem 1.25rem;
+  align-items: start;
 }
 
 .manage-prop-thumb {
+  grid-column: 1;
+  grid-row: 1 / 3;
   width: 100%;
-  height: 118px;
+  height: 100%;
+  min-height: 140px;
+  max-height: 190px;
   object-fit: cover;
   border-radius: var(--radius-md);
+}
+
+.manage-prop-body {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
 }
 
 .manage-prop-badges {
@@ -5708,6 +5718,12 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
 .manage-prop-code {
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+.manage-prop-tenant {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-main);
 }
 
 .manage-prop-title {
@@ -5735,10 +5751,24 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
 }
 
 .manage-prop-actions {
+  grid-column: 2;
+  grid-row: 2;
   display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  min-width: 148px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.manage-prop-actions > * {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  height: 48px;
+  padding: 0 0.85rem;
+  white-space: nowrap;
 }
 
 .btn-sm {
@@ -6413,12 +6443,42 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
   }
 
   .manage-prop-thumb {
+    grid-column: 1;
+    grid-row: auto;
     height: 170px;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .manage-prop-body {
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .manage-prop-actions {
-    flex-direction: row;
+    grid-column: 1;
+    grid-row: auto;
+    display: flex;
     flex-wrap: wrap;
+    gap: 0.4rem;
+    width: 100%;
+  }
+
+  .manage-prop-actions > :first-child {
+    flex: 1 0 100%;
+    width: 100%;
+  }
+
+  .manage-prop-actions > :not(:first-child) {
+    flex: 1 1 auto;
+    min-width: 48px;
+    padding: 0 0.45rem;
+    font-size: 0.78rem;
+  }
+
+  .manage-prop-actions > .btn-danger-outline {
+    flex: 0 1 auto;
+    min-width: 52px;
   }
 
   .analytics-two-col,
@@ -6433,6 +6493,24 @@ h1, h2, h3 { line-break: strict; overflow-wrap: anywhere; font-feature-settings:
 }
 
 @media (max-width: 640px) {
+  .manage-toolbar .status-filter-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+
+  .manage-toolbar .status-tab-btn {
+    min-width: 0;
+    width: 100%;
+    padding: 0 0.2rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .form-grid-2,
   .form-grid-3,
   .location-radio-grid,
@@ -7058,6 +7136,90 @@ dialog.confirm-lightbox-dialog::backdrop {
 
 .confirm-lightbox-btn[hidden] {
   display: none;
+}
+
+/* O01 公開確認ダイアログ */
+dialog.o01-confirm-dialog {
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: var(--text-main);
+  width: min(92vw, 460px);
+  max-width: min(92vw, 460px);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.24);
+}
+
+dialog[open].o01-confirm-dialog {
+  display: block;
+}
+
+dialog:modal.o01-confirm-dialog {
+  overscroll-behavior: contain;
+}
+
+dialog.o01-confirm-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.56);
+  backdrop-filter: blur(2px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.o01-dialog-panel {
+  padding: var(--space-5);
+}
+
+.o01-dialog-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.o01-dialog-prop {
+  margin: 0 0 0.65rem 0;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft, #f8fafc);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.o01-dialog-desc {
+  margin: 0 0 0.85rem 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text-sub);
+}
+
+.o01-dialog-edit-row {
+  margin-bottom: 1.15rem;
+}
+
+.o01-dialog-edit-link {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--primary-700);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.o01-dialog-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.o01-dialog-actions > button {
+  min-height: 48px;
+  padding: 0 var(--space-4);
+}
+
+.o01-dialog-confirm {
+  min-width: 120px;
 }
 
 @media (max-width: 640px) {

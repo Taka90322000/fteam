@@ -60,6 +60,13 @@ window.MachirikuStore = (function() {
       const currentRole = saved.users[saved.currentRole] ? saved.currentRole : 'resident';
       // Upgrade previous covers or external URLs to local assets without resetting votes or follows.
       for (const prop of saved.properties) {
+        if (typeof prop.statusLabel === 'string') {
+          const sm = prop.statusLabel.match(/^出店決定・開店準備中[（(](.+)[）)]$/);
+          if (sm) {
+            if (!prop.contractedStoreName) prop.contractedStoreName = sm[1];
+            prop.statusLabel = '出店決定・開店準備中';
+          }
+        }
         const source = data.PROPERTIES.find(item => item.id === prop.id);
         if (source) {
           // Photo-only catalog updates must reach saved previews without losing interaction data,
@@ -532,7 +539,8 @@ window.MachirikuStore = (function() {
       if (prop) {
         prop.status = "preparing";
         prop.listingStatus = "CONTRACTED";
-        prop.statusLabel = `出店決定・開店準備中（${app.storeName}）`;
+        prop.statusLabel = "出店決定・開店準備中";
+        if (app.storeName) prop.contractedStoreName = app.storeName;
       }
     } else if (newStatus === "rejected") {
       app.statusLabel = "見送り";

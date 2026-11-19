@@ -3,7 +3,7 @@
   <jsp:param name="title" value="登録物件管理 | マチリク" />
   <jsp:param name="description" value="所有する空き店舗の掲載状態・需要スコア・出店応募状況を一元管理します。" />
   <jsp:param name="pageScreenId" value="o01" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261119_o01_v26" />
 </jsp:include>
 
     <section id="o01-section" class="screen-view s11-view" data-screen="O01">
@@ -17,7 +17,6 @@
           <h1 class="page-title">登録物件管理</h1>
           <span class="badge-status status-voting">オーナー</span>
         </div>
-        <p class="page-description">保有する空き店舗の一覧と募集ステータス、需要投票・出店応募への対応状況を管理します。</p>
       </div>
 
       <div id="o01-role-notice" class="role-switch-notice" hidden>
@@ -73,5 +72,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o01" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261119_o01_v26" />
 </jsp:include>

@@ -767,6 +767,116 @@ window.MachirikuPropertyPages = (function () {
   // =========================================================================
   let manageStatusFilter = "ALL";
 
+  function getO01PropertyActionsHtml(p, state) {
+    const ls = p.listingStatus || "OPEN";
+    const propApps = (state.applications || []).filter(a => a.propId === p.id);
+    const pendingApps = propApps.filter(a => a.status === "submitted" || a.status === "applying" || a.status === "consulting").length;
+    const activeApps = propApps.filter(a => a.status !== "rejected" && a.status !== "withdrawn").length;
+    const appCount = pendingApps > 0 ? pendingApps : activeApps;
+
+    const isContracted = ls === "CONTRACTED" || p.status === "preparing" || p.status === "opened" || p.status === "contracted" || p.status === "agreed";
+    const isDraft = !isContracted && (ls === "DRAFT" || p.status === "draft");
+    const isPaused = !isContracted && !isDraft && (ls === "PAUSED" || p.status === "paused");
+
+    const analyticsLink = (isPrimary) => `<a class="${isPrimary ? "btn-primary" : "btn-secondary"} btn-sm" href="${escapeHtml(propUrl("analytics.jsp", { id: p.id }))}">需要分析</a>`;
+    const editLink = `<a class="btn-secondary btn-sm" href="${escapeHtml(propUrl("edit.jsp", { id: p.id }))}">物件編集</a>`;
+    const deleteLink = `<a class="btn-secondary btn-sm btn-danger-outline" href="${escapeHtml(propUrl("delete-confirm.jsp", { id: p.id }))}">削除</a>`;
+    const applyLink = (isPrimary) => `<a class="${isPrimary ? "btn-primary" : "btn-secondary"} btn-sm" href="${escapeHtml(propUrl("apply-list.jsp", { propId: p.id }))}">出店希望確認 (${appCount}件)</a>`;
+    const pauseBtn = `<button type="button" class="btn-secondary btn-sm" onclick="MachirikuPropertyPages.toggleStatus('${escapeHtml(p.id)}', 'PAUSED')">募集を一時停止</button>`;
+
+    if (isDraft) {
+      return [
+        `<button type="button" class="btn-primary btn-sm" data-o01-publish="${escapeHtml(p.id)}" data-o01-mode="draft">公開する</button>`,
+        editLink,
+        deleteLink
+      ].join("");
+    }
+
+    if (isContracted) {
+      const contractApp = propApps.find(a => a.status === "contracted" || a.status === "approved") || propApps[0];
+      const handoverUrl = contractApp ? indexUrl(`#s14?id=${encodeURIComponent(contractApp.id)}`) : indexUrl("#s14");
+      return [
+        `<a class="btn-primary btn-sm" href="${escapeHtml(handoverUrl)}">契約引渡し</a>`,
+        analyticsLink(false),
+        editLink
+      ].join("");
+    }
+
+    if (isPaused) {
+      const btns = [
+        `<button type="button" class="btn-primary btn-sm" data-o01-publish="${escapeHtml(p.id)}" data-o01-mode="resume">募集を再開する</button>`
+      ];
+      if (appCount > 0) btns.push(applyLink(false));
+      btns.push(analyticsLink(false), editLink, deleteLink);
+      return btns.join("");
+    }
+
+    // 公開中（OPEN）
+    if (appCount > 0) {
+      return [applyLink(true), analyticsLink(false), editLink, pauseBtn, deleteLink].join("");
+    }
+    return [analyticsLink(true), editLink, pauseBtn, deleteLink].join("");
+  }
+
+  function openPublishConfirmDialog(prop, isResume) {
+    if (!prop) return;
+    const prev = document.getElementById("o01-publish-dialog");
+    if (prev) prev.remove();
+
+    const dialog = document.createElement("dialog");
+    dialog.id = "o01-publish-dialog";
+    dialog.className = "o01-confirm-dialog";
+    dialog.setAttribute("closedby", "any");
+    dialog.setAttribute("aria-labelledby", "o01-publish-dialog-title");
+    dialog.innerHTML = `
+      <div class="o01-dialog-panel">
+        <h2 id="o01-publish-dialog-title" class="o01-dialog-title">${isResume ? "募集を再開して公開しますか？" : "この物件を公開しますか？"}</h2>
+        <p class="o01-dialog-prop">${escapeHtml(prop.title)}</p>
+        <p class="o01-dialog-desc">${isResume
+          ? "募集を再開すると、検索一覧・地図上に公開され、住民からの需要投票や事業者からの新規出店応募を受け付けます。"
+          : "公開すると、検索一覧・地図上に表示され、住民からの需要投票や事業者からの出店応募を受け付ける状態になります。"}</p>
+        <div class="o01-dialog-edit-row">
+          <a class="o01-dialog-edit-link" href="${escapeHtml(propUrl("edit.jsp", { id: prop.id }))}">内容を修正してから公開する →</a>
+        </div>
+        <div class="o01-dialog-actions">
+          <button type="button" class="btn-secondary o01-dialog-cancel" autofocus>キャンセル</button>
+          <button type="button" class="btn-primary o01-dialog-confirm">公開する</button>
+        </div>
+      </div>
+    `;
+
+    dialog.addEventListener("click", (e) => {
+      if (e.target.closest(".o01-dialog-cancel")) {
+        dialog.close();
+        return;
+      }
+      if (e.target.closest(".o01-dialog-confirm")) {
+        dialog.close();
+        toggleStatus(prop.id, "OPEN");
+      }
+    });
+
+    if (!("closedBy" in HTMLDialogElement.prototype)) {
+      const isOutside = (e) => {
+        const r = dialog.getBoundingClientRect();
+        return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+      };
+      let startedOutside = false;
+      dialog.addEventListener("pointerdown", (e) => { startedOutside = isOutside(e); });
+      dialog.addEventListener("pointerup", (e) => {
+        if (startedOutside && isOutside(e)) dialog.close();
+        startedOutside = false;
+      });
+    }
+
+    dialog.addEventListener("close", () => {
+      dialog.remove();
+    }, { once: true });
+
+    document.body.appendChild(dialog);
+    dialog.showModal();
+  }
+
   function hydrateO01() {
     const sectionEl = document.getElementById("o01-section");
     if (!sectionEl) return;
@@ -830,11 +940,12 @@ window.MachirikuPropertyPages = (function () {
     }
 
     listEl.innerHTML = filtered.map(p => {
-      const ls = p.listingStatus || "OPEN";
-      const isPaused = ls === "PAUSED" || ls === "DRAFT";
-      const nextStatus = ls === "OPEN" ? "PAUSED" : "OPEN";
-      const toggleLabel = ls === "OPEN" ? "募集を一時停止" : "公開中にする";
       const pendingApps = (state.applications || []).filter(a => a.propId === p.id && (a.status === "submitted" || a.status === "applying" || a.status === "consulting")).length;
+      const contractedApp = (state.applications || []).find(a => a.propId === p.id && a.status === "contracted");
+      const rawStatusLabel = String(p.statusLabel || "募集中");
+      const legacyStoreMatch = rawStatusLabel.match(/^出店決定・開店準備中[（(](.+)[）)]$/);
+      const badgeLabel = legacyStoreMatch ? "出店決定・開店準備中" : rawStatusLabel;
+      const tenantName = p.contractedStoreName || p.storePlan?.storeName || contractedApp?.storeName || legacyStoreMatch?.[1] || "";
       const imgUrl = resolveAssetUrl(p.coverImage || PLACEHOLDER_IMG);
 
       return `
@@ -842,7 +953,8 @@ window.MachirikuPropertyPages = (function () {
           <img class="manage-prop-thumb" src="${escapeHtml(imgUrl)}" alt="${escapeHtml(p.title)}" onerror="MachirikuScreens.handlePropertyImageError(this)">
           <div class="manage-prop-body">
             <div class="manage-prop-badges">
-              <span class="badge-status status-${escapeHtml(p.status || 'voting')}">${escapeHtml(p.statusLabel || "募集中")}</span>
+              <span class="badge-status status-${escapeHtml(p.status || 'voting')}">${escapeHtml(badgeLabel)}</span>
+              ${tenantName ? `<span class="manage-prop-tenant">出店：${escapeHtml(tenantName)}</span>` : ""}
               ${p.isPr ? '<span class="badge-pr">PR注目枠掲載中</span>' : ""}
               ${pendingApps > 0 ? `<span class="badge-pending-app">未対応応募 ${pendingApps}件</span>` : ""}
               <span class="manage-prop-code">管理コード: ${escapeHtml(p.code || p.id)}</span>
@@ -856,15 +968,19 @@ window.MachirikuPropertyPages = (function () {
             </div>
           </div>
           <div class="manage-prop-actions">
-            <a class="btn-primary btn-sm" href="${escapeHtml(propUrl("apply-list.jsp", { propId: p.id }))}">出店希望確認${pendingApps > 0 ? ` (${pendingApps})` : ""}</a>
-            <a class="btn-secondary btn-sm" href="${escapeHtml(propUrl("analytics.jsp", { id: p.id }))}">需要分析</a>
-            <a class="btn-secondary btn-sm" href="${escapeHtml(propUrl("edit.jsp", { id: p.id }))}">物件編集</a>
-            <button type="button" class="btn-secondary btn-sm" onclick="MachirikuPropertyPages.toggleStatus('${escapeHtml(p.id)}', '${nextStatus}')">${toggleLabel}</button>
-            <a class="btn-secondary btn-sm btn-danger-outline" href="${escapeHtml(propUrl("delete-confirm.jsp", { id: p.id }))}">削除</a>
+            ${getO01PropertyActionsHtml(p, state)}
           </div>
         </article>
       `;
     }).join("");
+
+    listEl.onclick = (e) => {
+      const pubBtn = e.target.closest("[data-o01-publish]");
+      if (!pubBtn) return;
+      const prop = store.getPropertyById(pubBtn.getAttribute("data-o01-publish"));
+      const isResume = pubBtn.getAttribute("data-o01-mode") === "resume";
+      openPublishConfirmDialog(prop, isResume);
+    };
   }
 
   function toggleStatus(propId, nextStatus) {
