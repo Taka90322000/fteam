@@ -3,7 +3,7 @@
   <jsp:param name="title" value="物件編集確認 | マチリク" />
   <jsp:param name="description" value="変更前と変更後の差分を確認し、物件情報の更新を確定します。" />
   <jsp:param name="pageScreenId" value="o07" />
-  <jsp:param name="assetVersion" value="20261119_prop_v10" />
+  <jsp:param name="assetVersion" value="20261119_o07_v18" />
 </jsp:include>
 
     <section id="o07-empty-state" class="screen-view empty-state" data-screen="O07" hidden>
@@ -12,13 +12,14 @@
       <a class="btn-primary" href="${pageContext.request.contextPath}/property/manage.jsp">登録物件管理へ戻る</a>
     </section>
 
-    <section id="o07-section" class="screen-view" data-screen="O07">
+    <section id="o07-section" class="screen-view o07-view" data-screen="O07">
       <div class="page-header-banner" data-screen="O07">
         <nav class="breadcrumb-trail" aria-label="現在の位置">
           <a href="${pageContext.request.contextPath}/index.jsp#s01">ホーム</a>
           <span aria-hidden="true">/</span>
           <a href="${pageContext.request.contextPath}/property/manage.jsp">登録物件管理</a>
-          <span class="sep">/</span>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">物件編集確認</span>
         </nav>
         <div class="page-title-row">
           <h1 class="page-title">物件編集確認画面</h1>
@@ -42,7 +43,7 @@
           </table>
         </div>
 
-        <div class="form-actions-bar" style="margin-top:1.75rem;">
+        <div class="form-actions-bar form-actions-split" style="margin-top:1.75rem;">
           <a id="o07-back-btn" class="btn-secondary" href="${pageContext.request.contextPath}/property/edit.jsp">← 内容を修正する</a>
           <button type="button" id="o07-commit-btn" class="btn-primary">この内容で更新を確定する</button>
         </div>
@@ -51,5 +52,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o07" />
-  <jsp:param name="assetVersion" value="20261119_prop_v10" />
+  <jsp:param name="assetVersion" value="20261119_o07_v18" />
 </jsp:include>

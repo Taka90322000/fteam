@@ -2126,6 +2126,41 @@ window.MachirikuPropertyPages = (function () {
     dialog.showModal();
   }
 
+  function renderConfirmPhotoGrid(containerEl, photos, options = {}) {
+    if (!containerEl) return;
+    const validPhotos = (Array.isArray(photos) ? photos : []).filter(g => g && g.url && g.url !== PLACEHOLDER_IMG);
+    const emptyMsg = options.emptyMessage || "写真は登録されていません。";
+    const extraCardClass = options.itemClass ? ` ${options.itemClass}` : "";
+
+    containerEl.innerHTML = validPhotos.length
+      ? validPhotos.map((g, idx) => {
+        const kindLabel = PHOTO_KIND_LABELS[g.kind] || "写真";
+        const label = g.label || `物件写真 ${idx + 1}`;
+        const statusText = options.statusLabel || g._diffStatusLabel || "";
+        const statusClass = options.statusClass || g._diffStatusClass || "";
+        const statusMarkup = statusText
+          ? `<span class="confirm-photo-diff-mark ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span>`
+          : "";
+        return `
+          <button type="button" class="confirm-photo-item confirm-photo-btn${extraCardClass}" data-photo-idx="${idx}" title="クリックして拡大表示" aria-label="${escapeHtml(kindLabel)}：${escapeHtml(label)}を拡大表示">
+            <img src="${escapeHtml(resolveAssetUrl(g.url))}" alt="">
+            <span class="confirm-photo-label">${escapeHtml(label)}</span>
+            <span class="confirm-photo-tag">${escapeHtml(kindLabel)}</span>
+            ${statusMarkup}
+          </button>
+        `;
+      }).join("")
+      : `<p class="sample-note">${escapeHtml(emptyMsg)}</p>`;
+
+    containerEl.onclick = validPhotos.length
+      ? (e) => {
+        const btn = e.target.closest(".confirm-photo-btn");
+        if (!btn || !containerEl.contains(btn)) return;
+        openConfirmPhotoLightbox(validPhotos, Number(btn.dataset.photoIdx || 0));
+      }
+      : null;
+  }
+
   function hydrateO05() {
     const sectionEl = document.getElementById("o05-section");
     const emptyEl = document.getElementById("o05-empty-state");
@@ -2150,31 +2185,9 @@ window.MachirikuPropertyPages = (function () {
     if (tbody) {
       tbody.innerHTML = rows.map(r => `<tr><th scope="row">${escapeHtml(r.label)}</th><td>${escapeHtml(r.value)}</td></tr>`).join("");
     }
-    const galleryPrev = document.getElementById("o05-gallery-preview");
-    if (galleryPrev) {
-      const photos = (draft.gallery || []).filter(g => g && g.url && g.url !== PLACEHOLDER_IMG);
-      galleryPrev.innerHTML = photos.length
-        ? photos.map((g, idx) => {
-          const kindLabel = PHOTO_KIND_LABELS[g.kind] || "写真";
-          const label = g.label || `物件写真 ${idx + 1}`;
-          return `
-          <button type="button" class="confirm-photo-item confirm-photo-btn" data-photo-idx="${idx}" title="クリックして拡大表示" aria-label="${escapeHtml(kindLabel)}：${escapeHtml(label)}を拡大表示">
-            <img src="${escapeHtml(resolveAssetUrl(g.url))}" alt="">
-            <span class="confirm-photo-label">${escapeHtml(label)}</span>
-            <span class="confirm-photo-tag">${escapeHtml(kindLabel)}</span>
-          </button>
-        `;
-        }).join("")
-        : `<p class="sample-note">写真は登録されていません。</p>`;
-
-      galleryPrev.onclick = photos.length
-        ? (e) => {
-          const btn = e.target.closest(".confirm-photo-btn");
-          if (!btn || !galleryPrev.contains(btn)) return;
-          openConfirmPhotoLightbox(photos, Number(btn.dataset.photoIdx || 0));
-        }
-        : null;
-    }
+    renderConfirmPhotoGrid(document.getElementById("o05-gallery-preview"), draft.gallery, {
+      emptyMessage: "写真は登録されていません。"
+    });
 
     const backBtn = document.getElementById("o05-back-btn");
     if (backBtn) backBtn.setAttribute("href", propUrl("add.jsp", { restore: "1" }));
@@ -2213,34 +2226,256 @@ window.MachirikuPropertyPages = (function () {
     const beforeRows = formatConfirmRows(beforeProp);
     const afterRows = formatConfirmRows(payload.after);
     const tbody = document.getElementById("o07-confirm-tbody");
-    let diffCount = 0;
+    const tableWrap = sectionEl.querySelector(".diff-table-wrap");
+
+    const filterValidPhotos = (list) => (Array.isArray(list) ? list : []).filter(g => g && g.url && g.url !== PLACEHOLDER_IMG);
+    const beforePhotos = filterValidPhotos(beforeProp.gallery);
+    const afterPhotos = filterValidPhotos(payload.after.gallery);
+
+    const afterMatchedUsed = new Set();
+    const beforeToAfterIdx = beforePhotos.map((bg) => {
+      const idx = afterPhotos.findIndex((ag, j) => !afterMatchedUsed.has(j) && ag.url === bg.url);
+      if (idx !== -1) afterMatchedUsed.add(idx);
+      return idx;
+    });
+    const afterToBeforeIdx = afterPhotos.map(() => -1);
+    beforeToAfterIdx.forEach((afterIdx, beforeIdx) => {
+      if (afterIdx !== -1) afterToBeforeIdx[afterIdx] = beforeIdx;
+    });
+    let prevKeptBefore = -1;
+    let hasPhotoReorder = false;
+    for (let j = 0; j < afterToBeforeIdx.length; j += 1) {
+      const bIdx = afterToBeforeIdx[j];
+      if (bIdx !== -1) {
+        if (bIdx < prevKeptBefore) {
+          hasPhotoReorder = true;
+          break;
+        }
+        prevKeptBefore = bIdx;
+      }
+    }
+
+    const computeVisiblePhotoHunks = (totalLen, anchorMask) => {
+      if (totalLen <= 0) return { visible: [], hasOmitted: false };
+      const visible = new Array(totalLen).fill(false);
+      let hasAnchor = false;
+      for (let i = 0; i < totalLen; i += 1) {
+        if (anchorMask[i]) {
+          hasAnchor = true;
+          if (i > 0) visible[i - 1] = true;
+          visible[i] = true;
+          if (i + 1 < totalLen) visible[i + 1] = true;
+        }
+      }
+      if (!hasAnchor) {
+        visible.fill(true);
+        return { visible, hasOmitted: false };
+      }
+      // 未変更が連続2枚以上ある箇所のみ省略する（1枚だけ残る場合はそのまま表示）
+      let idx = 0;
+      while (idx < totalLen) {
+        if (visible[idx]) {
+          idx += 1;
+          continue;
+        }
+        let end = idx;
+        while (end < totalLen && !visible[end]) end += 1;
+        if (end - idx < 2) {
+          for (let k = idx; k < end; k += 1) visible[k] = true;
+        }
+        idx = end;
+      }
+      return { visible, hasOmitted: visible.some(v => !v) };
+    };
+
+    const isPhotoMetaEdited = (bItem, aItem) => Boolean(
+      bItem && aItem && (bItem.kind !== aItem.kind || (bItem.label || "") !== (aItem.label || ""))
+    );
+
+    const beforeAnchors = beforePhotos.map((g, i) => {
+      const aIdx = beforeToAfterIdx[i];
+      if (aIdx === -1) return true;
+      if (hasPhotoReorder && aIdx !== i) return true;
+      return isPhotoMetaEdited(g, afterPhotos[aIdx]);
+    });
+    const afterAnchors = afterPhotos.map((g, j) => {
+      const bIdx = afterToBeforeIdx[j];
+      if (bIdx === -1) return true;
+      if (hasPhotoReorder && bIdx !== j) return true;
+      return isPhotoMetaEdited(beforePhotos[bIdx], g);
+    });
+
+    // 削除・追加の境界も前後コンテキストとしてマークし、変更側の省略と連動させる
+    beforeToAfterIdx.forEach((aIdx, bIdx) => {
+      if (aIdx !== -1) return;
+      for (let p = bIdx - 1; p >= 0; p -= 1) {
+        if (beforeToAfterIdx[p] !== -1) { afterAnchors[beforeToAfterIdx[p]] = true; break; }
+      }
+      for (let q = bIdx + 1; q < beforeToAfterIdx.length; q += 1) {
+        if (beforeToAfterIdx[q] !== -1) { afterAnchors[beforeToAfterIdx[q]] = true; break; }
+      }
+    });
+    afterToBeforeIdx.forEach((bIdx, aIdx) => {
+      if (bIdx !== -1) return;
+      for (let p = aIdx - 1; p >= 0; p -= 1) {
+        if (afterToBeforeIdx[p] !== -1) { beforeAnchors[afterToBeforeIdx[p]] = true; break; }
+      }
+      for (let q = aIdx + 1; q < afterToBeforeIdx.length; q += 1) {
+        if (afterToBeforeIdx[q] !== -1) { beforeAnchors[afterToBeforeIdx[q]] = true; break; }
+      }
+    });
+
+    const beforeHunk = computeVisiblePhotoHunks(beforePhotos.length, beforeAnchors);
+    const afterHunk = computeVisiblePhotoHunks(afterPhotos.length, afterAnchors);
+    const hasAnyOmittedPhotos = beforeHunk.hasOmitted || afterHunk.hasOmitted;
+    let showAllO07Photos = false;
+
+    const renderO07CellPhotoList = (side, showAll = false) => {
+      const list = side === "before" ? beforePhotos : afterPhotos;
+      if (!list.length) {
+        return side === "after" && beforePhotos.length
+          ? `<span class="o07-photo-empty-after">なし（すべて削除）</span>`
+          : `<span class="sample-note">なし</span>`;
+      }
+
+      const visibleMask = showAll
+        ? list.map(() => true)
+        : (side === "before" ? beforeHunk.visible : afterHunk.visible);
+
+      const parts = [];
+      let idx = 0;
+      while (idx < list.length) {
+        if (!visibleMask[idx]) {
+          let end = idx;
+          while (end + 1 < list.length && !visibleMask[end + 1]) end += 1;
+          parts.push(`<div class="o07-photo-omitted-note">… ${idx + 1}〜${end + 1}枚目は変更なし …</div>`);
+          idx = end + 1;
+          continue;
+        }
+        const g = list[idx];
+        const kindLabel = PHOTO_KIND_LABELS[g.kind] || "写真";
+        const label = g.label || `物件写真 ${idx + 1}`;
+        let itemStateClass = "";
+        let tagMarkup = "";
+        if (side === "before") {
+          if (beforeToAfterIdx[idx] === -1) {
+            itemStateClass = " is-removed";
+            tagMarkup = `<span class="o07-photo-tag is-removed">削除</span>`;
+          }
+        } else {
+          const oldIdx = afterToBeforeIdx[idx];
+          if (oldIdx === -1) {
+            itemStateClass = " is-added";
+            tagMarkup = `<span class="o07-photo-tag is-added">新規追加</span>`;
+          } else {
+            const notes = [];
+            if (hasPhotoReorder && oldIdx !== idx) {
+              itemStateClass = " is-reordered";
+              notes.push(`<span class="o07-photo-tag is-reordered">${oldIdx + 1}枚目から移動</span>`);
+            }
+            if (isPhotoMetaEdited(beforePhotos[oldIdx], g)) {
+              if (!itemStateClass) itemStateClass = " is-edited";
+              notes.push(`<span class="o07-photo-tag is-edited">種別・説明変更</span>`);
+            }
+            tagMarkup = notes.join(" ");
+          }
+        }
+        parts.push(`
+          <button type="button" class="o07-cell-photo-item${itemStateClass}" data-photo-idx="${idx}" title="クリックして拡大表示" aria-label="${escapeHtml(kindLabel)}：${escapeHtml(label)}を拡大表示">
+            <img src="${escapeHtml(resolveAssetUrl(g.url))}" alt="">
+            <span class="o07-cell-photo-meta">
+              <span class="o07-cell-photo-order">${idx + 1}枚目 ${tagMarkup}</span>
+              <span class="o07-cell-photo-name">${escapeHtml(label)}</span>
+              <span class="o07-cell-photo-kind">${escapeHtml(kindLabel)}</span>
+            </span>
+          </button>
+        `);
+        idx += 1;
+      }
+
+      let html = `<div class="o07-cell-photo-list" data-photo-side="${side}">${parts.join("")}</div>`;
+      if (side === "after" && hasAnyOmittedPhotos) {
+        const totalCount = afterPhotos.length || beforePhotos.length;
+        html += `
+          <div class="o07-photo-toggle-wrap">
+            <button type="button" class="o07-photo-toggle-btn" data-o07-toggle-photos="1" aria-expanded="${showAll ? "true" : "false"}">
+              ${showAll ? "変更周辺のみ表示に戻す" : `すべての写真（全${totalCount}枚）を表示`}
+            </button>
+          </div>
+        `;
+      }
+      return html;
+    };
+
+    const changedItems = afterRows
+      .map((ar, idx) => ({ ar, br: beforeRows[idx] || { value: "" } }))
+      .filter(({ ar, br }) => br.value !== ar.value || (ar.sig !== undefined && br.sig !== ar.sig));
+    const diffCount = changedItems.length;
+
+    if (tableWrap) tableWrap.hidden = diffCount === 0;
 
     if (tbody) {
-      tbody.innerHTML = afterRows.map((ar, idx) => {
-        const br = beforeRows[idx] || { value: "" };
-        const changed = br.value !== ar.value || (ar.sig !== undefined && br.sig !== ar.sig);
-        if (changed) diffCount += 1;
+      tbody.innerHTML = changedItems.map(({ ar, br }) => {
+        const isPhotosRow = ar.key === "photos";
+        const beforeHtml = isPhotosRow
+          ? renderO07CellPhotoList("before", showAllO07Photos)
+          : escapeHtml(br.value || "-");
+        const afterHtml = isPhotosRow
+          ? renderO07CellPhotoList("after", showAllO07Photos)
+          : escapeHtml(ar.value || "-");
         return `
-          <tr class="${changed ? "diff-changed-row" : ""}">
-            <th scope="row">${escapeHtml(ar.label)} ${changed ? '<span class="diff-badge">変更あり</span>' : ""}</th>
-            <td class="diff-before">${escapeHtml(br.value || "-")}</td>
-            <td class="diff-after">${escapeHtml(ar.value || "-")}</td>
+          <tr class="diff-changed-row"${isPhotosRow ? ' data-diff-key="photos"' : ""}>
+            <th scope="row">${escapeHtml(ar.label)}</th>
+            <td class="diff-before" data-diff-label="変更前">${beforeHtml}</td>
+            <td class="diff-after" data-diff-label="変更後">${afterHtml}</td>
           </tr>
         `;
       }).join("");
+
+      tbody.onclick = (e) => {
+        const toggleBtn = e.target.closest("[data-o07-toggle-photos]");
+        if (toggleBtn) {
+          showAllO07Photos = !showAllO07Photos;
+          const photoRow = toggleBtn.closest('tr[data-diff-key="photos"]');
+          if (photoRow) {
+            const beforeTd = photoRow.querySelector("td.diff-before");
+            const afterTd = photoRow.querySelector("td.diff-after");
+            if (beforeTd) beforeTd.innerHTML = renderO07CellPhotoList("before", showAllO07Photos);
+            if (afterTd) afterTd.innerHTML = renderO07CellPhotoList("after", showAllO07Photos);
+            photoRow.querySelector("[data-o07-toggle-photos]")?.focus();
+          }
+          return;
+        }
+        const btn = e.target.closest(".o07-cell-photo-item");
+        if (!btn) return;
+        const sideWrap = btn.closest("[data-photo-side]");
+        const list = sideWrap?.getAttribute("data-photo-side") === "before" ? beforePhotos : afterPhotos;
+        openConfirmPhotoLightbox(list, Number(btn.dataset.photoIdx || 0));
+      };
     }
 
-    setText("o07-diff-summary", diffCount > 0 ? `${diffCount}項目が変更されています（緑色でハイライト表示）` : "各項目の変更はありません（そのまま確定できます）");
+    const isDraft = payload.after.listingStatus === "DRAFT";
+    setText("o07-diff-summary", diffCount > 0
+      ? `${diffCount}項目が変更されています`
+      : "変更された項目はありません（「内容を修正する」から編集できます）");
+
+    const descEl = sectionEl.querySelector(".page-description");
+    if (descEl) {
+      descEl.textContent = isDraft
+        ? "変更内容をご確認のうえ、下書きとして更新してください。"
+        : "変更前と変更後の差分をご確認のうえ、更新を確定してください。";
+    }
 
     const backBtn = document.getElementById("o07-back-btn");
     if (backBtn) backBtn.setAttribute("href", propUrl("edit.jsp", { id: payload.propId, restore: "1" }));
 
     const commitBtn = document.getElementById("o07-commit-btn");
     if (commitBtn) {
+      commitBtn.textContent = isDraft ? "下書きとして更新する" : "この内容で更新を確定する";
       commitBtn.onclick = () => {
         store.updateProperty(payload.propId, payload.after);
         try { window.sessionStorage.removeItem(DRAFT_EDIT_KEY); } catch (_) {}
-        window.MachirikuApp?.showToast?.("物件情報を更新しました！");
+        window.MachirikuApp?.showToast?.(isDraft ? "下書きとして物件情報を更新しました！" : "物件情報を更新しました！");
         window.location.href = propUrl("manage.jsp");
       };
     }
