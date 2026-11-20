@@ -173,7 +173,8 @@
         '#o06': '/property/edit.jsp',
         '#o07': '/property/edit-confirm.jsp',
         '#o08': '/property/delete-confirm.jsp',
-        '#o09': '/property/delete-complete.jsp'
+        '#o09': '/property/delete-complete.jsp',
+        '#o10': '/property/apply-detail.jsp'
       };
       function checkServletRedirect() {
         var rawHash = window.location.hash || '';

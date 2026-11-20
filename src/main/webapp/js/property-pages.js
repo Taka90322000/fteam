@@ -60,6 +60,44 @@ window.MachirikuPropertyPages = (function () {
     if (el) el.textContent = val;
   }
 
+  function readOptimizedImageDataUrl(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const rawUrl = String(ev.target?.result || "");
+        if (!rawUrl || rawUrl.length <= 350000 || !/^data:image\//i.test(rawUrl)) {
+          resolve(rawUrl);
+          return;
+        }
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const maxDim = 1280;
+            const scale = Math.min(1, maxDim / Math.max(img.width || 1, img.height || 1));
+            const w = Math.max(1, Math.round((img.width || 1) * scale));
+            const h = Math.max(1, Math.round((img.height || 1) * scale));
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) { resolve(rawUrl); return; }
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(img, 0, 0, w, h);
+            const compressed = canvas.toDataURL("image/jpeg", 0.82);
+            resolve(compressed && compressed.length < rawUrl.length ? compressed : rawUrl);
+          } catch (_) {
+            resolve(rawUrl);
+          }
+        };
+        img.onerror = () => resolve(rawUrl);
+        img.src = rawUrl;
+      };
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(file);
+    });
+  }
+
   function showRoleNotice(noticeElId, requiredRoles, roleLabel) {
     const el = document.getElementById(noticeElId);
     if (!el) return;
@@ -612,12 +650,25 @@ window.MachirikuPropertyPages = (function () {
     const reqAlertEl = document.getElementById("b01-req-alert");
     const reqListEl = document.getElementById("b01-req-list");
     const submitBtn = document.getElementById("b01-submit-btn");
-    const heldQualNames = (bizUser.qualifications || []).map(q => String(q.name || ""));
+    const heldQualNames = (bizUser.qualifications || []).map(q => String((typeof q === "string" ? q : q?.name) || ""));
+    const uploadedDocsMap = new Map();
     let missingRequiredQualCount = 0;
 
     const hasHeldQualification = (qualObj) => {
       if (!qualObj) return false;
       return heldQualNames.some(held => held.includes(qualObj.name) || qualObj.name.includes(held));
+    };
+
+    const syncUploadUi = (qualId) => {
+      if (!reqListEl) return;
+      const doc = uploadedDocsMap.get(qualId);
+      const statusEl = reqListEl.querySelector(`[data-req-file-status="${CSS.escape(qualId)}"]`);
+      const clearBtn = reqListEl.querySelector(`[data-req-file-clear="${CSS.escape(qualId)}"]`);
+      if (statusEl) {
+        statusEl.textContent = doc ? `添付済み：${doc.name}` : "未添付（画像またはPDF）";
+        statusEl.classList.toggle("is-attached", Boolean(doc));
+      }
+      if (clearBtn) clearBtn.hidden = !doc;
     };
 
     const renderRequirements = () => {
@@ -638,6 +689,8 @@ window.MachirikuPropertyPages = (function () {
 
         const cbId = `b01-req-cb-${idx}`;
         const errId = `b01-req-err-${idx}`;
+        const fileId = `b01-req-file-${idx}`;
+        const existingDoc = uploadedDocsMap.get(q.id);
         const badgeClass = isHeld ? "req-badge-ok" : (mustDisable ? "req-badge-missing" : "req-badge-info");
         const badgeText = isHeld ? "プロフィール登録済 ✓" : (mustDisable ? "未登録（応募前にプロフィール登録が必要）" : (req.isRequired ? "必須確認" : "確認・推奨"));
 
@@ -655,6 +708,14 @@ window.MachirikuPropertyPages = (function () {
               </label>
             </div>
             <p class="req-check-desc">${escapeHtml(req.conditionText || q.guidanceText || "")}</p>
+            <div class="req-upload-row">
+              <label class="btn-secondary btn-xs req-upload-btn" for="${fileId}">
+                <span>＋ 証明書・許可書を添付（任意）</span>
+                <input id="${fileId}" type="file" class="sr-only b01-req-file" data-req-file-id="${escapeHtml(q.id)}" accept="image/*,.pdf">
+              </label>
+              <span class="req-upload-status${existingDoc ? " is-attached" : ""}" data-req-file-status="${escapeHtml(q.id)}">${existingDoc ? `添付済み：${escapeHtml(existingDoc.name)}` : "未添付（画像またはPDF）"}</span>
+              <button type="button" class="btn-secondary btn-xs btn-danger-outline" data-req-file-clear="${escapeHtml(q.id)}"${existingDoc ? "" : " hidden"}>削除</button>
+            </div>
             ${(!isHeld && q.guidanceUrl) ? `
               <div class="req-guidance-row">
                 <span>申請・取得案内：</span>
@@ -681,6 +742,32 @@ window.MachirikuPropertyPages = (function () {
       }
       if (submitBtn) submitBtn.disabled = false;
     };
+
+    if (reqListEl) {
+      reqListEl.addEventListener("change", async (e) => {
+        const input = e.target.closest(".b01-req-file");
+        if (!input) return;
+        const qualId = input.getAttribute("data-req-file-id");
+        const file = input.files?.[0];
+        input.value = "";
+        if (!qualId || !file) return;
+        const url = await readOptimizedImageDataUrl(file);
+        if (!url) {
+          window.MachirikuApp?.showToast?.("ファイルの読み込みに失敗しました。");
+          return;
+        }
+        uploadedDocsMap.set(qualId, { name: file.name, type: file.type || "", url });
+        syncUploadUi(qualId);
+      });
+      reqListEl.addEventListener("click", (e) => {
+        const clearBtn = e.target.closest("[data-req-file-clear]");
+        if (!clearBtn) return;
+        const qualId = clearBtn.getAttribute("data-req-file-clear");
+        if (!qualId) return;
+        uploadedDocsMap.delete(qualId);
+        syncUploadUi(qualId);
+      });
+    }
 
     if (genreEl) {
       genreEl.onchange = renderRequirements;
@@ -719,13 +806,17 @@ window.MachirikuPropertyPages = (function () {
         const sVal = isPopup ? (startEl?.value || "") : openDateVal;
         const eVal = isPopup ? (endEl?.value || "") : "";
 
-        const checks = Array.from(form.querySelectorAll(".b01-req-checkbox")).map(cb => ({
-          qualificationId: cb.value,
-          requirementName: cb.getAttribute("data-req-name") || cb.value,
-          businessConfirmed: cb.checked,
-          ownerCheckStatus: "UNCONFIRMED",
-          checkNote: ""
-        }));
+        const checks = Array.from(form.querySelectorAll(".b01-req-checkbox")).map(cb => {
+          const doc = uploadedDocsMap.get(cb.value);
+          return {
+            qualificationId: cb.value,
+            requirementName: cb.getAttribute("data-req-name") || cb.value,
+            businessConfirmed: cb.checked,
+            ownerCheckStatus: "UNCONFIRMED",
+            checkNote: "",
+            ...(doc ? { documentUrl: doc.url, documentName: doc.name, documentType: doc.type } : {})
+          };
+        });
 
         const created = store.submitApplication({
           propId: prop.id,
@@ -818,6 +909,20 @@ window.MachirikuPropertyPages = (function () {
     return [analyticsLink(true), editLink, pauseBtn, deleteLink].join("");
   }
 
+  function bindDialogLightDismissFallback(dialog) {
+    if (!dialog || ("closedBy" in HTMLDialogElement.prototype)) return;
+    const isOutside = (e) => {
+      const r = dialog.getBoundingClientRect();
+      return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+    };
+    let startedOutside = false;
+    dialog.addEventListener("pointerdown", (e) => { startedOutside = isOutside(e); });
+    dialog.addEventListener("pointerup", (e) => {
+      if (startedOutside && isOutside(e)) dialog.close();
+      startedOutside = false;
+    });
+  }
+
   function openPublishConfirmDialog(prop, isResume) {
     if (!prop) return;
     const prev = document.getElementById("o01-publish-dialog");
@@ -856,18 +961,7 @@ window.MachirikuPropertyPages = (function () {
       }
     });
 
-    if (!("closedBy" in HTMLDialogElement.prototype)) {
-      const isOutside = (e) => {
-        const r = dialog.getBoundingClientRect();
-        return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
-      };
-      let startedOutside = false;
-      dialog.addEventListener("pointerdown", (e) => { startedOutside = isOutside(e); });
-      dialog.addEventListener("pointerup", (e) => {
-        if (startedOutside && isOutside(e)) dialog.close();
-        startedOutside = false;
-      });
-    }
+    bindDialogLightDismissFallback(dialog);
 
     dialog.addEventListener("close", () => {
       dialog.remove();
@@ -1139,9 +1233,98 @@ window.MachirikuPropertyPages = (function () {
   }
 
   // =========================================================================
-  // O03: property/apply-list.jsp (出店希望確認 / オーナー)
+  // O03: property/apply-list.jsp (出店希望確認一覧 / オーナー)
+  // O10: property/apply-detail.jsp (出店応募詳細・審査・返信 / オーナー)
   // =========================================================================
-  let expandedAppId = null;
+  let activeCheckBlobUrls = [];
+  let lastO10AppId = null;
+  let o10ReplyDraft = "";
+
+  function revokeActiveCheckBlobUrls() {
+    if (!activeCheckBlobUrls.length) return;
+    activeCheckBlobUrls.forEach((u) => {
+      try { URL.revokeObjectURL(u); } catch (_) {}
+    });
+    activeCheckBlobUrls = [];
+  }
+
+  function dataUrlToBlobUrl(dataUrl) {
+    try {
+      const m = String(dataUrl).match(/^data:([^;,]+)?(?:;base64)?,(.*)$/i);
+      if (!m) return dataUrl;
+      const mime = m[1] || "application/octet-stream";
+      const isBase64 = /;base64,/i.test(dataUrl);
+      let bytes;
+      if (isBase64) {
+        const bin = window.atob(m[2]);
+        bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+      } else {
+        bytes = new TextEncoder().encode(decodeURIComponent(m[2]));
+      }
+      const url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      activeCheckBlobUrls.push(url);
+      return url;
+    } catch (_) {
+      return dataUrl;
+    }
+  }
+
+  function getAppStatusBadgeClass(status) {
+    switch (status) {
+      case "consulting":
+      case "interviewing":
+        return "status-app-consulting";
+      case "approved":
+        return "status-app-approved";
+      case "contracted":
+        return "status-app-contracted";
+      case "rejected":
+      case "withdrawn":
+        return "status-app-rejected";
+      default:
+        return "status-reviewing";
+    }
+  }
+
+  function buildCheckDocumentInfo(app, checkItem, bizUser) {
+    const reqName = checkItem.requirementName || checkItem.qualificationId || "資格・書類";
+    const heldList = Array.isArray(bizUser?.qualifications) ? bizUser.qualifications : [];
+    const matchedQual = heldList.find((q) => {
+      const qName = typeof q === "string" ? q : (q?.name || "");
+      return qName && (qName.includes(reqName) || reqName.includes(qName));
+    });
+
+    if (checkItem.documentUrl) {
+      const href = /^data:/i.test(checkItem.documentUrl)
+        ? dataUrlToBlobUrl(checkItem.documentUrl)
+        : resolveAssetUrl(checkItem.documentUrl);
+      return { href, meta: checkItem.documentName || "アップロード書類" };
+    }
+    if (matchedQual && typeof matchedQual === "object" && matchedQual.documentUrl) {
+      const href = /^data:/i.test(matchedQual.documentUrl)
+        ? dataUrlToBlobUrl(matchedQual.documentUrl)
+        : resolveAssetUrl(matchedQual.documentUrl);
+      return { href, meta: matchedQual.documentName || "登録済み証明書" };
+    }
+
+    const regNumber = (matchedQual && typeof matchedQual === "object" && matchedQual.number) ? matchedQual.number : "";
+    const statusLabel = checkItem.ownerCheckStatus === "CONFIRMED"
+      ? "オーナー確認済"
+      : (checkItem.ownerCheckStatus === "REJECTED" ? "不備あり" : "未確認");
+    const docHtml = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(reqName)} - 提出情報確認 | マチリク</title><style>body{font-family:sans-serif;max-width:680px;margin:2rem auto;padding:0 1rem;color:#18201c;line-height:1.7;background:#fcfbf7}h1{font-size:1.25rem;margin-bottom:1rem;color:#1b4332}.card{background:#fff;border:1px solid #d1d5db;border-radius:10px;padding:1.25rem}.row{display:flex;justify-content:space-between;gap:1rem;padding:.55rem 0;border-bottom:1px solid #f0f0eb}.row:last-child{border-bottom:none}.k{font-weight:700;color:#47554e}.note{margin-top:1rem;padding:.75rem 1rem;background:#f3f4ee;border-radius:6px;font-size:.9rem;color:#47554e}</style></head><body><h1>${escapeHtml(reqName)} — 資格・確認情報</h1><div class="card"><div class="row"><span class="k">店舗屋号 / 応募者</span><span>${escapeHtml(app.storeName || "")}（${escapeHtml(app.applicantName || "")}）</span></div><div class="row"><span class="k">登録番号</span><span>${escapeHtml(regNumber || "プロフィール番号なし")}</span></div><div class="row"><span class="k">応募時確認チェック</span><span>${checkItem.businessConfirmed ? "確認済み" : "未チェック"}</span></div><div class="row"><span class="k">オーナー確認ステータス</span><span>${escapeHtml(statusLabel)}</span></div></div><p class="note">${regNumber ? "事業主プロフィールに登録されている資格番号の情報です。証明書画像が未添付の場合は、メッセージ等で原本・写しの提示をご依頼いただけます。" : "この項目には画像・PDFファイルがまだ添付されていません。必要に応じて事業主へ提出をご依頼ください。"}</p></body></html>`;
+    const blobUrl = URL.createObjectURL(new Blob([docHtml], { type: "text/html;charset=utf-8" }));
+    activeCheckBlobUrls.push(blobUrl);
+    return { href: blobUrl, meta: regNumber ? `登録番号: ${regNumber}` : "書類未添付" };
+  }
+
+  function formatApplicationPeriod(app, includeOpenPrefix = true) {
+    if (app.requestedEndOn) {
+      return `${app.requestedStartOn || "未定"} 〜 ${app.requestedEndOn}`;
+    }
+    const openDate = app.targetOpenDate || app.requestedStartOn || "相談";
+    return includeOpenPrefix ? `オープン予定: ${openDate}` : openDate;
+  }
 
   function hydrateO03(params) {
     const sectionEl = document.getElementById("o03-section");
@@ -1189,94 +1372,380 @@ window.MachirikuPropertyPages = (function () {
     }
     if (emptyEl) emptyEl.hidden = true;
 
-    const bizUser = state.users?.business || {};
-    const avgScore = bizUser.reviewCount ? `${bizUser.avgSatisfaction} / 5（${bizUser.reviewCount}件）` : "集計中（新規事業主）";
-
     listEl.innerHTML = filtered.map(a => {
-      const isOpen = expandedAppId === a.id || filtered.length === 1;
       const checks = Array.isArray(a.checks) ? a.checks : [];
+      const confirmedCount = checks.filter(c => c.ownerCheckStatus === "CONFIRMED").length;
+      const rejectedCount = checks.filter(c => c.ownerCheckStatus === "REJECTED").length;
       const contractLabel = a.contractKind === "POPUP" ? "ポップアップ短期" : "通常賃貸";
+      const badgeClass = getAppStatusBadgeClass(a.status);
+      const detailQuery = filterPropId && filterPropId !== "ALL"
+        ? { id: a.id, propId: filterPropId }
+        : { id: a.id };
+      const checkSummaryText = checks.length
+        ? `必要資格: ${confirmedCount}/${checks.length} 確認済`
+        : "資格要件なし";
+      const hasReply = Boolean((a.ownerReply && a.ownerReply.trim()) || a.repliedAt);
+
       return `
         <article class="detail-card apply-item-card">
           <div class="apply-item-head">
-            <div>
+            <div class="apply-item-main">
               <div class="apply-item-meta">
-                <span class="badge-status status-reviewing">${escapeHtml(a.statusLabel || a.status)}</span>
+                <span class="badge-status ${escapeHtml(badgeClass)}">${escapeHtml(a.statusLabel || a.status)}</span>
                 <span class="qual-badge">${escapeHtml(a.genreName || "")}</span>
                 <span class="apply-item-date">${escapeHtml(a.submittedAt || "")}</span>
               </div>
               <h3 class="apply-item-title">${escapeHtml(a.storeName)} <small>（応募者: ${escapeHtml(a.applicantName)}）</small></h3>
               <div class="apply-item-prop">
                 対象物件: <a href="${escapeHtml(propUrl("detail.jsp", { id: a.propId }))}">${escapeHtml(a.propTitle)}</a>
-                ／ 契約: ${contractLabel}（${a.requestedEndOn ? `${escapeHtml(a.requestedStartOn || "未定")} 〜 ${escapeHtml(a.requestedEndOn)}` : `オープン予定: ${escapeHtml(a.targetOpenDate || a.requestedStartOn || "相談")}`}）
+                ／ 契約: ${contractLabel}（${escapeHtml(formatApplicationPeriod(a))}）
+              </div>
+              <div class="apply-card-summary-row">
+                <span class="apply-summary-pill">${escapeHtml(checkSummaryText)}</span>
+                ${rejectedCount > 0 ? `<span class="apply-summary-pill is-alert">不備あり ${rejectedCount}件</span>` : ""}
+                ${hasReply ? `<span class="apply-summary-pill is-replied">返信済${a.repliedAt ? `（${escapeHtml(a.repliedAt)}）` : ""}</span>` : ""}
               </div>
             </div>
-            <button type="button" class="btn-secondary btn-sm" aria-expanded="${isOpen}" onclick="MachirikuPropertyPages.toggleApplyDetail('${escapeHtml(a.id)}')">
-              ${isOpen ? "詳細を閉じる" : "詳細・資格確認・返信"}
-            </button>
-          </div>
-
-          <div id="o03-detail-${escapeHtml(a.id)}" class="apply-item-detail" ${isOpen ? "" : "hidden"}>
-            <div class="apply-detail-grid">
-              <div>
-                <h4 class="apply-sub-heading">出店への想い・メッセージ</h4>
-                <div class="story-content-body">${escapeHtml(a.message || a.concept || "メッセージなし")}</div>
-                <div class="apply-extra-row">
-                  <span><strong>内覧希望日時:</strong> ${escapeHtml((a.viewingRequestedAt || "指定なし").replace("T", " "))}</span>
-                  <span><strong>顧客アンケート評価実績:</strong> ${escapeHtml(avgScore)}</span>
-                </div>
-
-                <h4 class="apply-sub-heading" style="margin-top:1rem;">必要資格・要件の確認（application_checks）</h4>
-                <div class="apply-checks-list">
-                  ${checks.length ? checks.map(c => `
-                    <div class="apply-check-row">
-                      <div>
-                        <strong>${escapeHtml(c.requirementName || c.qualificationId)}</strong>
-                        <span class="req-badge-${c.ownerCheckStatus === 'CONFIRMED' ? 'ok' : (c.ownerCheckStatus === 'REJECTED' ? 'missing' : 'info')}">
-                          ${c.ownerCheckStatus === "CONFIRMED" ? "オーナー確認済" : (c.ownerCheckStatus === "REJECTED" ? "不備あり" : "未確認")}
-                        </span>
-                      </div>
-                      <div class="apply-check-actions">
-                        <button type="button" class="btn-secondary btn-xs" onclick="MachirikuPropertyPages.setCheckStatus('${escapeHtml(a.id)}', '${escapeHtml(c.qualificationId)}', 'CONFIRMED')">確認済</button>
-                        <button type="button" class="btn-secondary btn-xs btn-danger-outline" onclick="MachirikuPropertyPages.setCheckStatus('${escapeHtml(a.id)}', '${escapeHtml(c.qualificationId)}', 'REJECTED')">不備あり</button>
-                      </div>
-                    </div>
-                  `).join("") : `<p class="sample-note">要件確認項目は登録されていません。</p>`}
-                </div>
-              </div>
-
-              <div class="apply-reply-panel">
-                <h4 class="apply-sub-heading">オーナーからの返信・判断</h4>
-                <textarea id="o03-reply-${escapeHtml(a.id)}" class="form-control" rows="4" placeholder="面談候補日時や質問事項、審査結果のメッセージを入力...">${escapeHtml(a.ownerReply || "")}</textarea>
-                <div class="apply-action-stack">
-                  <button type="button" class="btn-primary btn-sm" onclick="MachirikuPropertyPages.updateApp('${escapeHtml(a.id)}', 'consulting')">面談・相談中にして返信</button>
-                  <button type="button" class="btn-cta-apply btn-sm" onclick="MachirikuPropertyPages.updateApp('${escapeHtml(a.id)}', 'approved')">出店を承認する</button>
-                  <button type="button" class="btn-secondary btn-sm" onclick="MachirikuPropertyPages.updateApp('${escapeHtml(a.id)}', 'contracted')">契約成立・引渡し完了にする</button>
-                  <button type="button" class="btn-secondary btn-sm btn-danger-outline" onclick="MachirikuPropertyPages.updateApp('${escapeHtml(a.id)}', 'rejected')">今回は見送る</button>
-                </div>
-              </div>
-            </div>
+            <a class="btn-primary btn-sm apply-detail-nav-btn" href="${escapeHtml(propUrl("apply-detail.jsp", detailQuery))}">
+              詳細・資格確認・返信
+            </a>
           </div>
         </article>
       `;
     }).join("");
   }
 
-  function toggleApplyDetail(appId) {
-    expandedAppId = expandedAppId === appId ? null : appId;
-    hydrateO03({});
+  function getO10ConfirmMeta(newStatus) {
+    if (newStatus === "approved") {
+      return {
+        title: "出店を承認しますか？",
+        desc: "ステータスを「出店合意（契約調整へ）」に更新します。以降、契約引渡し手続きへ進めるようになります。",
+        confirmLabel: "承認する",
+        confirmClass: "btn-cta-apply"
+      };
+    }
+    if (newStatus === "contracted") {
+      return {
+        title: "契約成立・引渡し完了にしますか？",
+        desc: "ステータスを「契約成立・引渡し完了」に更新し、対象物件を「出店決定・開店準備中（募集終了）」に切り替えます。",
+        confirmLabel: "契約成立を確定",
+        confirmClass: "btn-primary"
+      };
+    }
+    return {
+      title: "この応募を見送りますか？",
+      desc: "ステータスを「見送り」に更新します。必要に応じてチャット欄からフォローメッセージをお送りください。",
+      confirmLabel: "見送りを確定",
+      confirmClass: "btn-secondary btn-danger-outline"
+    };
+  }
+
+  function openO10StatusConfirmDialog(app, newStatus) {
+    if (!app) return;
+    const prev = document.getElementById("o10-status-dialog");
+    if (prev) prev.remove();
+
+    const meta = getO10ConfirmMeta(newStatus);
+    const dialog = document.createElement("dialog");
+    dialog.id = "o10-status-dialog";
+    dialog.className = "o01-confirm-dialog";
+    dialog.setAttribute("closedby", "any");
+    dialog.setAttribute("aria-labelledby", "o10-status-dialog-title");
+    dialog.innerHTML = `
+      <div class="o01-dialog-panel">
+        <h2 id="o10-status-dialog-title" class="o01-dialog-title">${escapeHtml(meta.title)}</h2>
+        <p class="o01-dialog-prop">${escapeHtml(app.storeName || "")}（${escapeHtml(app.propTitle || "")}）</p>
+        <p class="o01-dialog-desc">${escapeHtml(meta.desc)}</p>
+        <div class="o01-dialog-actions">
+          <button type="button" class="btn-secondary o01-dialog-cancel" autofocus>キャンセル</button>
+          <button type="button" class="${escapeHtml(meta.confirmClass)} o01-dialog-confirm">${escapeHtml(meta.confirmLabel)}</button>
+        </div>
+      </div>
+    `;
+
+    dialog.addEventListener("click", (e) => {
+      if (e.target.closest(".o01-dialog-cancel")) {
+        dialog.close();
+        return;
+      }
+      if (e.target.closest(".o01-dialog-confirm")) {
+        dialog.close();
+        commitAppStatusUpdate(app.id, newStatus);
+      }
+    });
+
+    bindDialogLightDismissFallback(dialog);
+    dialog.addEventListener("close", () => { dialog.remove(); }, { once: true });
+
+    document.body.appendChild(dialog);
+    dialog.showModal();
+  }
+
+  function getO10ChatMessages(app) {
+    if (Array.isArray(app?.chatMessages) && app.chatMessages.length) {
+      return app.chatMessages;
+    }
+    if (app?.ownerReply && String(app.ownerReply).trim()) {
+      return [{
+        id: "msg-legacy",
+        senderRole: "owner",
+        senderName: "物件オーナー",
+        text: String(app.ownerReply).trim(),
+        sentAt: app.repliedAt || ""
+      }];
+    }
+    return [];
+  }
+
+  function hydrateO10(params) {
+    const sectionEl = document.getElementById("o10-section");
+    const emptyEl = document.getElementById("o10-empty-state");
+    if (!sectionEl) return;
+
+    const appId = params?.id || "";
+    const state = store.getState();
+    const app = (state.applications || []).find(a => a.id === appId);
+
+    if (!app) {
+      if (emptyEl) emptyEl.hidden = false;
+      sectionEl.hidden = true;
+      revokeActiveCheckBlobUrls();
+      return;
+    }
+
+    if (emptyEl) emptyEl.hidden = true;
+    sectionEl.hidden = false;
+    showRoleNotice("o10-role-notice", ["owner", "business", "admin"], "物件オーナー");
+
+    const backQuery = params?.propId ? { propId: params.propId } : {};
+    const backHref = propUrl("apply-list.jsp", backQuery);
+    const backLinkEl = document.getElementById("o10-back-link");
+    const breadcrumbListEl = document.getElementById("o10-breadcrumb-list");
+    if (backLinkEl) backLinkEl.href = backHref;
+    if (breadcrumbListEl) breadcrumbListEl.href = backHref;
+
+    setText("o10-title", app.storeName || "出店応募詳細");
+    const badgeEl = document.getElementById("o10-status-badge");
+    if (badgeEl) {
+      badgeEl.className = `badge-status ${getAppStatusBadgeClass(app.status)}`;
+      badgeEl.textContent = app.statusLabel || app.status;
+    }
+    setText("o10-subtitle", `対象物件: ${app.propTitle || "-"} ／ 応募日時: ${app.submittedAt || "-"}`);
+
+    const bizUser = state.users?.business || {};
+    const avgScore = bizUser.reviewCount ? `${bizUser.avgSatisfaction} / 5（${bizUser.reviewCount}件）` : "集計中（新規事業主）";
+    const contractLabel = app.contractKind === "POPUP" ? "ポップアップ短期" : "通常賃貸";
+    const rentLabel = app.targetRent ? `${formatRent(app.targetRent)}万円 / 月` : "物件条件に準拠";
+    const viewingLabel = app.viewingRequestedAt ? app.viewingRequestedAt.replace("T", " ") : "指定なし";
+
+    const summaryEl = document.getElementById("o10-summary-grid");
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <div class="o10-summary-item">
+          <dt>対象物件</dt>
+          <dd><a href="${escapeHtml(propUrl("detail.jsp", { id: app.propId }))}">${escapeHtml(app.propTitle || "-")}</a></dd>
+        </div>
+        <div class="o10-summary-item">
+          <dt>応募者・事業者</dt>
+          <dd>${escapeHtml(app.applicantName || "-")}</dd>
+        </div>
+        <div class="o10-summary-item">
+          <dt>業態ジャンル</dt>
+          <dd>${escapeHtml(app.genreName || "-")}</dd>
+        </div>
+        <div class="o10-summary-item">
+          <dt>契約形態</dt>
+          <dd>${escapeHtml(contractLabel)}</dd>
+        </div>
+        <div class="o10-summary-item">
+          <dt>オープン希望時期 / 期間</dt>
+          <dd>${escapeHtml(formatApplicationPeriod(app, false))}</dd>
+        </div>
+        <div class="o10-summary-item">
+          <dt>希望賃料条件</dt>
+          <dd>${escapeHtml(rentLabel)}</dd>
+        </div>
+        <div class="o10-summary-item">
+          <dt>内覧希望日時</dt>
+          <dd>${escapeHtml(viewingLabel)}</dd>
+        </div>
+        <div class="o10-summary-item">
+          <dt>経験年数 / 顧客評価実績</dt>
+          <dd>${escapeHtml(app.experienceYears || "未設定")} ／ ${escapeHtml(avgScore)}</dd>
+        </div>
+      `;
+    }
+
+    setText("o10-message-body", app.message || app.concept || "メッセージなし");
+
+    revokeActiveCheckBlobUrls();
+    const checks = Array.isArray(app.checks) ? app.checks : [];
+    const confirmedCount = checks.filter(c => c.ownerCheckStatus === "CONFIRMED").length;
+    const rejectedCount = checks.filter(c => c.ownerCheckStatus === "REJECTED").length;
+    const summaryBadgeEl = document.getElementById("o10-checks-summary");
+    if (summaryBadgeEl) {
+      summaryBadgeEl.textContent = checks.length
+        ? `${confirmedCount}/${checks.length} 確認済${rejectedCount > 0 ? `（不備 ${rejectedCount}件）` : ""}`
+        : "登録要件なし";
+    }
+
+    const checksEl = document.getElementById("o10-checks-list");
+    if (checksEl) {
+      checksEl.innerHTML = checks.length ? checks.map(c => {
+        const docInfo = buildCheckDocumentInfo(app, c, bizUser);
+        const statusClass = c.ownerCheckStatus === "CONFIRMED"
+          ? "ok"
+          : (c.ownerCheckStatus === "REJECTED" ? "missing" : "info");
+        const statusText = c.ownerCheckStatus === "CONFIRMED"
+          ? "オーナー確認済"
+          : (c.ownerCheckStatus === "REJECTED" ? "不備あり" : "未確認");
+        return `
+          <div class="apply-check-row o10-check-row">
+            <div class="apply-check-info">
+              <div class="apply-check-title-line">
+                <strong>${escapeHtml(c.requirementName || c.qualificationId)}</strong>
+                <span class="req-badge-${statusClass}">${statusText}</span>
+              </div>
+              <div class="apply-check-doc-row">
+                <a class="apply-check-doc-link" href="${escapeHtml(docInfo.href)}" target="_blank" rel="noopener noreferrer">別タブで確認する</a>
+              </div>
+              <input type="text" class="form-control o10-check-note-input" data-o10-note="${escapeHtml(c.qualificationId)}" value="${escapeHtml(c.checkNote || "")}" placeholder="確認メモ">
+            </div>
+            <div class="apply-check-actions">
+              <button type="button" class="btn-secondary btn-xs" onclick="MachirikuPropertyPages.setCheckStatus('${escapeHtml(app.id)}', '${escapeHtml(c.qualificationId)}', 'CONFIRMED')">確認済</button>
+              <button type="button" class="btn-secondary btn-xs btn-danger-outline" onclick="MachirikuPropertyPages.setCheckStatus('${escapeHtml(app.id)}', '${escapeHtml(c.qualificationId)}', 'REJECTED')">不備あり</button>
+            </div>
+          </div>
+        `;
+      }).join("") : `<p class="sample-note">要件確認項目は登録されていません。</p>`;
+    }
+
+    if (lastO10AppId !== app.id) {
+      lastO10AppId = app.id;
+      o10ReplyDraft = "";
+    }
+
+    const threadEl = document.getElementById("o10-chat-thread");
+    if (threadEl) {
+      const messages = getO10ChatMessages(app);
+      threadEl.innerHTML = messages.length ? messages.map(m => {
+        const isOwner = m.senderRole !== "business";
+        return `
+          <div class="o10-chat-msg ${isOwner ? "is-owner" : "is-business"}">
+            <div class="o10-chat-msg-meta">
+              <strong>${escapeHtml(m.senderName || (isOwner ? "物件オーナー" : "応募事業主"))}</strong>
+              ${m.sentAt ? `<span>${escapeHtml(m.sentAt)}</span>` : ""}
+            </div>
+            <div class="o10-chat-msg-body">${escapeHtml(m.text)}</div>
+          </div>
+        `;
+      }).join("") : `<p class="o10-chat-empty">まだメッセージはありません。内覧候補日や質問事項などを送信できます。</p>`;
+    }
+
+    const chatEl = document.getElementById("o10-chat-input");
+    if (chatEl) {
+      chatEl.value = o10ReplyDraft;
+      chatEl.oninput = () => {
+        o10ReplyDraft = chatEl.value;
+      };
+    }
+
+    const chatSendBtn = document.getElementById("o10-chat-send-btn");
+    if (chatSendBtn) {
+      chatSendBtn.onclick = () => sendChatMessage(app.id);
+    }
+
+    const actionsEl = document.getElementById("o10-actions-stack");
+    if (actionsEl) {
+      actionsEl.innerHTML = getO10ActionButtonDefs(app.status).map(btn => {
+        const cls = btn.isPrimary
+          ? "btn-primary btn-sm"
+          : (btn.isDanger ? "btn-secondary btn-sm btn-danger-outline" : "btn-secondary btn-sm");
+        return `<button type="button" class="${cls}"${btn.disabled ? " disabled" : ""} onclick="MachirikuPropertyPages.updateApp('${escapeHtml(app.id)}', '${btn.status}')">${escapeHtml(btn.label)}</button>`;
+      }).join("");
+    }
+
+    const handoverBox = document.getElementById("o10-handover-box");
+    const handoverLink = document.getElementById("o10-handover-link");
+    if (handoverBox && handoverLink) {
+      const canHandover = app.status === "approved" || app.status === "contracted";
+      handoverBox.hidden = !canHandover;
+      if (canHandover) {
+        handoverLink.href = indexUrl(`#s14?id=${encodeURIComponent(app.id)}`);
+      }
+    }
+  }
+
+  function getO10ActionButtonDefs(rawStatus) {
+    const st = rawStatus === "applying" ? "submitted" : (rawStatus === "interviewing" ? "consulting" : rawStatus);
+    const isConsulting = st === "consulting";
+    const isApproved = st === "approved";
+    const isContracted = st === "contracted";
+    const isRejected = st === "rejected" || st === "withdrawn";
+    return [
+      {
+        status: "consulting",
+        label: "面談・相談中にする",
+        isPrimary: !isConsulting && !isApproved && !isContracted && !isRejected,
+        disabled: isConsulting || isApproved || isContracted
+      },
+      {
+        status: "approved",
+        label: "出店を承認する",
+        isPrimary: isConsulting,
+        disabled: isApproved || isContracted
+      },
+      {
+        status: "contracted",
+        label: "契約成立・引渡し完了にする",
+        isPrimary: isApproved,
+        disabled: isContracted
+      },
+      {
+        status: "rejected",
+        label: "今回は見送る",
+        isPrimary: false,
+        isDanger: true,
+        disabled: isContracted || isRejected
+      }
+    ];
+  }
+
+  function sendChatMessage(appId) {
+    const chatEl = document.getElementById("o10-chat-input");
+    const text = chatEl ? chatEl.value.trim() : "";
+    if (!text) {
+      window.MachirikuApp?.showToast?.("送信するメッセージを入力してください");
+      chatEl?.focus();
+      return;
+    }
+    o10ReplyDraft = "";
+    store.addApplicationMessage(appId, text, "owner");
+    window.MachirikuApp?.showToast?.("チャットメッセージを送信しました");
   }
 
   function setCheckStatus(appId, qualificationId, status) {
-    store.updateApplicationCheck(appId, qualificationId, status);
+    const noteEl = document.querySelector(`[data-o10-note="${CSS.escape(qualificationId)}"]`);
+    const noteText = noteEl ? noteEl.value.trim() : undefined;
+    store.updateApplicationCheck(appId, qualificationId, status, noteText);
     window.MachirikuApp?.showToast?.(status === "CONFIRMED" ? "要件を確認済みにしました" : "不備ありとして記録しました");
   }
 
+  function commitAppStatusUpdate(appId, newStatus) {
+    store.updateApplicationStatus(appId, newStatus);
+    window.MachirikuApp?.showToast?.("応募ステータスを更新しました");
+  }
+
   function updateApp(appId, newStatus) {
-    const replyEl = document.getElementById(`o03-reply-${appId}`);
-    const replyText = replyEl ? replyEl.value.trim() : "";
-    store.updateApplicationStatus(appId, newStatus, replyText);
-    window.MachirikuApp?.showToast?.("応募ステータスと返信を更新しました");
+    const app = (store.getState().applications || []).find(a => a.id === appId);
+    if (!app) return;
+    const def = getO10ActionButtonDefs(app.status).find(b => b.status === newStatus);
+    if (def?.disabled) return;
+    if (newStatus === "consulting") {
+      commitAppStatusUpdate(appId, newStatus);
+      return;
+    }
+    openO10StatusConfirmDialog(app, newStatus);
   }
 
   // =========================================================================
@@ -1763,42 +2232,6 @@ window.MachirikuPropertyPages = (function () {
       });
     };
     renderGalleryBuilder();
-
-    const readOptimizedImageDataUrl = (file) => new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const rawUrl = String(ev.target?.result || "");
-        if (!rawUrl || rawUrl.length <= 350000) {
-          resolve(rawUrl);
-          return;
-        }
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const maxDim = 1280;
-            const scale = Math.min(1, maxDim / Math.max(img.width || 1, img.height || 1));
-            const w = Math.max(1, Math.round((img.width || 1) * scale));
-            const h = Math.max(1, Math.round((img.height || 1) * scale));
-            const canvas = document.createElement("canvas");
-            canvas.width = w;
-            canvas.height = h;
-            const ctx = canvas.getContext("2d");
-            if (!ctx) { resolve(rawUrl); return; }
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, w, h);
-            ctx.drawImage(img, 0, 0, w, h);
-            const compressed = canvas.toDataURL("image/jpeg", 0.82);
-            resolve(compressed && compressed.length < rawUrl.length ? compressed : rawUrl);
-          } catch (_) {
-            resolve(rawUrl);
-          }
-        };
-        img.onerror = () => resolve(rawUrl);
-        img.src = rawUrl;
-      };
-      reader.onerror = () => resolve("");
-      reader.readAsDataURL(file);
-    });
 
     const fileInput = document.getElementById("prop-photo-file");
     if (fileInput) {
@@ -2677,6 +3110,7 @@ window.MachirikuPropertyPages = (function () {
       case "o07": return hydrateO07(params);
       case "o08": return hydrateO08(params);
       case "o09": return hydrateO09(params);
+      case "o10": return hydrateO10(params);
       default: break;
     }
   }
@@ -2684,7 +3118,6 @@ window.MachirikuPropertyPages = (function () {
   return {
     hydrate,
     toggleStatus,
-    toggleApplyDetail,
     setCheckStatus,
     updateApp
   };

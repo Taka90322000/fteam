@@ -488,6 +488,7 @@ window.MachirikuStore = (function() {
       checks: Array.isArray(appData.checks) ? appData.checks : [],
       ownerReply: "",
       repliedAt: null,
+      chatMessages: [],
       status: "submitted",
       statusLabel: "新規応募受付中",
       submittedAt: new Date().toLocaleString("ja-JP"),
@@ -550,6 +551,40 @@ window.MachirikuStore = (function() {
 
     notify();
     return app;
+  }
+
+  // 応募チャットメッセージ送信 (O10)
+  function addApplicationMessage(appId, text, senderRole = "owner") {
+    const app = state.applications.find(a => a.id === appId);
+    const trimmed = String(text || "").trim();
+    if (!app || !trimmed) return null;
+    if (!Array.isArray(app.chatMessages)) {
+      app.chatMessages = [];
+      if (app.ownerReply && String(app.ownerReply).trim()) {
+        app.chatMessages.push({
+          id: "msg-legacy-" + Date.now(),
+          senderRole: "owner",
+          senderName: state.currentUser?.name || "物件オーナー",
+          text: String(app.ownerReply).trim(),
+          sentAt: app.repliedAt || ""
+        });
+      }
+    }
+    const nowText = new Date().toLocaleString("ja-JP");
+    const msg = {
+      id: "msg-" + Date.now(),
+      senderRole,
+      senderName: state.currentUser?.name || (senderRole === "owner" ? "物件オーナー" : "出店事業主"),
+      text: trimmed,
+      sentAt: nowText
+    };
+    app.chatMessages.push(msg);
+    if (senderRole === "owner") {
+      app.ownerReply = trimmed;
+      app.repliedAt = nowText;
+    }
+    notify();
+    return msg;
   }
 
   // 応募要件チェック確認更新 (O03 / application_checks 準拠)
@@ -1046,6 +1081,7 @@ window.MachirikuStore = (function() {
     withdrawVote,
     submitApplication,
     updateApplicationStatus,
+    addApplicationMessage,
     updateApplicationCheck,
     publishStorePlan,
     createSurvey,
