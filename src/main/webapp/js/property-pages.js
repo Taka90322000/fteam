@@ -1085,9 +1085,61 @@ window.MachirikuPropertyPages = (function () {
   // =========================================================================
   // O02: property/analytics.jsp (物件需要分析 / オーナー)
   // =========================================================================
+  let o02ToggletipWired = false;
+
+  function setupO02Toggletip() {
+    if (o02ToggletipWired) return;
+    o02ToggletipWired = true;
+
+    const probe = document.createElement("div");
+    probe.popover = "hint";
+    if (probe.popover !== "hint") {
+      document.addEventListener("beforetoggle", (e) => {
+        const target = e.target;
+        const isToggletip = target?.getAttribute?.("popover") === "hint"
+          && target.id
+          && document.querySelector(`[popovertarget="${CSS.escape(target.id)}"]`);
+        if (e.newState === "open" && isToggletip) {
+          target.popover = "auto";
+        }
+      }, true);
+    }
+
+    document.addEventListener("toggle", (e) => {
+      const target = e.target;
+      if (!target?.id || !target.hasAttribute?.("popover")) return;
+      const isOpen = e.newState === "open";
+      document.querySelectorAll(`[popovertarget="${CSS.escape(target.id)}"]`).forEach((btn) => {
+        if (btn.hasAttribute("aria-expanded")) {
+          btn.setAttribute("aria-expanded", String(isOpen));
+        }
+      });
+    }, true);
+
+    if (!("interestForElement" in HTMLButtonElement.prototype)) {
+      const helpBtn = document.getElementById("o02-vote-help-btn");
+      const pop = document.getElementById("o02-vote-rule-popover");
+      if (helpBtn && pop) {
+        helpBtn.addEventListener("click", (e) => {
+          if (pop.matches(":popover-open")) {
+            e.preventDefault();
+            pop.hidePopover();
+          }
+        });
+      }
+    }
+  }
+
   function hydrateO02(params) {
     const sectionEl = document.getElementById("o02-section");
     if (!sectionEl) return;
+
+    setupO02Toggletip();
+    const roleBtn = document.getElementById("o02-role-switch-btn");
+    if (roleBtn && !roleBtn.dataset.bound) {
+      roleBtn.dataset.bound = "true";
+      roleBtn.addEventListener("click", () => store.setRole("owner"));
+    }
 
     showRoleNotice("o02-role-notice", ["owner", "business", "admin"], "物件オーナー・事業主");
     const state = store.getState();
@@ -1105,21 +1157,16 @@ window.MachirikuPropertyPages = (function () {
     }
 
     const linkDetail = document.getElementById("o02-link-detail");
-    const linkEdit = document.getElementById("o02-link-edit");
     const linkApplyList = document.getElementById("o02-link-apply-list");
     if (linkDetail) {
       linkDetail.hidden = !selectedProp;
       if (selectedProp) linkDetail.setAttribute("href", propUrl("detail.jsp", { id: selectedProp.id }));
     }
-    if (linkEdit) {
-      linkEdit.hidden = !selectedProp;
-      if (selectedProp) linkEdit.setAttribute("href", propUrl("edit.jsp", { id: selectedProp.id }));
-    }
     if (linkApplyList) {
       linkApplyList.setAttribute("href", propUrl("apply-list.jsp", selectedProp ? { propId: selectedProp.id } : {}));
     }
 
-    let targetTitle, votesCount, demandScore, topGenreLabel, entryCount, topDemandsList, voicesList;
+    let targetTitle, votesCount, demandScore, topGenreLabel, entryCount, topDemandsList;
     if (selectedProp) {
       targetTitle = selectedProp.title;
       votesCount = selectedProp.votesCount || 0;
@@ -1127,7 +1174,6 @@ window.MachirikuPropertyPages = (function () {
       topGenreLabel = selectedProp.topDemands?.[0]?.label || "需要集計中";
       entryCount = (state.applications || []).filter(a => a.propId === selectedProp.id).length;
       topDemandsList = selectedProp.topDemands || [];
-      voicesList = selectedProp.residentVoices || [];
     } else {
       targetTitle = "全物件総合需要";
       votesCount = props.reduce((acc, p) => acc + (p.votesCount || 0), 0);
@@ -1145,7 +1191,6 @@ window.MachirikuPropertyPages = (function () {
       topDemandsList = [...byGenre.values()].sort((a, b) => b.score - a.score);
       topGenreLabel = topDemandsList[0]?.label || "未集計";
       entryCount = (state.applications || []).length;
-      voicesList = props.flatMap(p => p.residentVoices || []);
     }
 
     setText("o02-kpi-votes", String(votesCount));
@@ -1159,23 +1204,25 @@ window.MachirikuPropertyPages = (function () {
         .filter(d => data.SUBCATS[d.subcatId]?.categoryId === c.id)
         .reduce((total, d) => total + (d.score || 0), 0);
       return { ...c, score: Math.round(score * 10) / 10 };
-    });
-    const maxCatScore = Math.max(...catScores.map(c => c.score), 1);
+    }).sort((a, b) => b.score - a.score);
+    const totalCatScore = catScores.reduce((sum, c) => sum + c.score, 0);
 
     const catChartEl = document.getElementById("o02-cat-chart");
     if (catChartEl) {
       catChartEl.innerHTML = catScores.map(c => {
-        const pct = Math.min(100, Math.round((c.score / maxCatScore) * 100));
+        const rawShare = totalCatScore > 0 ? (c.score / totalCatScore) * 100 : 0;
+        const shareLabel = rawShare.toFixed(1);
+        const barWidth = c.score > 0 ? Math.max(1.5, Math.min(100, Math.round(rawShare * 10) / 10)) : 0;
         return `
-          <div class="cat-score-row">
+          <li class="cat-score-row">
             <div class="cat-score-head">
               <span>${escapeHtml(c.name)}</span>
-              <span>${c.score} pt (${pct}%)</span>
+              <span>${c.score} pt (${shareLabel}%)</span>
             </div>
             <div class="demand-progress-track">
-              <div class="demand-progress-fill" style="width:${pct}%; background-color:${c.color};"></div>
+              <div class="demand-progress-fill" style="width:${barWidth}%; background-color:${c.color};"></div>
             </div>
-          </div>
+          </li>
         `;
       }).join("");
     }
@@ -1187,7 +1234,7 @@ window.MachirikuPropertyPages = (function () {
       rankingEl.innerHTML = sorted.length ? sorted.map((d, idx) => {
         const pct = Math.max(4, Math.round(((d.score || 0) / maxSubScore) * 100));
         return `
-          <div class="demand-bar-item">
+          <li class="demand-bar-item">
             <div class="demand-bar-header demand-stacked-header">
               <span>第${idx + 1}位: ${escapeHtml(d.label)}</span>
               <span class="demand-stacked-metrics"><strong>${d.score} pt</strong> <span class="demand-votes-breakdown">/ 計${d.votes}票</span></span>
@@ -1195,36 +1242,28 @@ window.MachirikuPropertyPages = (function () {
             <div class="demand-progress-track">
               <div class="demand-progress-fill" style="width:${pct}%; background-color:var(--primary-600);"></div>
             </div>
-          </div>
+          </li>
         `;
-      }).join("") : `<p class="sample-note">まだ需要投票がありません。</p>`;
-    }
-
-    const voicesEl = document.getElementById("o02-voices-list");
-    if (voicesEl) {
-      voicesEl.innerHTML = voicesList.length ? voicesList.map(v => `
-        <div class="quote-bubble">
-          <p class="quote-text">“${escapeHtml(v.text)}”</p>
-          <div class="quote-meta"><span>${escapeHtml(v.author)}</span><span>${escapeHtml(v.date || "")}</span></div>
-        </div>
-      `).join("") : `<p class="sample-note">まだ住民の声が寄せられていません。</p>`;
+      }).join("") : `<li class="sample-note">まだ需要投票がありません。</li>`;
     }
 
     const insightEl = document.getElementById("o02-condition-insight");
     if (insightEl) {
-      if (selectedProp && topDemandsList[0]) {
+      if (selectedProp) {
         const topSub = topDemandsList[0];
         const allowed = Array.isArray(selectedProp.allowedIndustries) ? selectedProp.allowedIndustries : [];
-        const mismatch = allowed.length > 0 && !allowed.includes(topSub.subcatId);
+        const mismatch = topSub && allowed.length > 0 && !allowed.includes(topSub.subcatId);
+        const hintBody = topSub
+          ? (mismatch
+            ? `1位希望の「${escapeHtml(topSub.label)}」は現在の募集許可業種に含まれていません。`
+            : `1位希望の「${escapeHtml(topSub.label)}（${topSub.score} pt）」に合う事業主からの応募獲得に向け、募集条件や設備PRを充実させましょう。`)
+          : "住民の需要傾向に合わせて、募集許可業種や設備PRを見直しましょう。";
         insightEl.hidden = false;
         insightEl.innerHTML = `
-          <div>
-            <strong>条件見直しのヒント：</strong>
-            ${mismatch
-              ? `1位希望の「${escapeHtml(topSub.label)}」は現在の募集許可業種に含まれていません。`
-              : `1位希望の「${escapeHtml(topSub.label)}（${topSub.score} pt）」に合う事業主からの応募獲得に向け、募集条件や設備PRを充実させましょう。`}
-          </div>
-          <a class="btn-secondary btn-sm" href="${escapeHtml(propUrl("edit.jsp", { id: selectedProp.id }))}">この物件の条件を見直す</a>
+          <span>
+            <strong>条件見直しのヒント：</strong>${hintBody}
+            <a class="o02-insight-edit-link" href="${escapeHtml(propUrl("edit.jsp", { id: selectedProp.id }))}">この物件の条件を見直す →</a>
+          </span>
         `;
       } else {
         insightEl.hidden = true;
