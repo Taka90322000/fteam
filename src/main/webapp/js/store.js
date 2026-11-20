@@ -60,21 +60,49 @@ window.MachirikuStore = (function() {
       const currentRole = saved.users[saved.currentRole] ? saved.currentRole : 'resident';
       // Upgrade previous covers or external URLs to local assets without resetting votes or follows.
       for (const prop of saved.properties) {
+        if (typeof prop.statusLabel === 'string') {
+          const sm = prop.statusLabel.match(/^出店決定・開店準備中[（(](.+)[）)]$/);
+          if (sm) {
+            if (!prop.contractedStoreName) prop.contractedStoreName = sm[1];
+            prop.statusLabel = '出店決定・開店準備中';
+          }
+        }
         const source = data.PROPERTIES.find(item => item.id === prop.id);
         if (source) {
-          // Photo-only catalog updates must reach saved previews without losing interaction data.
-          if (source.galleryVersion && prop.galleryVersion !== source.galleryVersion) {
+          // Photo-only catalog updates must reach saved previews without losing interaction data,
+          // unless the owner has explicitly customized/cleared photos for this property.
+          if (source.galleryVersion && prop.galleryVersion !== source.galleryVersion && !prop.photosEdited) {
             prop.gallery = JSON.parse(JSON.stringify(source.gallery));
             prop.galleryVersion = source.galleryVersion;
           }
+          if (Array.isArray(prop.gallery)) {
+            prop.gallery = prop.gallery.filter(g => g && g.url && g.url !== 'assets/property-placeholder.svg');
+          }
+          const ownerClearedPhotos = Boolean(
+            (prop.photosEdited || prop.ownerId || prop.coverImage === 'assets/property-placeholder.svg') &&
+            Array.isArray(prop.gallery) &&
+            prop.gallery.length === 0
+          );
           // If the property is not an owner-created custom listing, synchronize coverImage and access with the catalog master.
-          if (!prop.ownerId || !prop.coverImage || prop.coverImage === 'assets/property-placeholder.svg') {
+          if (!ownerClearedPhotos && !prop.photosEdited && (!prop.ownerId || !prop.coverImage || prop.coverImage === 'assets/property-placeholder.svg')) {
             prop.coverImage = source.coverImage;
             prop.imageCaption = source.imageCaption;
           }
           if (source.access) {
             prop.access = source.access;
           }
+        } else {
+          if (Array.isArray(prop.gallery)) {
+            prop.gallery = prop.gallery.filter(g => (
+              g && g.url && g.url !== 'assets/property-placeholder.svg' &&
+              !(g.url === 'assets/properties/prop-orion-01/01_exterior.jpg' && g.label === '外観写真') &&
+              !(g.url === 'assets/properties/prop-orion-01/02_interior.jpg' && g.label === '店内サンプル写真')
+            ));
+          } else {
+            prop.gallery = [];
+          }
+          const firstExt = prop.gallery.find(g => g.kind === 'exterior') || prop.gallery[0];
+          prop.coverImage = (firstExt && firstExt.url) || 'assets/property-placeholder.svg';
         }
       }
       // マスタに追加された新規物件（仮想物件など）を saved.properties にマージ
@@ -88,6 +116,14 @@ window.MachirikuStore = (function() {
         if (!loadedFilters.pref || loadedFilters.pref === 'all' || loadedFilters.pref === '栃木') {
           loadedFilters.pref = '栃木';
           loadedFilters.cities = ['宇都宮市'];
+        }
+      }
+      if (saved.users.business && initial.users.business) {
+        if (!saved.users.business.businessName) {
+          saved.users.business.businessName = initial.users.business.businessName || initial.users.business.company || "";
+        }
+        if (!Array.isArray(saved.users.business.preferredIndustries) || !saved.users.business.preferredIndustries.length) {
+          saved.users.business.preferredIndustries = [...(initial.users.business.preferredIndustries || [])];
         }
       }
       return { ...initial, ...saved, currentRole, currentUser: saved.users[currentRole], filters: loadedFilters };
@@ -243,7 +279,17 @@ window.MachirikuStore = (function() {
     notify('follow', { propId });
   }
 
-  // 順位投票実行 (S03)
+  // 2地点間の概算距離 (km)
+  function calcDistanceKm(lat1, lng1, lat2, lng2) {
+    if ([lat1, lng1, lat2, lng2].some(v => typeof v !== 'number' || isNaN(v))) return null;
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad;
+    const dLng = (lng2 - lng1) * rad;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+    return Math.round(6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 100) / 100;
+  }
+
+  // 順位投票実行 (S03 / R01)
   // 計算根拠: テーブル設計書 設計補足
   // 明細スコア = rank_weight / (1 + distance_km / distance_scale_km)
   function submitVote(propId, ranks, surveyData) {
@@ -264,14 +310,22 @@ window.MachirikuStore = (function() {
       return { success: false, message: "第1希望の業種を選択してください" };
     }
 
-    const distanceKm = state.currentUser.livingDistanceKm || 0.4;
-    const distanceScale = 1.5;
+    const userLocations = state.currentUser.locations || (data.USERS?.resident?.locations || []);
+    const selectedLoc = userLocations.find(l => l.id === surveyData?.locationId) || userLocations[0];
+    let distanceKm = state.currentUser.livingDistanceKm || 0.4;
+    if (selectedLoc && prop.location) {
+      const computed = calcDistanceKm(selectedLoc.lat, selectedLoc.lng, prop.location.lat, prop.location.lng);
+      if (computed != null) distanceKm = computed;
+    }
+    const distanceScale = Number(prop.distanceScaleKm) || 1.5;
     const distanceFactor = 1 / (1 + distanceKm / distanceScale);
     const weights = [1.0, 0.6, 0.3];
 
     // 同一ユーザーが既に同一物件に投票済みかチェック（二重カウント・スコア無限増殖の防止）
     const curVote = state.currentUser.votedProps?.[propId];
     const isUpdate = Boolean(curVote);
+
+    const rankKeys = ["rank1Votes", "rank2Votes", "rank3Votes"];
 
     // 既存投票がある場合は過去の加算スコア・票数を減算して再集計
     if (isUpdate && curVote.prevRanks && curVote.prevScoreAdded !== undefined) {
@@ -283,6 +337,10 @@ window.MachirikuStore = (function() {
         const dem = prop.topDemands.find(d => d.subcatId === prevSubcat);
         if (dem) {
           dem.votes = Math.max(0, dem.votes - 1);
+          const rk = rankKeys[idx];
+          if (rk) {
+            dem[rk] = Math.max(0, (dem[rk] || 0) - 1);
+          }
           dem.score = Math.max(0, Math.round((dem.score - prevSubScore) * 10) / 10);
         }
       });
@@ -303,12 +361,19 @@ window.MachirikuStore = (function() {
         targetDemand = {
           subcatId: subcatId,
           votes: 0,
+          rank1Votes: 0,
+          rank2Votes: 0,
+          rank3Votes: 0,
           score: 0,
           label: sub ? sub.name : subcatId
         };
         prop.topDemands.push(targetDemand);
       }
       targetDemand.votes += 1;
+      const rk = rankKeys[idx];
+      if (rk) {
+        targetDemand[rk] = (targetDemand[rk] || 0) + 1;
+      }
       targetDemand.score = Math.round((targetDemand.score + scoreAdded) * 10) / 10;
     });
 
@@ -316,10 +381,14 @@ window.MachirikuStore = (function() {
     prop.topDemands.sort((a, b) => b.score - a.score);
     prop.demandScore = Math.round((prop.demandScore + addedTotalScore) * 10) / 10;
 
-    // 住民の声を追加（自由コメントがあれば）
+    // 住民の声を追加（再投票時は前回の同コメントを置換、自由コメントがあれば追加）
+    if (isUpdate && curVote.comment && curVote.comment.trim() && Array.isArray(prop.residentVoices)) {
+      const oldIdx = prop.residentVoices.findIndex(v => v.text === curVote.comment.trim() && v.date === "本日");
+      if (oldIdx !== -1) prop.residentVoices.splice(oldIdx, 1);
+    }
     if (surveyData && surveyData.comment && surveyData.comment.trim()) {
       prop.residentVoices.unshift({
-        author: `${state.currentUser.name}（${state.currentUser.livingArea}）`,
+        author: `${state.currentUser.name}（${selectedLoc ? selectedLoc.label : state.currentUser.livingArea}）`,
         text: surveyData.comment.trim(),
         date: "本日"
       });
@@ -332,6 +401,9 @@ window.MachirikuStore = (function() {
       prevRanks: [...cleanRanks],
       prevScoreAdded: addedTotalScore,
       prevDistanceFactor: distanceFactor,
+      locationId: selectedLoc ? selectedLoc.id : "loc-home",
+      locationLabel: selectedLoc ? selectedLoc.label : "自宅",
+      distanceKm: distanceKm,
       date: new Date().toISOString().slice(0, 10),
       comment: surveyData?.comment || "",
       frequency: surveyData?.frequency || "",
@@ -350,29 +422,73 @@ window.MachirikuStore = (function() {
     });
 
     notify();
-    return { success: true, addedScore: addedTotalScore, newTotalScore: prop.demandScore, isUpdate };
+    return { success: true, addedScore: addedTotalScore, newTotalScore: prop.demandScore, isUpdate, distanceKm };
   }
 
-  // 出店応募送信 (S08)
+  // 投票取り下げ (R01 / property_votes.withdrawn_at 相当)
+  function withdrawVote(propId) {
+    const prop = getPropertyById(propId);
+    const curVote = state.currentUser.votedProps?.[propId];
+    if (!prop || !curVote) return { success: false, message: "取り下げる投票が見つかりません" };
+
+    const weights = [1.0, 0.6, 0.3];
+    const rankKeys = ["rank1Votes", "rank2Votes", "rank3Votes"];
+    if (curVote.prevScoreAdded !== undefined) {
+      prop.demandScore = Math.max(0, Math.round((prop.demandScore - curVote.prevScoreAdded) * 10) / 10);
+    }
+    (curVote.prevRanks || []).forEach((prevSubcat, idx) => {
+      const prevWeight = weights[idx] || 0.3;
+      const prevFactor = curVote.prevDistanceFactor || 1;
+      const prevSubScore = Math.round(prevWeight * prevFactor * 10) / 10;
+      const dem = prop.topDemands.find(d => d.subcatId === prevSubcat);
+      if (dem) {
+        dem.votes = Math.max(0, dem.votes - 1);
+        const rk = rankKeys[idx];
+        if (rk) dem[rk] = Math.max(0, (dem[rk] || 0) - 1);
+        dem.score = Math.max(0, Math.round((dem.score - prevSubScore) * 10) / 10);
+      }
+    });
+    prop.votesCount = Math.max(0, (prop.votesCount || 1) - 1);
+    if (curVote.comment && curVote.comment.trim() && Array.isArray(prop.residentVoices)) {
+      const voiceIdx = prop.residentVoices.findIndex(v => v.text === curVote.comment.trim() && v.date === "本日");
+      if (voiceIdx !== -1) prop.residentVoices.splice(voiceIdx, 1);
+    }
+    prop.topDemands.sort((a, b) => b.score - a.score);
+    delete state.currentUser.votedProps[propId];
+    notify();
+    return { success: true };
+  }
+
+  // 出店応募送信 (S08 / B01)
   function submitApplication(appData) {
+    const bizName = appData.businessName || state.currentUser.businessName || state.currentUser.company || "";
+    const plannedStoreName = appData.plannedStoreName || "";
+    const displayStoreName = plannedStoreName || appData.storeName || bizName || "新規店舗";
+    const contractKind = appData.contractKind || "LONG";
     const newApp = {
       id: "app-" + Date.now(),
       propId: appData.propId,
       propTitle: appData.propTitle,
       applicantId: state.currentUser.id,
-      applicantName: state.currentUser.name + (state.currentUser.company ? `（${state.currentUser.company}）` : ''),
+      applicantName: state.currentUser.name + (bizName ? `（${bizName}）` : ''),
+      businessName: bizName,
+      plannedStoreName: plannedStoreName,
       genreId: appData.genreId,
       genreName: data.SUBCATS[appData.genreId]?.name || "飲食店",
-      storeName: appData.storeName,
+      storeName: displayStoreName,
       targetRent: Number(appData.targetRent) || 0,
       targetOpenDate: appData.targetOpenDate || appData.requestedStartOn || "",
       message: appData.message || appData.concept || "",
       concept: appData.concept || appData.message || "",
-      contractKind: appData.contractKind || "REGULAR",
+      contractKind: contractKind,
       requestedStartOn: appData.requestedStartOn || appData.targetOpenDate || "",
-      requestedEndOn: appData.requestedEndOn || "",
+      requestedEndOn: contractKind === "POPUP" ? (appData.requestedEndOn || "") : "",
       viewingRequestedAt: appData.viewingRequestedAt || "",
-      status: "applying",
+      experienceYears: appData.experienceYears || "",
+      checks: Array.isArray(appData.checks) ? appData.checks : [],
+      ownerReply: "",
+      repliedAt: null,
+      status: "submitted",
       statusLabel: "新規応募受付中",
       submittedAt: new Date().toLocaleString("ja-JP"),
       hasDocuments: true
@@ -391,10 +507,10 @@ window.MachirikuStore = (function() {
     state.notifications.unshift({
       id: "notif-" + Date.now(),
       type: "application",
-      title: `【新規出店応募】${appData.storeName}様より応募がありました`,
+      title: `【新規出店応募】${displayStoreName}様より応募がありました`,
       body: `${prop?.title}に新しい出店申込が届きました。内容をご確認ください。`,
       date: "たった今",
-      linkScreen: "s10",
+      linkScreen: "o03",
       isRead: false
     });
 
@@ -402,14 +518,19 @@ window.MachirikuStore = (function() {
     return newApp;
   }
 
-  // 応募ステータス更新 (S10)
-  function updateApplicationStatus(appId, newStatus) {
+  // 応募ステータス・返信更新 (O03)
+  function updateApplicationStatus(appId, newStatus, ownerReply) {
     const app = state.applications.find(a => a.id === appId);
-    if (!app) return;
+    if (!app) return null;
     app.status = newStatus;
+    if (ownerReply !== undefined) {
+      app.ownerReply = ownerReply;
+      app.repliedAt = new Date().toLocaleString("ja-JP");
+    }
 
-    if (newStatus === "interviewing") {
-      app.statusLabel = "面談調整中";
+    if (newStatus === "consulting" || newStatus === "interviewing") {
+      app.status = "consulting";
+      app.statusLabel = "面談・相談中";
     } else if (newStatus === "approved") {
       app.statusLabel = "出店合意（契約調整へ）";
     } else if (newStatus === "contracted") {
@@ -417,13 +538,30 @@ window.MachirikuStore = (function() {
       const prop = getPropertyById(app.propId);
       if (prop) {
         prop.status = "preparing";
-        prop.statusLabel = `出店決定・開店準備中（${app.storeName}）`;
+        prop.listingStatus = "CONTRACTED";
+        prop.statusLabel = "出店決定・開店準備中";
+        if (app.storeName) prop.contractedStoreName = app.storeName;
       }
     } else if (newStatus === "rejected") {
-      app.statusLabel = "見送り（辞退済）";
+      app.statusLabel = "見送り";
+    } else if (newStatus === "withdrawn") {
+      app.statusLabel = "応募辞退";
     }
 
     notify();
+    return app;
+  }
+
+  // 応募要件チェック確認更新 (O03 / application_checks 準拠)
+  function updateApplicationCheck(appId, qualificationId, ownerCheckStatus, checkNote) {
+    const app = state.applications.find(a => a.id === appId);
+    if (!app || !Array.isArray(app.checks)) return null;
+    const chk = app.checks.find(c => c.qualificationId === qualificationId);
+    if (!chk) return null;
+    chk.ownerCheckStatus = ownerCheckStatus;
+    if (checkNote !== undefined) chk.checkNote = checkNote;
+    notify();
+    return chk;
   }
 
   // 出店計画公開 (S15)
@@ -610,60 +748,191 @@ window.MachirikuStore = (function() {
     return { success: true };
   }
 
-  // 物件新規登録 (S12)
+  function listingStatusToUiStatus(listingStatus) {
+    switch (listingStatus) {
+      case "DRAFT": return { status: "draft", statusLabel: "下書き" };
+      case "PAUSED": return { status: "paused", statusLabel: "公開一時停止" };
+      case "CONTRACTED": return { status: "preparing", statusLabel: "契約済み" };
+      case "OPEN":
+      default:
+        return { status: "voting", statusLabel: "募集中" };
+    }
+  }
+
+  function normalizePropertyPayload(propData, existing = {}) {
+    const areaSqm = propData.areaSqm != null && Number(propData.areaSqm) > 0
+      ? Math.round(Number(propData.areaSqm) * 100) / 100
+      : (propData.areaTsubo ? Math.round(Number(propData.areaTsubo) * 3.30578 * 100) / 100 : (existing.areaSqm || 50));
+    const areaTsubo = propData.areaTsubo != null && Number(propData.areaTsubo) > 0
+      ? Math.round(Number(propData.areaTsubo) * 100) / 100
+      : Math.round((areaSqm / 3.30578) * 100) / 100;
+
+    const prefecture = propData.prefecture || existing.prefecture || "栃木県";
+    const municipality = propData.municipality || existing.municipality || "宇都宮市";
+    const addressLine = propData.addressLine || existing.addressLine || "";
+    const address = propData.address || `${prefecture}${municipality}${addressLine}`.trim();
+
+    const lat = propData.lat != null && !isNaN(Number(propData.lat)) ? Number(propData.lat) : (existing.location?.lat || 36.5610);
+    const lng = propData.lng != null && !isNaN(Number(propData.lng)) ? Number(propData.lng) : (existing.location?.lng || 139.8830);
+
+    const listingStatus = propData.listingStatus || existing.listingStatus || "OPEN";
+    const uiStatus = listingStatusToUiStatus(listingStatus);
+
+    const floorStr = (propData.floorNumber && propData.totalFloors)
+      ? `${propData.floorNumber}/${propData.totalFloors}`
+      : (propData.floor || existing.floor || "1階");
+
+    const rawGallery = Array.isArray(propData.gallery)
+      ? propData.gallery
+      : (Array.isArray(existing.gallery) ? existing.gallery : []);
+    const galleryInput = rawGallery.filter(g => g && g.url && g.url !== "assets/property-placeholder.svg");
+
+    const firstExt = galleryInput.find(g => g.kind === "exterior") || galleryInput[0];
+    const coverImage = propData.coverImage || (firstExt && firstExt.url) || "assets/property-placeholder.svg";
+
+    const infra = propData.infrastructure || existing.infrastructure || {};
+    const facLabels = [];
+    (data.INFRASTRUCTURE_FACILITIES || []).forEach(item => {
+      if (infra[item.key]) facLabels.push(item.label);
+    });
+
+    return {
+      title: propData.title ?? existing.title ?? "",
+      prefecture,
+      municipality,
+      addressLine,
+      address,
+      access: propData.access ?? existing.access ?? "",
+      subtitle: propData.subtitle || `${floorStr} / ${areaSqm}㎡`,
+      rent: propData.rent != null ? Number(propData.rent) : (existing.rent || 0),
+      managementFee: propData.managementFee === "" || propData.managementFee == null ? null : Number(propData.managementFee),
+      deposit: propData.deposit ?? existing.deposit ?? "掲載なし（要確認）",
+      keyMoney: propData.keyMoney ?? existing.keyMoney ?? "掲載なし（要確認）",
+      securityDeposit: propData.securityDeposit ?? existing.securityDeposit ?? "掲載なし（要確認）",
+      areaSqm,
+      areaTsubo,
+      floorNumber: propData.floorNumber ?? existing.floorNumber ?? "1階",
+      totalFloors: propData.totalFloors ?? existing.totalFloors ?? "",
+      floor: floorStr,
+      structure: propData.structure ?? existing.structure ?? "",
+      builtYear: propData.builtYear ?? existing.builtYear ?? "",
+      handover: propData.handover ?? existing.handover ?? "相談",
+      permitStatus: propData.permitStatus || existing.permitStatus || "UNKNOWN",
+      permitStatusLabel: propData.permitStatus === "OBTAINED" ? "取得済み" : (propData.permitStatus === "NOT_OBTAINED" ? "未取得（取得相談可）" : "要確認"),
+      listingStatus,
+      status: uiStatus.status,
+      statusLabel: uiStatus.statusLabel,
+      condition: propData.condition ?? existing.condition ?? "業種相談可",
+      description: propData.description ?? existing.description ?? "",
+      listingUrl: propData.listingUrl ?? existing.listingUrl ?? "",
+      infrastructure: infra,
+      facilities: facLabels.length ? facLabels : (propData.facilities || existing.facilities || []),
+      allowedIndustries: Array.isArray(propData.allowedIndustries) ? propData.allowedIndustries : (existing.allowedIndustries || []),
+      contractTerms: propData.contractTerms || existing.contractTerms || {
+        longEnabled: true,
+        popupEnabled: false,
+        minDays: 3,
+        maxDays: 30,
+        dailyRentYen: null
+      },
+      distanceScaleKm: propData.distanceScaleKm != null ? Number(propData.distanceScaleKm) : (existing.distanceScaleKm || 10),
+      location: { lat, lng },
+      mapCoords: { x: 420, y: 280, lat, lng },
+      coverImage,
+      gallery: galleryInput.map((g, i) => ({ ...g, index: i })),
+      photosEdited: Array.isArray(propData.gallery) ? true : Boolean(existing.photosEdited),
+      ...(existing.galleryVersion ? { galleryVersion: existing.galleryVersion } : {})
+    };
+  }
+
+  // 物件新規登録 (O04 / O05)
   function registerProperty(propData) {
+    const normalized = normalizePropertyPayload(propData);
     const newProp = {
       id: "prop-" + Date.now(),
-      code: "UT-NEW-" + Math.floor(Math.random() * 90 + 10),
-      title: propData.title,
-      subtitle: propData.subtitle || "宇都宮中心市街地の新規登録空き店舗",
-      address: propData.address,
-      access: propData.access,
-      rent: Number(propData.rent),
-      managementFee: Number(propData.managementFee) || 0,
-      deposit: propData.deposit || "敷金2ヶ月 / 礼金1ヶ月",
-      securityDeposit: propData.securityDeposit || "30万円",
-      areaTsubo: Number(propData.areaTsubo),
-      areaSqm: Math.round(Number(propData.areaTsubo) * 3.30578 * 100) / 100,
-      floor: propData.floor || "1階路面",
-      structure: propData.structure || "鉄骨造",
-      builtYear: propData.builtYear || "1995年築",
-      handover: propData.handover || "相談",
-      condition: propData.condition || "業種相談可",
-      facilities: propData.facilities || ["都市ガス", "給排水"],
-      status: "voting",
-      statusLabel: "掲載開始・投票受付中",
+      code: "UT-NEW-" + Math.floor(Math.random() * 900 + 100),
+      ...normalized,
       isPr: false,
       ownerId: state.currentUser.id,
       ownerName: state.currentUser.name,
-      mapCoords: { x: 420, y: 280, lat: 36.5610, lng: 139.8830 },
-      coverImage: "assets/prop_orion.svg",
-      gallery: [{ label: "店舗外観", type: "facade" }],
       votesCount: 0,
       demandScore: 0,
       topDemands: [],
-      residentVoices: [],
-      description: propData.description || ""
+      residentVoices: []
     };
 
     state.properties.unshift(newProp);
-    if (!state.currentUser.ownedPropIds) state.currentUser.ownedPropIds = [];
-    state.currentUser.ownedPropIds.push(newProp.id);
+    if (!state.users.owner.ownedPropIds) state.users.owner.ownedPropIds = [];
+    if (!state.users.owner.ownedPropIds.includes(newProp.id)) {
+      state.users.owner.ownedPropIds.push(newProp.id);
+    }
+    if (state.currentUser && state.currentUser !== state.users.owner) {
+      if (!state.currentUser.ownedPropIds) state.currentUser.ownedPropIds = [];
+      if (!state.currentUser.ownedPropIds.includes(newProp.id)) {
+        state.currentUser.ownedPropIds.push(newProp.id);
+      }
+    }
 
     notify();
     return newProp;
   }
 
-  // 物件更新 (S12 物件編集)
+  // 物件更新 (O06 / O07)
   function updateProperty(propId, updateData) {
     const prop = getPropertyById(propId);
     if (!prop) return null;
-    Object.assign(prop, updateData);
-    if (updateData.areaTsubo) {
-      prop.areaSqm = Math.round(Number(updateData.areaTsubo) * 3.30578 * 100) / 100;
-    }
+    const normalized = normalizePropertyPayload(updateData, prop);
+    Object.assign(prop, normalized);
     notify();
     return prop;
+  }
+
+  // 公開ステータス切替 (O01)
+  function togglePropertyStatus(propId, nextListingStatus) {
+    const prop = getPropertyById(propId);
+    if (!prop) return null;
+    const uiStatus = listingStatusToUiStatus(nextListingStatus);
+    prop.listingStatus = nextListingStatus;
+    prop.status = uiStatus.status;
+    prop.statusLabel = uiStatus.statusLabel;
+    notify();
+    return prop;
+  }
+
+  // 削除影響件数の集計 (O08)
+  function getPropertyDeletionImpact(propId) {
+    const prop = getPropertyById(propId);
+    if (!prop) return { votesCount: 0, appsCount: 0, activeAppsCount: 0, followsCount: 0 };
+    const apps = (state.applications || []).filter(a => a.propId === propId);
+    const activeApps = apps.filter(a => a.status !== "rejected" && a.status !== "withdrawn");
+    let followsCount = 0;
+    Object.values(state.users || {}).forEach(u => {
+      if (Array.isArray(u.followedProps) && u.followedProps.includes(propId)) followsCount += 1;
+    });
+    return {
+      votesCount: Number(prop.votesCount) || 0,
+      appsCount: apps.length,
+      activeAppsCount: activeApps.length,
+      followsCount
+    };
+  }
+
+  // オーナーデモサンプル物件割当（初期状態が空のときの確認補助）
+  function assignDemoOwnerProperties() {
+    const targetIds = (state.properties || []).slice(0, 2).map(p => p.id);
+    if (!state.users.owner.ownedPropIds) state.users.owner.ownedPropIds = [];
+    targetIds.forEach(id => {
+      if (!state.users.owner.ownedPropIds.includes(id)) {
+        state.users.owner.ownedPropIds.push(id);
+      }
+      const p = getPropertyById(id);
+      if (p) p.ownerId = state.users.owner.id;
+    });
+    if (state.currentRole === "owner") {
+      state.currentUser.ownedPropIds = [...state.users.owner.ownedPropIds];
+    }
+    notify();
+    return targetIds;
   }
 
   // 各エンティティID指定取得ヘルパー
@@ -679,11 +948,19 @@ window.MachirikuStore = (function() {
     return state.applications.find(a => a.id === id);
   }
 
-  // 物件削除
+  // 物件削除 (O08 / O09)
   function deleteProperty(propId) {
     const idx = state.properties.findIndex(p => p.id === propId);
     if (idx !== -1) {
       state.properties.splice(idx, 1);
+      Object.values(state.users || {}).forEach(u => {
+        if (Array.isArray(u.ownedPropIds)) {
+          u.ownedPropIds = u.ownedPropIds.filter(id => id !== propId);
+        }
+        if (Array.isArray(u.followedProps)) {
+          u.followedProps = u.followedProps.filter(id => id !== propId);
+        }
+      });
       notify();
       return true;
     }
@@ -766,8 +1043,10 @@ window.MachirikuStore = (function() {
     setFilters,
     toggleFollowProperty,
     submitVote,
+    withdrawVote,
     submitApplication,
     updateApplicationStatus,
+    updateApplicationCheck,
     publishStorePlan,
     createSurvey,
     submitSurveyResponse,
@@ -776,6 +1055,9 @@ window.MachirikuStore = (function() {
     applyPrAdvertisement,
     registerProperty,
     updateProperty,
+    togglePropertyStatus,
+    getPropertyDeletionImpact,
+    assignDemoOwnerProperties,
     deleteProperty,
     getSurveyById,
     getCouponById,

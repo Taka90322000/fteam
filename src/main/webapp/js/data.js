@@ -78,8 +78,22 @@ window.MACHIRIKU_DATA = (function() {
     });
   });
 
+  // 基本インフラ設備の共通定義（DBのboolean/マスタ列と1対1対応）
+  const INFRASTRUCTURE_FACILITIES = [
+    { key: "hasInuki", label: "居抜き" },
+    { key: "hasParking", label: "駐車場あり" },
+    { key: "hasBarrierFree", label: "バリアフリー" },
+    { key: "hasPrivateToilet", label: "専用トイレ" },
+    { key: "hasIndividualAc", label: "個別空調" },
+    { key: "hasPower", label: "動力あり" },
+    { key: "hasCityGas", label: "都市ガス" },
+    { key: "hasWaterDrainage", label: "給排水" },
+    { key: "hasGreaseTrap", label: "グリストラップ" },
+    { key: "hasExhaustDuct", label: "排気ダクト" }
+  ];
+
   // Virtual property catalog. Galleries: tools/update-generated-galleries.cjs
-  const DATASET_VERSION = "machiriku-v20261111";
+  const DATASET_VERSION = "machiriku-v20261116b";
   const PROPERTIES = [
   {
     "id": "prop-orion-01",
@@ -122,11 +136,31 @@ window.MACHIRIKU_DATA = (function() {
     "areaSqm": 52.8,
     "areaTsuboBasis": "calculated (52.8 sqm / 3.305785)",
     "floor": "1階/4階建",
+    "floorNumber": "1階",
+    "totalFloors": "4階建",
     "structure": "RC(鉄筋コンクリート造)",
     "builtYear": "2008年3月",
     "handover": "相談（即時可）",
     "listingStatusRaw": "空き店舗（居抜き）",
     "condition": "元カフェ・ベーカリー居抜き（厨房設備残置・譲渡無償）",
+    "infrastructure": {
+      "hasInuki": true,
+      "hasParking": false,
+      "hasBarrierFree": false,
+      "hasPrivateToilet": true,
+      "hasIndividualAc": false,
+      "hasPower": true,
+      "hasCityGas": true,
+      "hasWaterDrainage": true,
+      "hasGreaseTrap": true,
+      "hasExhaustDuct": true
+    },
+    "featureTags": [
+      "アーケード商店街直結（雨天集客力高）",
+      "前面ガラス張りファサード",
+      "木目調エントランス",
+      "即引渡し可"
+    ],
     "permittedUses": [
       "カフェ・喫茶店",
       "ベーカリー",
@@ -187,25 +221,88 @@ window.MACHIRIKU_DATA = (function() {
       }
     ],
     "votesCount": 342,
-    "demandScore": 342,
+    "demandScore": 435.6,
     "topDemands": [
       {
         "subcatId": "I0101",
         "label": "カフェ・喫茶店",
-        "votes": 148,
-        "score": 148
+        "votes": 160,
+        "rank1Votes": 110,
+        "rank2Votes": 36,
+        "rank3Votes": 14,
+        "score": 105.9
       },
       {
         "subcatId": "I0107",
         "label": "パン屋・ベーカリー",
-        "votes": 112,
-        "score": 112
+        "votes": 148,
+        "rank1Votes": 78,
+        "rank2Votes": 48,
+        "rank3Votes": 22,
+        "score": 86.2
       },
       {
         "subcatId": "I0106",
         "label": "弁当・テイクアウト",
-        "votes": 82,
-        "score": 82
+        "votes": 162,
+        "rank1Votes": 42,
+        "rank2Votes": 68,
+        "rank3Votes": 52,
+        "score": 72.8
+      },
+      {
+        "subcatId": "I0203",
+        "label": "雑貨・生活用品店",
+        "votes": 114,
+        "rank1Votes": 38,
+        "rank2Votes": 42,
+        "rank3Votes": 34,
+        "score": 55.1
+      },
+      {
+        "subcatId": "I0205",
+        "label": "書店・文具店",
+        "votes": 86,
+        "rank1Votes": 26,
+        "rank2Votes": 32,
+        "rank3Votes": 28,
+        "score": 39.1
+      },
+      {
+        "subcatId": "I0206",
+        "label": "花屋・フラワーショップ",
+        "votes": 64,
+        "rank1Votes": 18,
+        "rank2Votes": 22,
+        "rank3Votes": 24,
+        "score": 27.6
+      },
+      {
+        "subcatId": "I0402",
+        "label": "コワーキングスペース",
+        "votes": 48,
+        "rank1Votes": 14,
+        "rank2Votes": 18,
+        "rank3Votes": 16,
+        "score": 21.9
+      },
+      {
+        "subcatId": "I0503",
+        "label": "文化・体験教室",
+        "votes": 42,
+        "rank1Votes": 10,
+        "rank2Votes": 14,
+        "rank3Votes": 18,
+        "score": 16.9
+      },
+      {
+        "subcatId": "I0602",
+        "label": "修理サービス",
+        "votes": 26,
+        "rank1Votes": 6,
+        "rank2Votes": 8,
+        "rank3Votes": 12,
+        "score": 10.1
       }
     ],
     "sourceImages": [],
@@ -271,11 +368,32 @@ window.MACHIRIKU_DATA = (function() {
     "areaSqm": 66.2,
     "areaTsuboBasis": "calculated (66.2 sqm / 3.305785)",
     "floor": "1階/8階建",
+    "floorNumber": "1階",
+    "totalFloors": "8階建",
     "structure": "SRC(鉄骨鉄筋コンクリート造)",
     "builtYear": "2015年9月",
     "handover": "即時",
     "listingStatusRaw": "空室（元調剤薬局・物販居抜き）",
     "condition": "元調剤薬局居抜き（受付カウンター、待合、バックヤード残置）",
+    "infrastructure": {
+      "hasInuki": true,
+      "hasParking": false,
+      "hasBarrierFree": true,
+      "hasPrivateToilet": true,
+      "hasIndividualAc": true,
+      "hasPower": false,
+      "hasCityGas": false,
+      "hasWaterDrainage": true,
+      "hasGreaseTrap": false,
+      "hasExhaustDuct": false
+    },
+    "featureTags": [
+      "宇都宮大通り交差点角地（圧倒的視認性）",
+      "全自動ドア",
+      "バックヤード・調剤室ブース",
+      "ビル共用ゴミ置場",
+      "機械警備システム"
+    ],
     "permittedUses": [
       "クリニック",
       "調剤薬局・ドラッグストア",
@@ -335,25 +453,79 @@ window.MACHIRIKU_DATA = (function() {
       }
     ],
     "votesCount": 289,
-    "demandScore": 289,
+    "demandScore": 371.9,
     "topDemands": [
       {
         "subcatId": "I0701",
         "label": "クリニック",
-        "votes": 120,
-        "score": 120
+        "votes": 146,
+        "rank1Votes": 108,
+        "rank2Votes": 26,
+        "rank3Votes": 12,
+        "score": 100.5
       },
       {
         "subcatId": "I0201",
         "label": "コンビニ・小型スーパー",
-        "votes": 98,
-        "score": 98
+        "votes": 150,
+        "rank1Votes": 72,
+        "rank2Votes": 54,
+        "rank3Votes": 24,
+        "score": 85.9
+      },
+      {
+        "subcatId": "I0101",
+        "label": "カフェ・喫茶店",
+        "votes": 136,
+        "rank1Votes": 32,
+        "rank2Votes": 56,
+        "rank3Votes": 48,
+        "score": 59.2
       },
       {
         "subcatId": "I0601",
-        "label": "生活サービス",
-        "votes": 71,
-        "score": 71
+        "label": "クリーニング店",
+        "votes": 94,
+        "rank1Votes": 28,
+        "rank2Votes": 36,
+        "rank3Votes": 30,
+        "score": 43.9
+      },
+      {
+        "subcatId": "I0106",
+        "label": "弁当・テイクアウト",
+        "votes": 86,
+        "rank1Votes": 20,
+        "rank2Votes": 32,
+        "rank3Votes": 34,
+        "score": 36.1
+      },
+      {
+        "subcatId": "I0402",
+        "label": "コワーキングスペース",
+        "votes": 48,
+        "rank1Votes": 14,
+        "rank2Votes": 16,
+        "rank3Votes": 18,
+        "score": 22.0
+      },
+      {
+        "subcatId": "I0702",
+        "label": "福祉・介護サービス",
+        "votes": 32,
+        "rank1Votes": 10,
+        "rank2Votes": 12,
+        "rank3Votes": 10,
+        "score": 14.5
+      },
+      {
+        "subcatId": "I0602",
+        "label": "修理サービス",
+        "votes": 27,
+        "rank1Votes": 5,
+        "rank2Votes": 8,
+        "rank3Votes": 14,
+        "score": 9.8
       }
     ],
     "sourceImages": [],
@@ -415,11 +587,32 @@ window.MACHIRIKU_DATA = (function() {
     "areaSqm": 59.4,
     "areaTsuboBasis": "calculated (59.4 sqm / 3.305785)",
     "floor": "2階/3階建",
+    "floorNumber": "2階",
+    "totalFloors": "3階建",
     "structure": "鉄骨造",
     "builtYear": "2012年7月",
     "handover": "即時",
     "listingStatusRaw": "空き店舗（元イタリアンバル居抜き）",
     "condition": "元イタリアンバル居抜き（厨房設備・カウンター・エアコン完備）",
+    "infrastructure": {
+      "hasInuki": true,
+      "hasParking": false,
+      "hasBarrierFree": false,
+      "hasPrivateToilet": true,
+      "hasIndividualAc": true,
+      "hasPower": false,
+      "hasCityGas": true,
+      "hasWaterDrainage": true,
+      "hasGreaseTrap": true,
+      "hasExhaustDuct": true
+    },
+    "featureTags": [
+      "東武宇都宮駅西口徒歩2分の抜群の集客立地",
+      "道路に面した専用独立直通階段",
+      "開放的なオープンテラス・バルコニー席",
+      "業務用給湯器",
+      "深夜営業相談可"
+    ],
     "permittedUses": [
       "居酒屋・バー",
       "レストラン",
@@ -485,25 +678,79 @@ window.MACHIRIKU_DATA = (function() {
       }
     ],
     "votesCount": 315,
-    "demandScore": 315,
+    "demandScore": 403.1,
     "topDemands": [
       {
         "subcatId": "I0105",
         "label": "居酒屋・バー",
-        "votes": 156,
-        "score": 156
+        "votes": 168,
+        "rank1Votes": 118,
+        "rank2Votes": 34,
+        "rank3Votes": 16,
+        "score": 111.7
       },
       {
         "subcatId": "I0102",
         "label": "レストラン",
-        "votes": 104,
-        "score": 104
+        "votes": 158,
+        "rank1Votes": 82,
+        "rank2Votes": 52,
+        "rank3Votes": 24,
+        "score": 91.5
+      },
+      {
+        "subcatId": "I0103",
+        "label": "ラーメン・麺類",
+        "votes": 138,
+        "rank1Votes": 38,
+        "rank2Votes": 58,
+        "rank3Votes": 42,
+        "score": 63.2
       },
       {
         "subcatId": "I0101",
         "label": "カフェ・喫茶店",
-        "votes": 55,
-        "score": 55
+        "votes": 118,
+        "rank1Votes": 28,
+        "rank2Votes": 46,
+        "rank3Votes": 44,
+        "score": 50.2
+      },
+      {
+        "subcatId": "I0104",
+        "label": "定食・食堂",
+        "votes": 86,
+        "rank1Votes": 22,
+        "rank2Votes": 34,
+        "rank3Votes": 30,
+        "score": 38.6
+      },
+      {
+        "subcatId": "I0106",
+        "label": "弁当・テイクアウト",
+        "votes": 56,
+        "rank1Votes": 12,
+        "rank2Votes": 20,
+        "rank3Votes": 24,
+        "score": 22.5
+      },
+      {
+        "subcatId": "I0402",
+        "label": "コワーキングスペース",
+        "votes": 35,
+        "rank1Votes": 9,
+        "rank2Votes": 12,
+        "rank3Votes": 14,
+        "score": 14.5
+      },
+      {
+        "subcatId": "I0502",
+        "label": "娯楽施設",
+        "votes": 28,
+        "rank1Votes": 6,
+        "rank2Votes": 10,
+        "rank3Votes": 12,
+        "score": 10.9
       }
     ],
     "sourceImages": [],
@@ -565,11 +812,33 @@ window.MACHIRIKU_DATA = (function() {
     "areaSqm": 41.2,
     "areaTsuboBasis": "calculated (41.2 sqm / 3.305785)",
     "floor": "1階/3階建",
+    "floorNumber": "1階",
+    "totalFloors": "3階建",
     "structure": "RC(鉄筋コンクリート造)",
     "builtYear": "2016年11月",
     "handover": "即時",
     "listingStatusRaw": "空き店舗（元セレクトショップ居抜き）",
     "condition": "元アパレル・雑貨店（コンクリート打放し・アイアン什器・配線ダクト）",
+    "infrastructure": {
+      "hasInuki": true,
+      "hasParking": false,
+      "hasBarrierFree": true,
+      "hasPrivateToilet": true,
+      "hasIndividualAc": false,
+      "hasPower": false,
+      "hasCityGas": false,
+      "hasWaterDrainage": false,
+      "hasGreaseTrap": false,
+      "hasExhaustDuct": false
+    },
+    "featureTags": [
+      "宇都宮カルチャー発信地「ユニオン通り」路面店",
+      "コンクリート打ち放し×黒アイアンの洗練デザイン",
+      "天井高3.2mの開放感とライティングレール",
+      "モルタル仕上げフロア",
+      "試着室スペース・バックヤード",
+      "自動ドア"
+    ],
     "permittedUses": [
       "衣料品・セレクトショップ",
       "雑貨・生活用品店",
@@ -629,25 +898,79 @@ window.MACHIRIKU_DATA = (function() {
       }
     ],
     "votesCount": 264,
-    "demandScore": 264,
+    "demandScore": 336.0,
     "topDemands": [
       {
         "subcatId": "I0204",
         "label": "衣料品・セレクトショップ",
-        "votes": 138,
-        "score": 138
+        "votes": 148,
+        "rank1Votes": 104,
+        "rank2Votes": 30,
+        "rank3Votes": 14,
+        "score": 101.0
       },
       {
         "subcatId": "I0203",
         "label": "雑貨・生活用品店",
-        "votes": 86,
-        "score": 86
+        "votes": 138,
+        "rank1Votes": 68,
+        "rank2Votes": 48,
+        "rank3Votes": 22,
+        "score": 79.6
       },
       {
         "subcatId": "I0101",
         "label": "カフェ・喫茶店",
-        "votes": 40,
-        "score": 40
+        "votes": 118,
+        "rank1Votes": 34,
+        "rank2Votes": 46,
+        "rank3Votes": 38,
+        "score": 54.8
+      },
+      {
+        "subcatId": "I0205",
+        "label": "書店・文具店",
+        "votes": 84,
+        "rank1Votes": 24,
+        "rank2Votes": 32,
+        "rank3Votes": 28,
+        "score": 38.2
+      },
+      {
+        "subcatId": "I0301",
+        "label": "美容室・ヘアサロン",
+        "votes": 58,
+        "rank1Votes": 16,
+        "rank2Votes": 22,
+        "rank3Votes": 20,
+        "score": 25.3
+      },
+      {
+        "subcatId": "I0501",
+        "label": "ゲーム・ホビーショップ",
+        "votes": 44,
+        "rank1Votes": 10,
+        "rank2Votes": 16,
+        "rank3Votes": 18,
+        "score": 18.3
+      },
+      {
+        "subcatId": "I0206",
+        "label": "花屋・フラワーショップ",
+        "votes": 33,
+        "rank1Votes": 5,
+        "rank2Votes": 12,
+        "rank3Votes": 16,
+        "score": 12.1
+      },
+      {
+        "subcatId": "I0602",
+        "label": "修理サービス",
+        "votes": 19,
+        "rank1Votes": 3,
+        "rank2Votes": 6,
+        "rank3Votes": 10,
+        "score": 6.7
       }
     ],
     "sourceImages": [],
@@ -709,11 +1032,34 @@ window.MACHIRIKU_DATA = (function() {
     "areaSqm": 74.5,
     "areaTsuboBasis": "calculated (74.5 sqm / 3.305785)",
     "floor": "2階/6階建",
+    "floorNumber": "2階",
+    "totalFloors": "6階建",
     "structure": "S造(鉄骨造)",
     "builtYear": "2021年4月",
     "handover": "相談（2026年11月可）",
     "listingStatusRaw": "空室（築浅オフィス・コワーキング）",
     "condition": "築浅美室（OAフロア、個別空調、男女別トイレ、EV完備）",
+    "infrastructure": {
+      "hasInuki": false,
+      "hasParking": false,
+      "hasBarrierFree": true,
+      "hasPrivateToilet": false,
+      "hasIndividualAc": true,
+      "hasPower": false,
+      "hasCityGas": false,
+      "hasWaterDrainage": true,
+      "hasGreaseTrap": false,
+      "hasExhaustDuct": false
+    },
+    "featureTags": [
+      "LRT東宿郷駅徒歩2分の超好アクセス",
+      "築浅ガラスカーテンウォール外観",
+      "OAフロア（床下配線）完備",
+      "男女別共用トイレ・給湯室",
+      "エレベーター2基完備",
+      "機械警備・非接触ICカードキー",
+      "光ファイバー引き込み済み"
+    ],
     "permittedUses": [
       "コワーキングスペース",
       "IT・デザインオフィス",
@@ -773,25 +1119,79 @@ window.MACHIRIKU_DATA = (function() {
       }
     ],
     "votesCount": 198,
-    "demandScore": 198,
+    "demandScore": 258.6,
     "topDemands": [
       {
         "subcatId": "I0402",
         "label": "コワーキングスペース",
-        "votes": 115,
-        "score": 115
+        "votes": 120,
+        "rank1Votes": 86,
+        "rank2Votes": 24,
+        "rank3Votes": 10,
+        "score": 83.8
       },
       {
         "subcatId": "I0401",
         "label": "学習塾・スクール",
-        "votes": 52,
-        "score": 52
+        "votes": 92,
+        "rank1Votes": 42,
+        "rank2Votes": 34,
+        "rank3Votes": 16,
+        "score": 51.1
       },
       {
         "subcatId": "I0101",
         "label": "カフェ・喫茶店",
-        "votes": 31,
-        "score": 31
+        "votes": 94,
+        "rank1Votes": 24,
+        "rank2Votes": 38,
+        "rank3Votes": 32,
+        "score": 41.7
+      },
+      {
+        "subcatId": "I0106",
+        "label": "弁当・テイクアウト",
+        "votes": 72,
+        "rank1Votes": 18,
+        "rank2Votes": 26,
+        "rank3Votes": 28,
+        "score": 30.7
+      },
+      {
+        "subcatId": "I0201",
+        "label": "コンビニ・小型スーパー",
+        "votes": 54,
+        "rank1Votes": 12,
+        "rank2Votes": 20,
+        "rank3Votes": 22,
+        "score": 22.0
+      },
+      {
+        "subcatId": "I0701",
+        "label": "クリニック",
+        "votes": 30,
+        "rank1Votes": 8,
+        "rank2Votes": 12,
+        "rank3Votes": 10,
+        "score": 13.5
+      },
+      {
+        "subcatId": "I0304",
+        "label": "ジム・フィットネススタジオ",
+        "votes": 25,
+        "rank1Votes": 5,
+        "rank2Votes": 8,
+        "rank3Votes": 12,
+        "score": 9.5
+      },
+      {
+        "subcatId": "I0503",
+        "label": "文化・体験教室",
+        "votes": 17,
+        "rank1Votes": 3,
+        "rank2Votes": 6,
+        "rank3Votes": 8,
+        "score": 6.3
       }
     ],
     "sourceImages": [],
@@ -853,11 +1253,31 @@ window.MACHIRIKU_DATA = (function() {
     "areaSqm": 46.5,
     "areaTsuboBasis": "calculated (46.5 sqm / 3.305785)",
     "floor": "1階/3階建",
+    "floorNumber": "1階",
+    "totalFloors": "3階建",
     "structure": "RC(鉄筋コンクリート造)",
     "builtYear": "2010年5月",
     "handover": "相談",
     "listingStatusRaw": "空き店舗（元フレンチビストロ居抜き）",
     "condition": "元ビストロ・カフェ居抜き（テラス席、タイル厨房カウンター、ダクト）",
+    "infrastructure": {
+      "hasInuki": true,
+      "hasParking": false,
+      "hasBarrierFree": false,
+      "hasPrivateToilet": true,
+      "hasIndividualAc": true,
+      "hasPower": false,
+      "hasCityGas": true,
+      "hasWaterDrainage": true,
+      "hasGreaseTrap": true,
+      "hasExhaustDuct": true
+    },
+    "featureTags": [
+      "釜川沿いのせせらぎ遊歩道直結",
+      "ウッドデッキ調の専用親水テラススペース",
+      "赤レンガタイル調の温もりある外観",
+      "オープンキッチン"
+    ],
     "permittedUses": [
       "レストラン",
       "カフェ・喫茶店",
@@ -924,25 +1344,79 @@ window.MACHIRIKU_DATA = (function() {
       }
     ],
     "votesCount": 278,
-    "demandScore": 278,
+    "demandScore": 348.8,
     "topDemands": [
       {
         "subcatId": "I0101",
         "label": "カフェ・喫茶店",
-        "votes": 132,
-        "score": 132
+        "votes": 148,
+        "rank1Votes": 102,
+        "rank2Votes": 32,
+        "rank3Votes": 14,
+        "score": 99.1
       },
       {
         "subcatId": "I0102",
         "label": "レストラン",
-        "votes": 95,
-        "score": 95
+        "votes": 138,
+        "rank1Votes": 72,
+        "rank2Votes": 46,
+        "rank3Votes": 20,
+        "score": 81.3
       },
       {
         "subcatId": "I0105",
         "label": "居酒屋・バー",
-        "votes": 51,
-        "score": 51
+        "votes": 106,
+        "rank1Votes": 40,
+        "rank2Votes": 38,
+        "rank3Votes": 28,
+        "score": 53.4
+      },
+      {
+        "subcatId": "I0107",
+        "label": "パン屋・ベーカリー",
+        "votes": 102,
+        "rank1Votes": 26,
+        "rank2Votes": 40,
+        "rank3Votes": 36,
+        "score": 45.0
+      },
+      {
+        "subcatId": "I0206",
+        "label": "花屋・フラワーショップ",
+        "votes": 64,
+        "rank1Votes": 18,
+        "rank2Votes": 24,
+        "rank3Votes": 22,
+        "score": 29.6
+      },
+      {
+        "subcatId": "I0203",
+        "label": "雑貨・生活用品店",
+        "votes": 48,
+        "rank1Votes": 10,
+        "rank2Votes": 18,
+        "rank3Votes": 20,
+        "score": 19.3
+      },
+      {
+        "subcatId": "I0205",
+        "label": "書店・文具店",
+        "votes": 32,
+        "rank1Votes": 6,
+        "rank2Votes": 12,
+        "rank3Votes": 14,
+        "score": 12.4
+      },
+      {
+        "subcatId": "I0603",
+        "label": "ペット関連店舗",
+        "votes": 24,
+        "rank1Votes": 4,
+        "rank2Votes": 8,
+        "rank3Votes": 12,
+        "score": 8.7
       }
     ],
     "sourceImages": [],
@@ -1004,11 +1478,32 @@ window.MACHIRIKU_DATA = (function() {
     "areaSqm": 49.6,
     "areaTsuboBasis": "calculated (49.6 sqm / 3.305785)",
     "floor": "1階/3階建",
+    "floorNumber": "1階",
+    "totalFloors": "3階建",
     "structure": "鉄骨造",
     "builtYear": "2014年8月",
     "handover": "相談（即時可）",
     "listingStatusRaw": "空き店舗（元和菓子甘味処居抜き）",
     "condition": "元和カフェ・甘味処居抜き（木製格子戸、小上がり畳、茶房カウンター）",
+    "infrastructure": {
+      "hasInuki": true,
+      "hasParking": false,
+      "hasBarrierFree": false,
+      "hasPrivateToilet": true,
+      "hasIndividualAc": true,
+      "hasPower": false,
+      "hasCityGas": true,
+      "hasWaterDrainage": true,
+      "hasGreaseTrap": false,
+      "hasExhaustDuct": false
+    },
+    "featureTags": [
+      "二荒山神社門前町・バンバ通りの石畳沿い",
+      "無垢材格子戸ファサード・暖簾掛け",
+      "小上がり畳スペースと無垢一枚板風カウンター",
+      "和モダン手洗い洗面",
+      "参拝客・観光客の自然な流入動線"
+    ],
     "permittedUses": [
       "和菓子・甘味処",
       "日本茶カフェ",
@@ -1068,25 +1563,79 @@ window.MACHIRIKU_DATA = (function() {
       }
     ],
     "votesCount": 295,
-    "demandScore": 295,
+    "demandScore": 368.7,
     "topDemands": [
       {
         "subcatId": "I0101",
         "label": "カフェ・喫茶店",
-        "votes": 142,
-        "score": 142
+        "votes": 156,
+        "rank1Votes": 106,
+        "rank2Votes": 34,
+        "rank3Votes": 16,
+        "score": 102.3
       },
       {
         "subcatId": "I0107",
         "label": "パン屋・ベーカリー",
-        "votes": 88,
-        "score": 88
+        "votes": 134,
+        "rank1Votes": 68,
+        "rank2Votes": 42,
+        "rank3Votes": 24,
+        "score": 76.3
       },
       {
         "subcatId": "I0503",
         "label": "文化・体験教室",
-        "votes": 65,
-        "score": 65
+        "votes": 102,
+        "rank1Votes": 46,
+        "rank2Votes": 34,
+        "rank3Votes": 22,
+        "score": 54.8
+      },
+      {
+        "subcatId": "I0104",
+        "label": "定食・食堂",
+        "votes": 112,
+        "rank1Votes": 30,
+        "rank2Votes": 44,
+        "rank3Votes": 38,
+        "score": 50.2
+      },
+      {
+        "subcatId": "I0203",
+        "label": "雑貨・生活用品店",
+        "votes": 82,
+        "rank1Votes": 20,
+        "rank2Votes": 32,
+        "rank3Votes": 30,
+        "score": 35.2
+      },
+      {
+        "subcatId": "I0106",
+        "label": "弁当・テイクアウト",
+        "votes": 60,
+        "rank1Votes": 12,
+        "rank2Votes": 22,
+        "rank3Votes": 26,
+        "score": 23.8
+      },
+      {
+        "subcatId": "I0206",
+        "label": "花屋・フラワーショップ",
+        "votes": 40,
+        "rank1Votes": 8,
+        "rank2Votes": 14,
+        "rank3Votes": 18,
+        "score": 15.5
+      },
+      {
+        "subcatId": "I0204",
+        "label": "衣料品・セレクトショップ",
+        "votes": 29,
+        "rank1Votes": 5,
+        "rank2Votes": 10,
+        "rank3Votes": 14,
+        "score": 10.6
       }
     ],
     "sourceImages": [],
@@ -1148,11 +1697,31 @@ window.MACHIRIKU_DATA = (function() {
     "areaSqm": 57.2,
     "areaTsuboBasis": "calculated (57.2 sqm / 3.305785)",
     "floor": "1階/1階建",
+    "floorNumber": "1階",
+    "totalFloors": "1階建（平屋）",
     "structure": "大谷石造・木造平屋",
     "builtYear": "1952年築（2020年耐震・設備リノベーション済）",
     "handover": "即時",
     "listingStatusRaw": "空室（大谷石蔵リノベスタジオ）",
     "condition": "大谷石現し内装、モルタル土間床、天井高4.0m、耐震補強済",
+    "infrastructure": {
+      "hasInuki": false,
+      "hasParking": true,
+      "hasBarrierFree": false,
+      "hasPrivateToilet": true,
+      "hasIndividualAc": true,
+      "hasPower": false,
+      "hasCityGas": false,
+      "hasWaterDrainage": true,
+      "hasGreaseTrap": false,
+      "hasExhaustDuct": false
+    },
+    "featureTags": [
+      "宇都宮の文化遺産「大谷石造り」の歴史的蔵建築",
+      "2020年耐震改修・水回り設備完全刷新済み",
+      "天井高約4.0mの木造トラス大空間",
+      "作品展示用スポットライトライティングレール"
+    ],
     "permittedUses": [
       "クリエイティブスタジオ",
       "アートギャラリー",
@@ -1226,25 +1795,79 @@ window.MACHIRIKU_DATA = (function() {
       }
     ],
     "votesCount": 185,
-    "demandScore": 185,
+    "demandScore": 237.6,
     "topDemands": [
       {
         "subcatId": "I0503",
         "label": "文化・体験教室",
-        "votes": 92,
-        "score": 92
+        "votes": 104,
+        "rank1Votes": 72,
+        "rank2Votes": 22,
+        "rank3Votes": 10,
+        "score": 70.6
       },
       {
         "subcatId": "I0203",
         "label": "雑貨・生活用品店",
-        "votes": 56,
-        "score": 56
+        "votes": 94,
+        "rank1Votes": 42,
+        "rank2Votes": 34,
+        "rank3Votes": 18,
+        "score": 51.5
       },
       {
         "subcatId": "I0101",
         "label": "カフェ・喫茶店",
+        "votes": 94,
+        "rank1Votes": 30,
+        "rank2Votes": 36,
+        "rank3Votes": 28,
+        "score": 44.4
+      },
+      {
+        "subcatId": "I0206",
+        "label": "花屋・フラワーショップ",
+        "votes": 54,
+        "rank1Votes": 16,
+        "rank2Votes": 20,
+        "rank3Votes": 18,
+        "score": 24.4
+      },
+      {
+        "subcatId": "I0205",
+        "label": "書店・文具店",
+        "votes": 46,
+        "rank1Votes": 12,
+        "rank2Votes": 16,
+        "rank3Votes": 18,
+        "score": 19.4
+      },
+      {
+        "subcatId": "I0107",
+        "label": "パン屋・ベーカリー",
         "votes": 37,
-        "score": 37
+        "rank1Votes": 7,
+        "rank2Votes": 14,
+        "rank3Votes": 16,
+        "score": 14.3
+      },
+      {
+        "subcatId": "I0603",
+        "label": "ペット関連店舗",
+        "votes": 22,
+        "rank1Votes": 4,
+        "rank2Votes": 8,
+        "rank3Votes": 10,
+        "score": 8.3
+      },
+      {
+        "subcatId": "I0301",
+        "label": "美容室・ヘアサロン",
+        "votes": 14,
+        "rank1Votes": 2,
+        "rank2Votes": 4,
+        "rank3Votes": 8,
+        "score": 4.7
       }
     ],
     "sourceImages": [],
@@ -1306,11 +1929,32 @@ window.MACHIRIKU_DATA = (function() {
     "areaSqm": 78,
     "areaTsuboBasis": "calculated (78.0 sqm / 3.305785)",
     "floor": "1階/2階建",
+    "floorNumber": "1階",
+    "totalFloors": "2階建",
     "structure": "鉄骨造",
     "builtYear": "2017年3月",
     "handover": "相談（即時可）",
     "listingStatusRaw": "空き店舗（元美容室ヘアサロン居抜き）",
     "condition": "元ヘアサロン居抜き（セット面4席配線、シャンプー配管2台分、ボイラー残置）",
+    "infrastructure": {
+      "hasInuki": true,
+      "hasParking": true,
+      "hasBarrierFree": false,
+      "hasPrivateToilet": true,
+      "hasIndividualAc": true,
+      "hasPower": false,
+      "hasCityGas": true,
+      "hasWaterDrainage": true,
+      "hasGreaseTrap": false,
+      "hasExhaustDuct": false
+    },
+    "featureTags": [
+      "主要幹線道路「競輪場通り」沿いロードサイド",
+      "店舗前面に専用無料駐車場3台分完備",
+      "白を基調とした開放的なガラス張りファサード",
+      "セット面用床下配線・スポット照明",
+      "スタッフルーム・洗濯機パン"
+    ],
     "permittedUses": [
       "美容室・ヘアサロン",
       "理容室・バーバー",
@@ -1370,25 +2014,79 @@ window.MACHIRIKU_DATA = (function() {
       }
     ],
     "votesCount": 210,
-    "demandScore": 210,
+    "demandScore": 272.2,
     "topDemands": [
       {
         "subcatId": "I0301",
         "label": "美容室・ヘアサロン",
-        "votes": 124,
-        "score": 124
+        "votes": 126,
+        "rank1Votes": 92,
+        "rank2Votes": 24,
+        "rank3Votes": 10,
+        "score": 88.6
       },
       {
         "subcatId": "I0304",
         "label": "ジム・フィットネススタジオ",
-        "votes": 54,
-        "score": 54
+        "votes": 90,
+        "rank1Votes": 42,
+        "rank2Votes": 32,
+        "rank3Votes": 16,
+        "score": 50.8
       },
       {
         "subcatId": "I0303",
         "label": "ネイル・エステサロン",
-        "votes": 32,
-        "score": 32
+        "votes": 88,
+        "rank1Votes": 28,
+        "rank2Votes": 36,
+        "rank3Votes": 24,
+        "score": 42.6
+      },
+      {
+        "subcatId": "I0302",
+        "label": "理容室・バーバー",
+        "votes": 58,
+        "rank1Votes": 18,
+        "rank2Votes": 22,
+        "rank3Votes": 18,
+        "score": 27.1
+      },
+      {
+        "subcatId": "I0601",
+        "label": "クリーニング店",
+        "votes": 62,
+        "rank1Votes": 12,
+        "rank2Votes": 24,
+        "rank3Votes": 26,
+        "score": 25.0
+      },
+      {
+        "subcatId": "I0101",
+        "label": "カフェ・喫茶店",
+        "votes": 48,
+        "rank1Votes": 8,
+        "rank2Votes": 18,
+        "rank3Votes": 22,
+        "score": 18.3
+      },
+      {
+        "subcatId": "I0603",
+        "label": "ペット関連店舗",
+        "votes": 30,
+        "rank1Votes": 6,
+        "rank2Votes": 10,
+        "rank3Votes": 14,
+        "score": 11.5
+      },
+      {
+        "subcatId": "I0202",
+        "label": "食料品・生鮮店",
+        "votes": 22,
+        "rank1Votes": 4,
+        "rank2Votes": 8,
+        "rank3Votes": 10,
+        "score": 8.3
       }
     ],
     "sourceImages": [],
@@ -1450,11 +2148,32 @@ window.MACHIRIKU_DATA = (function() {
     "areaSqm": 80.5,
     "areaTsuboBasis": "calculated (80.5 sqm / 3.305785)",
     "floor": "1階/2階建",
+    "floorNumber": "1階",
+    "totalFloors": "2階建",
     "structure": "RC(鉄筋コンクリート造)",
     "builtYear": "2013年10月",
     "handover": "即時",
     "listingStatusRaw": "空室（元学習塾・スクール居抜き）",
     "condition": "元個別指導学習塾居抜き（個別ブース・ホワイトボード・教卓・OA配線完備）",
+    "infrastructure": {
+      "hasInuki": true,
+      "hasParking": true,
+      "hasBarrierFree": true,
+      "hasPrivateToilet": false,
+      "hasIndividualAc": true,
+      "hasPower": false,
+      "hasCityGas": false,
+      "hasWaterDrainage": false,
+      "hasGreaseTrap": false,
+      "hasExhaustDuct": false
+    },
+    "featureTags": [
+      "御幸ケ原の大型ファミリー住宅地中心部・生活道路沿い",
+      "敷地内共用大型駐車場10台以上・駐輪場あり",
+      "個別学習指導ブース・机・椅子・ホワイトボード残置",
+      "共用男女別トイレ・洗面所",
+      "LED照明"
+    ],
     "permittedUses": [
       "学習塾・スクール",
       "文化・体験教室",
@@ -1521,25 +2240,79 @@ window.MACHIRIKU_DATA = (function() {
       }
     ],
     "votesCount": 176,
-    "demandScore": 176,
+    "demandScore": 227.6,
     "topDemands": [
       {
         "subcatId": "I0401",
         "label": "学習塾・スクール",
-        "votes": 108,
-        "score": 108
+        "votes": 106,
+        "rank1Votes": 78,
+        "rank2Votes": 20,
+        "rank3Votes": 8,
+        "score": 75.8
       },
       {
         "subcatId": "I0701",
         "label": "クリニック",
-        "votes": 42,
-        "score": 42
+        "votes": 76,
+        "rank1Votes": 34,
+        "rank2Votes": 28,
+        "rank3Votes": 14,
+        "score": 42.4
       },
       {
         "subcatId": "I0503",
         "label": "文化・体験教室",
-        "votes": 26,
-        "score": 26
+        "votes": 68,
+        "rank1Votes": 22,
+        "rank2Votes": 26,
+        "rank3Votes": 20,
+        "score": 32.7
+      },
+      {
+        "subcatId": "I0702",
+        "label": "福祉・介護サービス",
+        "votes": 52,
+        "rank1Votes": 16,
+        "rank2Votes": 20,
+        "rank3Votes": 16,
+        "score": 24.3
+      },
+      {
+        "subcatId": "I0202",
+        "label": "食料品・生鮮店",
+        "votes": 48,
+        "rank1Votes": 10,
+        "rank2Votes": 18,
+        "rank3Votes": 20,
+        "score": 19.6
+      },
+      {
+        "subcatId": "I0106",
+        "label": "弁当・テイクアウト",
+        "votes": 40,
+        "rank1Votes": 8,
+        "rank2Votes": 14,
+        "rank3Votes": 18,
+        "score": 15.7
+      },
+      {
+        "subcatId": "I0601",
+        "label": "クリーニング店",
+        "votes": 29,
+        "rank1Votes": 5,
+        "rank2Votes": 10,
+        "rank3Votes": 14,
+        "score": 10.8
+      },
+      {
+        "subcatId": "I0602",
+        "label": "修理サービス",
+        "votes": 17,
+        "rank1Votes": 3,
+        "rank2Votes": 6,
+        "rank3Votes": 8,
+        "score": 6.3
       }
     ],
     "sourceImages": [],
@@ -1572,6 +2345,10 @@ window.MACHIRIKU_DATA = (function() {
       phone: "090-1234-5678",
       livingArea: "宇都宮市江野町",
       livingDistanceKm: 0.4,
+      locations: [
+        { id: "loc-home", label: "自宅", address: "栃木県宇都宮市江野町5丁目付近", lat: 36.5608, lng: 139.8825 },
+        { id: "loc-work", label: "職場・学校", address: "栃木県宇都宮市川向町1丁目付近（宇都宮駅）", lat: 36.5590, lng: 139.8980 }
+      ],
       followedProps: [],
       votedProps: {},
       receivedCoupons: [],
@@ -1582,8 +2359,10 @@ window.MACHIRIKU_DATA = (function() {
       name: "鈴木 健太",
       role: "business",
       roleName: "出店事業主",
+      businessName: "合同会社日光珈琲舎",
       brand: "日光焙煎珈琲スタンド / 釜川クラフトピッツァ",
       company: "合同会社日光珈琲舎",
+      preferredIndustries: ["I0101", "I0107"],
       email: "suzuki.kenta@nikko-coffee.jp",
       phone: "",
       experienceYears: "飲食業界歴12年（うち店舗統括マネージャー5年）",
@@ -1623,6 +2402,114 @@ window.MACHIRIKU_DATA = (function() {
   const INITIAL_SURVEYS = [];
   const INITIAL_COUPONS = [];
 
+  // 資格・許可・必要書類マスタ (machiriku_schema.sql: qualifications 準拠)
+  const QUALIFICATIONS = [
+    {
+      id: "qual-food-hygiene",
+      name: "食品衛生責任者",
+      kind: "QUALIFICATION",
+      kindLabel: "資格",
+      guidanceText: "飲食店営業に必須の資格です。各都道府県の食品衛生協会の講習会（1日）で取得できます（調理師・栄養士等の資格者は講習免除）。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/kurashi/eisei/shokuhin/index.html"
+    },
+    {
+      id: "qual-cook",
+      name: "調理師免許",
+      kind: "QUALIFICATION",
+      kindLabel: "資格",
+      guidanceText: "実務経験2年以上または養成施設卒業で都道府県試験により取得可能です。",
+      guidanceUrl: "https://www.pref.tochigi.lg.jp/e07/welfare/eisei/eisei/chourishi.html"
+    },
+    {
+      id: "qual-restaurant-permit",
+      name: "飲食店営業許可（保健所）",
+      kind: "PERMIT",
+      kindLabel: "営業許可",
+      guidanceText: "宇都宮市保健所への事前相談・図面確認・施設検査を経て交付される許可です（着工前の図面相談を推奨）。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/kurashi/eisei/shokuhin/1006431.html"
+    },
+    {
+      id: "qual-confectionery-permit",
+      name: "菓子製造業許可",
+      kind: "PERMIT",
+      kindLabel: "営業許可",
+      guidanceText: "パン・焼き菓子を製造して販売・卸売する場合に保健所への申請が必要です。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/kurashi/eisei/shokuhin/1006431.html"
+    },
+    {
+      id: "qual-barber-beauty",
+      name: "美容師免許・美容所開設届",
+      kind: "QUALIFICATION",
+      kindLabel: "資格・届出",
+      guidanceText: "美容師国家資格（厚生労働大臣免許）および宇都宮市保健所への美容所開設届・検査確認が必要です。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/kurashi/eisei/seikatsu/index.html"
+    },
+    {
+      id: "qual-fire-mgr",
+      name: "防火管理者（甲種）",
+      kind: "QUALIFICATION",
+      kindLabel: "資格",
+      guidanceText: "収容人員30名以上の飲食店・物販店等で選任義務が発生する場合があります（消防本部講習で取得）。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/kurashi/bosai/shobo/index.html"
+    },
+    {
+      id: "qual-biz-plan",
+      name: "出店事業計画書・収支計画",
+      kind: "DOCUMENT",
+      kindLabel: "提出書類",
+      guidanceText: "初期投資額・月次収支見込み・ターゲット顧客層を記載した簡易事業計画をご用意ください（宇都宮市創業支援窓口でも相談可能）。",
+      guidanceUrl: "https://www.city.utsunomiya.lg.jp/sangyo/sangyo/shogyo/index.html"
+    }
+  ];
+
+  const QUALIFICATIONS_MAP = QUALIFICATIONS.reduce((acc, q) => {
+    acc[q.id] = q;
+    return acc;
+  }, {});
+
+  // 業種別 必要資格・許可要件 (industry_qualification_requirements 準拠)
+  const INDUSTRY_QUALIFICATION_REQUIREMENTS = {
+    I0101: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "カフェ・喫茶店営業で1店舗につき1名選任必須" },
+      { qualificationId: "qual-restaurant-permit", isRequired: false, conditionText: "物件決定後に宇都宮市保健所で取得申請（着工前相談推奨）" },
+      { qualificationId: "qual-biz-plan", isRequired: false, conditionText: "オーナー審査・面談時の補足資料として推奨" }
+    ],
+    I0102: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "飲食店営業で選任必須" },
+      { qualificationId: "qual-cook", isRequired: false, conditionText: "調理専門性の証明として推奨" },
+      { qualificationId: "qual-fire-mgr", isRequired: false, conditionText: "収容人員30名以上の客席を設ける場合に必要" }
+    ],
+    I0103: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "飲食店営業で選任必須" },
+      { qualificationId: "qual-restaurant-permit", isRequired: false, conditionText: "換気・グリストラップ設備確認の上、保健所で申請" }
+    ],
+    I0104: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "飲食店営業で選任必須" },
+      { qualificationId: "qual-cook", isRequired: false, conditionText: "保有している場合は信頼性アピールに有効" }
+    ],
+    I0105: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "飲食店営業で選任必須" },
+      { qualificationId: "qual-fire-mgr", isRequired: true, conditionText: "夜間営業・客席規模に応じて選任または防火計画確認が必要" }
+    ],
+    I0106: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "テイクアウト・弁当販売でも選任必須" },
+      { qualificationId: "qual-restaurant-permit", isRequired: false, conditionText: "惣菜・飲食店営業許可を保健所へ申請" }
+    ],
+    I0107: [
+      { qualificationId: "qual-food-hygiene", isRequired: true, conditionText: "製造販売の衛生管理責任者として必須" },
+      { qualificationId: "qual-confectionery-permit", isRequired: true, conditionText: "パン・焼き菓子製造販売には菓子製造業許可の事前要件確認が必要" }
+    ],
+    I0301: [
+      { qualificationId: "qual-barber-beauty", isRequired: true, conditionText: "美容師免許の保有および保健所への美容所開設届が必須" }
+    ],
+    I0302: [
+      { qualificationId: "qual-barber-beauty", isRequired: true, conditionText: "理容師免許および理容所開設届が必要" }
+    ],
+    DEFAULT_NON_FOOD: [
+      { qualificationId: "qual-biz-plan", isRequired: false, conditionText: "業態概要・運営体制の確認資料として用意を推奨" }
+    ]
+  };
+
   // 全33画面仕様定義（レビュー画面S20およびルーター制御用）
   const SCREENS_SPEC = [
     { id: "s01", num: "S01", name: "物件検索・地図・需要", role: "all", roleLabel: "全員", desc: "空き店舗を一覧・地図から探す。需要ランキング表示とアットホーム風カード・Mapbox風地図連携", refExcel: "Row 4 (S01 / home)" },
@@ -1660,15 +2547,30 @@ window.MACHIRIKU_DATA = (function() {
     { id: "s33", num: "S33", name: "物件PR広告", role: "owner", roleLabel: "物件オーナー", desc: "オーナー向け収益プラン、検索トップ注目枠への掲載申込・シミュレーション", refExcel: "企画書 A170-176" }
   ];
 
+  const PROPERTY_FORM_OPTIONS = {
+    deposits: ["なし", "1ヶ月", "2ヶ月", "3ヶ月", "4ヶ月", "5ヶ月", "6ヶ月", "相談"],
+    keyMonies: ["なし", "1ヶ月", "2ヶ月", "3ヶ月", "相談"],
+    securityDeposits: ["なし", "1ヶ月", "2ヶ月", "3ヶ月", "6ヶ月", "10万円", "20万円", "30万円", "50万円", "100万円", "相談"],
+    floorNumbers: ["地下2階", "地下1階", "1階", "2階", "3階", "4階", "5階", "6階", "7階", "8階", "9階", "10階以上", "一棟貸し", "その他"],
+    totalFloors: ["1階建（平屋）", "2階建", "3階建", "4階建", "5階建", "6階建", "7階建", "8階建", "9階建", "10階建", "11階建以上"],
+    structures: ["木造", "軽量鉄骨造", "鉄骨造", "S造(鉄骨造)", "RC(鉄筋コンクリート造)", "SRC(鉄骨鉄筋コンクリート造)", "ALC", "その他"],
+    handovers: ["即時", "相談（即時可）", "相談", "1ヶ月後", "2ヶ月後", "3ヶ月後", "要相談"]
+  };
+
   return {
     DATASET_VERSION,
     CATEGORIES,
     SUBCATS,
+    INFRASTRUCTURE_FACILITIES,
+    PROPERTY_FORM_OPTIONS,
     PROPERTIES,
     USERS,
     INITIAL_APPLICATIONS,
     INITIAL_SURVEYS,
     INITIAL_COUPONS,
+    QUALIFICATIONS,
+    QUALIFICATIONS_MAP,
+    INDUSTRY_QUALIFICATION_REQUIREMENTS,
     SCREENS_SPEC
   };
 })();

@@ -37,11 +37,87 @@ window.MachirikuScreens = (function() {
   function renderEmptyState(screen, title, description, hash = '#s01', label = '物件を探す') {
     return `<section class="screen-view empty-state" data-screen="${escapeHtml(screen)}">
       <h1 class="page-title">${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p>
-      <a class="btn-primary" href="${escapeHtml(hash)}">${escapeHtml(label)}</a></section>`;
+      <a class="btn-primary" href="${escapeHtml(resolveScreenHref(hash))}">${escapeHtml(label)}</a></section>`;
   }
 
   const IMAGE_PLACEHOLDER = 'assets/property-placeholder.svg';
   const failedImages = new Set();
+
+  function getAppContextPath() {
+    if (typeof window !== 'undefined' && window.__MACHIRIKU_CONTEXT_PATH__ !== undefined) {
+      return String(window.__MACHIRIKU_CONTEXT_PATH__ || '').replace(/\/+$/, '');
+    }
+    return '';
+  }
+
+  function isFixedDetailPage() {
+    return typeof window !== 'undefined' && String(window.__MACHIRIKU_FIXED_SCREEN__ || '').toLowerCase() === 's02';
+  }
+
+  function resolveAssetUrl(url) {
+    if (!url) return '';
+    const s = String(url);
+    if (/^(?:https?:|data:|blob:|\/|\.\.\/)/i.test(s)) return s;
+    const ctx = getAppContextPath();
+    if (ctx) {
+      return `${ctx}/${s.replace(/^\/+/, '')}`;
+    }
+    if (typeof window !== 'undefined' && window.location && /\/property\/[^/]+\.jsp$/i.test(window.location.pathname)) {
+      return `../${s.replace(/^\/+/, '')}`;
+    }
+    return s;
+  }
+
+  function isJspMode() {
+    return typeof window !== 'undefined' && window.__MACHIRIKU_CONTEXT_PATH__ !== undefined;
+  }
+
+  function resolveDetailHref(propId) {
+    if (isJspMode()) {
+      return `${getAppContextPath()}/property/detail.jsp?id=${encodeURIComponent(propId)}`;
+    }
+    return `#s02?id=${encodeURIComponent(propId)}`;
+  }
+
+  const SCREEN_TO_JSP_MAP = {
+    '#s02': '/property/detail.jsp',
+    '#s03': '/property/vote.jsp',
+    '#r01': '/property/vote.jsp',
+    '#s08': '/property/apply.jsp',
+    '#b01': '/property/apply.jsp',
+    '#s11': '/property/manage.jsp',
+    '#o01': '/property/manage.jsp',
+    '#s07': '/property/analytics.jsp',
+    '#o02': '/property/analytics.jsp',
+    '#s09': '/property/apply-list.jsp',
+    '#o03': '/property/apply-list.jsp',
+    '#o04': '/property/add.jsp',
+    '#o05': '/property/add-confirm.jsp',
+    '#o06': '/property/edit.jsp',
+    '#o07': '/property/edit-confirm.jsp',
+    '#o08': '/property/delete-confirm.jsp',
+    '#o09': '/property/delete-complete.jsp'
+  };
+
+  function resolveScreenHref(rawHash) {
+    const h = String(rawHash || '#s01');
+    if (isJspMode() && h.startsWith('#')) {
+      const qIdx = h.indexOf('?');
+      const baseHash = (qIdx >= 0 ? h.slice(0, qIdx) : h).toLowerCase();
+      const qs = qIdx >= 0 ? h.slice(qIdx) : '';
+      if (baseHash === '#s12') {
+        const hasId = /(?:^\?|&)id=/.test(qs);
+        return `${getAppContextPath()}${hasId ? '/property/edit.jsp' + qs : '/property/add.jsp'}`;
+      }
+      if (SCREEN_TO_JSP_MAP[baseHash]) {
+        return `${getAppContextPath()}${SCREEN_TO_JSP_MAP[baseHash]}${qs}`;
+      }
+      if (typeof window !== 'undefined' && window.__MACHIRIKU_FIXED_SCREEN__) {
+        return `${getAppContextPath()}/index.jsp${h}`;
+      }
+    }
+    return h;
+  }
 
   const KIND_LABELS = {
     floorplan: '間取り',
@@ -63,16 +139,18 @@ window.MachirikuScreens = (function() {
 
   function renderPropertyImage(prop, attributes = '') {
     const rawSource = prop.coverImage || (prop.gallery && prop.gallery[0] && (prop.gallery[0].url || prop.gallery[0].localPath)) || IMAGE_PLACEHOLDER;
-    const source = rawSource;
-    const unavailable = source === IMAGE_PLACEHOLDER || failedImages.has(source);
-    return `<img src="${escapeHtml(unavailable ? IMAGE_PLACEHOLDER : source)}" alt="${unavailable ? '写真未登録' : escapeHtml(prop.title) + 'の外観'}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)" ${attributes}>`;
+    const resolvedSource = resolveAssetUrl(rawSource);
+    const placeholderUrl = resolveAssetUrl(IMAGE_PLACEHOLDER);
+    const unavailable = rawSource === IMAGE_PLACEHOLDER || failedImages.has(rawSource) || failedImages.has(resolvedSource);
+    return `<img src="${escapeHtml(unavailable ? placeholderUrl : resolvedSource)}" alt="${unavailable ? '写真未登録' : escapeHtml(prop.title) + 'の外観'}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)" ${attributes}>`;
   }
 
   function handlePropertyImageError(image) {
-    const source = image.getAttribute('src');
+    const source = image.getAttribute('src') || '';
     image.onerror = null;
     image.removeAttribute('onerror');
-    if (source === IMAGE_PLACEHOLDER) return;
+    const placeholderUrl = resolveAssetUrl(IMAGE_PLACEHOLDER);
+    if (source === IMAGE_PLACEHOLDER || source === placeholderUrl || source.endsWith('/' + IMAGE_PLACEHOLDER)) return;
 
     // もし assets/prop-xxx.jpg で失敗した場合は assets/properties/prop-xxx/01_exterior.jpg を自動試行
     if (source.includes('assets/prop-') && source.endsWith('.jpg')) {
@@ -93,7 +171,7 @@ window.MachirikuScreens = (function() {
 
     failedImages.add(source);
     image.alt = '写真未登録';
-    image.src = IMAGE_PLACEHOLDER;
+    image.src = placeholderUrl;
   }
 
   function businessReviews(user) {
@@ -128,14 +206,14 @@ window.MachirikuScreens = (function() {
     desc = copy ? copy[1] : desc;
     const bcHtml = breadcrumbs.map((b, i) => {
       if (b.hash) {
-        return `<a href="${b.hash}">${b.label}</a> <span class="sep">/</span>`;
+        return `<a href="${escapeHtml(resolveScreenHref(b.hash))}">${b.label}</a> <span class="sep">/</span>`;
       }
       return `<span>${b.label}</span>`;
     }).join(" ");
 
     return `
       <div class="page-header-banner" data-screen="${screenNum}">
-        ${breadcrumbs.length ? `<nav class="breadcrumb-trail" aria-label="現在の位置"><a href="#s01">ホーム</a><span aria-hidden="true">/</span>${bcHtml}</nav>` : ''}
+        ${breadcrumbs.length ? `<nav class="breadcrumb-trail" aria-label="現在の位置"><a href="${escapeHtml(resolveScreenHref('#s01'))}">ホーム</a><span aria-hidden="true">/</span>${bcHtml}</nav>` : ''}
         <div class="page-title-row">
           <h1 class="page-title">
             ${escapeHtml(title)}
@@ -727,7 +805,7 @@ window.MachirikuScreens = (function() {
             </div>
             <div class="card-info-pane">
               <div>
-                <h2 class="card-prop-title"><a class="property-title-link" href="#s02?id=${encodeURIComponent(p.id)}">${escapeHtml(p.title)}</a></h2>
+                <h2 class="card-prop-title"><a class="property-title-link" href="${escapeHtml(resolveDetailHref(p.id))}">${escapeHtml(p.title)}</a></h2>
                 <div class="card-prop-address">${escapeHtml(p.address)}（${escapeHtml(p.access)}）</div>
                 <div class="card-rent-row">
                   <div class="rent-main">${rentMan}万円<small>/月</small></div>
@@ -766,7 +844,7 @@ window.MachirikuScreens = (function() {
                     ${d3 ? `<span class="demand-chip"><span class="chip-color c-3"></span><strong>3位:</strong> ${escapeHtml(d3.label)} (${d3.votes}票)</span>` : ''}
                   </div>` : ''}
                   <div class="demand-vote-action-row">
-                    <a href="#s03?id=${p.id}" class="demand-vote-btn" title="この物件に欲しいお店を投票">+ この物件に欲しいお店を投票</a>
+                    <a href="${escapeHtml(resolveScreenHref(`#s03?id=${p.id}`))}" class="demand-vote-btn" title="この物件に欲しいお店を投票">+ この物件に欲しいお店を投票</a>
                   </div>
                 </div>
               </div>
@@ -869,25 +947,33 @@ window.MachirikuScreens = (function() {
   }
 
   // =========================================================================
-  // S02: 物件詳細 (アットホーム × Decidim 仕様)
+  // S02: 物件詳細 (JSP本体描画 + ビューモデル共通ヘルパー)
   // =========================================================================
-  function renderS02(params) {
+  function buildS02ViewModel(params) {
     const propId = params?.id || store.getProperties()[0]?.id;
     const prop = store.getPropertyById(propId);
-    if (!prop) return renderEmptyState('S02', "物件が見つかりません", "掲載が終了したか、まだ物件が登録されていません。", "#s01", "物件一覧へ");
+    if (!prop) return null;
+
     const state = store.getState();
     const isFollowed = state.currentUser.followedProps?.includes(prop.id);
     const hasVoted = Boolean(state.currentUser.votedProps?.[prop.id]);
     const rentMan = formatRent(prop.rent);
     const mgmt = prop.managementFee == null ? '掲載なし（要確認）' : `${formatMoney(prop.managementFee)}円`;
 
-    const top3DemandsHtml = prop.topDemands.slice(0, 3).map((d, idx) => {
+    const activeDemands = (prop.topDemands || [])
+      .filter(d => (d.votes || 0) > 0)
+      .slice()
+      .sort((a, b) => (b.score - a.score) || ((b.rank1Votes || 0) - (a.rank1Votes || 0)));
+
+    const maxDemandScore = Math.max(...activeDemands.map(d => d.score || 0), 1);
+
+    const top3DemandsHtml = activeDemands.slice(0, 3).map((d, idx) => {
       const sub = data.SUBCATS[d.subcatId] || { name: d.label, color: "var(--primary-600)", icon: "" };
-      const percent = Math.min(Math.round((d.score / (prop.demandScore || 1)) * 100), 100);
+      const percent = Math.min(Math.round((d.votes / (prop.votesCount || 1)) * 100), 100);
       return `
         <div class="demand-bar-item">
           <div class="demand-bar-header" style="font-size:0.85rem;">
-            <span>第${idx + 1}位: ${sub.icon} ${sub.name}</span>
+            <span>第${idx + 1}位: ${escapeHtml(sub.name)}</span>
             <span style="color:var(--primary-700); font-weight:700;">${d.votes}票 (${percent}%)</span>
           </div>
           <div class="demand-progress-track" style="height:8px; background:rgba(0,0,0,0.06);">
@@ -897,47 +983,114 @@ window.MachirikuScreens = (function() {
       `;
     }).join("");
 
-    const topDemandsHtml = prop.topDemands.map((d, idx) => {
-      const sub = data.SUBCATS[d.subcatId] || { name: d.label, color: "var(--primary-600)", icon: "" };
-      const percent = Math.min(Math.round((d.score / (prop.demandScore || 1)) * 100), 100);
+    const renderStackedDemandItem = (d, idx) => {
+      const sub = data.SUBCATS[d.subcatId] || { name: d.label, categoryName: "", color: "var(--primary-600)" };
+      const hasBreakdown = typeof d.rank1Votes === "number" || typeof d.rank2Votes === "number" || typeof d.rank3Votes === "number";
+      const r1 = hasBreakdown ? (d.rank1Votes || 0) : (d.votes || 0);
+      const r2 = hasBreakdown ? (d.rank2Votes || 0) : 0;
+      const r3 = hasBreakdown ? (d.rank3Votes || 0) : 0;
+      const totalVotes = (r1 + r2 + r3) || d.votes || 0;
+      const w1 = r1;
+      const w2 = Math.round(r2 * 6) / 10;
+      const w3 = Math.round(r3 * 3) / 10;
+      const barWidthPct = Math.max(4, Math.round(((d.score || 0) / maxDemandScore) * 1000) / 10);
       return `
         <div class="demand-bar-item">
-          <div class="demand-bar-header">
-            <span>第${idx + 1}位: ${sub.icon} ${sub.name}</span>
-            <span style="color:var(--primary-700);">${d.votes}票 / <strong>${d.score} pt</strong> (${percent}%)</span>
+          <div class="demand-bar-header demand-stacked-header">
+            <span class="demand-stacked-title">
+              <span>第${idx + 1}位: ${escapeHtml(sub.name)}</span>
+              ${sub.categoryName ? `<span class="demand-cat-badge">${escapeHtml(sub.categoryName)}</span>` : ''}
+            </span>
+            <span class="demand-stacked-metrics">
+              <strong>${d.score} pt</strong>
+              <span class="demand-votes-breakdown">/ 計${totalVotes}票</span>
+            </span>
           </div>
-          <div class="demand-progress-track">
-            <div class="demand-progress-fill" style="width: ${percent}%; background-color: ${sub.color};"></div>
+          <div class="demand-stacked-track" aria-hidden="true">
+            <div class="demand-stacked-fill" style="width: ${barWidthPct}%;">
+              ${w1 > 0 ? `<span class="demand-stacked-seg rank-1" style="flex: ${w1} 0 0%;" title="第1希望: ${r1}票 (×1.0)"></span>` : ''}
+              ${w2 > 0 ? `<span class="demand-stacked-seg rank-2" style="flex: ${w2} 0 0%;" title="第2希望: ${r2}票 (×0.6)"></span>` : ''}
+              ${w3 > 0 ? `<span class="demand-stacked-seg rank-3" style="flex: ${w3} 0 0%;" title="第3希望: ${r3}票 (×0.3)"></span>` : ''}
+            </div>
           </div>
         </div>
       `;
-    }).join("");
+    };
 
-    const residentVoicesHtml = (prop.residentVoices || []).map(v => `
-      <div class="quote-bubble">
-        <p class="quote-text">“${escapeHtml(v.text)}”</p>
-        <div class="quote-meta">
-          <span>${escapeHtml(v.author)}</span>
-          <span>${escapeHtml(v.date)}</span>
-        </div>
-      </div>
-    `).join("");
+    const top5DemandsHtml = activeDemands.slice(0, 5).map((d, idx) => renderStackedDemandItem(d, idx)).join("");
+    const restDemands = activeDemands.slice(5);
+    const restDemandsHtml = restDemands.map((d, idx) => renderStackedDemandItem(d, idx + 5)).join("");
+
+    const floorPart = (prop.floorNumber && prop.totalFloors)
+      ? `${prop.floorNumber} / ${prop.totalFloors}`
+      : (prop.floor || '掲載なし');
+    const floorStructure = prop.structure ? `${floorPart} ・ ${prop.structure}` : floorPart;
+
+    const infraItems = data.INFRASTRUCTURE_FACILITIES || [
+      { key: 'hasInuki', label: '居抜き' },
+      { key: 'hasParking', label: '駐車場あり' },
+      { key: 'hasBarrierFree', label: 'バリアフリー' },
+      { key: 'hasPrivateToilet', label: '専用トイレ' },
+      { key: 'hasIndividualAc', label: '個別空調' },
+      { key: 'hasPower', label: '動力あり' },
+      { key: 'hasCityGas', label: '都市ガス' },
+      { key: 'hasWaterDrainage', label: '給排水' },
+      { key: 'hasGreaseTrap', label: 'グリストラップ' },
+      { key: 'hasExhaustDuct', label: '排気ダクト' }
+    ];
+
+    const resolveInfraAvailable = (p, key) => {
+      if (p.infrastructure && typeof p.infrastructure[key] === 'boolean') {
+        return p.infrastructure[key];
+      }
+      const joined = `${(p.facilities || []).join(' ')} ${p.listingStatusRaw || ''} ${p.condition || ''}`;
+      switch (key) {
+        case 'hasInuki': return joined.includes('居抜き');
+        case 'hasParking': return joined.includes('駐車場');
+        case 'hasBarrierFree': return joined.includes('バリアフリー');
+        case 'hasPrivateToilet': return joined.includes('専用トイレ') || joined.includes('専用水洗トイレ');
+        case 'hasIndividualAc': return joined.includes('個別空調') || joined.includes('個別エアコン');
+        case 'hasPower': return joined.includes('動力');
+        case 'hasCityGas': return joined.includes('都市ガス');
+        case 'hasWaterDrainage': return joined.includes('給排水');
+        case 'hasGreaseTrap': return joined.includes('グリストラップ');
+        case 'hasExhaustDuct': return joined.includes('排気ダクト') || joined.includes('換気ダクト');
+        default: return false;
+      }
+    };
+
+    const infraBadgesHtml = infraItems.map(item => {
+      const available = resolveInfraAvailable(prop, item.key);
+      return `
+        <li class="infra-facility-chip ${available ? 'is-available' : 'is-unavailable'}" aria-label="${escapeHtml(item.label)}: ${available ? 'あり' : 'なし'}">
+          <span class="infra-chip-mark" aria-hidden="true">${available ? '✓' : 'ー'}</span>
+          <span>${escapeHtml(item.label)}</span>
+        </li>
+      `;
+    }).join('');
+
+    const featureTags = Array.isArray(prop.featureTags)
+      ? prop.featureTags
+      : (prop.facilities || []).filter(f => !['都市ガス', '給排水設備', '給排水', 'グリストラップ', '換気ダクト', '動力電力', '駐車場あり', '専用トイレ'].includes(f));
+
+    const isDetailsDefaultOpen = state.currentRole === 'business' || state.currentRole === 'owner';
 
     const defaultExterior = {
       index: 0,
       kind: 'exterior',
       label: prop.imageCaption || `${prop.title}の外観`,
-      url: prop.coverImage || IMAGE_PLACEHOLDER,
+      url: resolveAssetUrl(prop.coverImage || IMAGE_PLACEHOLDER),
       sourceUrl: prop.coverImage
     };
 
     const galleryItems = (prop.gallery && prop.gallery.length)
       ? prop.gallery.map((it, idx) => {
-          const unavailable = !it.url || it.url === IMAGE_PLACEHOLDER || failedImages.has(it.url);
+          const resolvedUrl = resolveAssetUrl(it.url);
+          const unavailable = !it.url || it.url === IMAGE_PLACEHOLDER || failedImages.has(it.url) || failedImages.has(resolvedUrl);
           return {
             ...it,
             index: idx,
-            url: unavailable ? IMAGE_PLACEHOLDER : it.url,
+            url: unavailable ? resolveAssetUrl(IMAGE_PLACEHOLDER) : resolvedUrl,
             isUnavailable: unavailable
           };
         })
@@ -957,12 +1110,315 @@ window.MachirikuScreens = (function() {
       items: galleryItems
     };
 
+    const gallerySlidesHtml = galleryItems.map((item, idx) => `
+      <div class="gallery-slide-item" data-index="${idx}" role="group" aria-roledescription="slide" aria-label="${idx + 1} / ${galleryItems.length}">
+        <img src="${escapeHtml(item.url)}" alt="${escapeHtml(prop.title)} - ${escapeHtml(item.label || '')}" loading="${idx === initialIdx ? 'eager' : 'lazy'}" fetchpriority="${idx === initialIdx ? 'high' : 'low'}" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
+      </div>
+    `).join('');
+
+    const galleryThumbsHtml = galleryItems.map((img, i) => `
+      <button type="button" class="gallery-thumb-btn ${i === initialIdx ? 'is-selected' : ''}" data-index="${i}" aria-label="${escapeHtml(img.label || `写真 ${i + 1}`)}" aria-current="${i === initialIdx ? 'true' : 'false'}" onclick="MachirikuScreens.selectGalleryImage(${i})" title="${escapeHtml(img.label)}">
+        <img src="${escapeHtml(img.url)}" alt="" loading="lazy" fetchpriority="low" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
+      </button>
+    `).join('');
+
+    let primaryCtaClass = 'btn-cta-apply';
+    let primaryCtaHash = `#s07?id=${prop.id}`;
+    let primaryCtaLabel = 'この物件の需要を確認する';
+    if (state.currentRole === 'resident') {
+      primaryCtaClass = 'btn-cta-vote';
+      primaryCtaHash = `#s03?id=${prop.id}`;
+      primaryCtaLabel = hasVoted ? '投票内容を変更する' : '欲しいお店に投票する';
+    } else if (state.currentRole === 'business') {
+      primaryCtaClass = 'btn-cta-apply';
+      primaryCtaHash = `#s08?id=${prop.id}`;
+      primaryCtaLabel = 'この物件に出店を申し込む';
+    } else if (state.currentRole === 'owner' && prop.ownerId === state.currentUser.id) {
+      primaryCtaClass = 'btn-cta-apply';
+      primaryCtaHash = `#s12?id=${prop.id}`;
+      primaryCtaLabel = '物件の掲載内容を編集する';
+    }
+
+    return {
+      prop,
+      state,
+      isFollowed,
+      rentMan,
+      mgmt,
+      activeDemands,
+      top3DemandsHtml,
+      top5DemandsHtml,
+      restDemands,
+      restDemandsHtml,
+      floorStructure,
+      infraBadgesHtml,
+      featureTags,
+      isDetailsDefaultOpen,
+      galleryItems,
+      initialIdx,
+      gallerySlidesHtml,
+      galleryThumbsHtml,
+      primaryCtaClass,
+      primaryCtaHref: resolveScreenHref(primaryCtaHash),
+      primaryCtaLabel
+    };
+  }
+
+  /**
+   * property/detail.jsp に静的に記述されたS02のHTML構造へ物件データ・状態を流し込む。
+   */
+  function hydrateS02(params) {
+    if (typeof document === 'undefined') return;
+    const emptyEl = document.getElementById('s02-empty-state');
+    const detailEl = document.getElementById('s02-detail-section');
+    if (!detailEl) return;
+
+    const vm = buildS02ViewModel(params);
+    if (!vm) {
+      detailEl.hidden = true;
+      if (emptyEl) emptyEl.hidden = false;
+      return;
+    }
+
+    if (emptyEl) emptyEl.hidden = true;
+    detailEl.hidden = false;
+
+    const { prop, state } = vm;
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+
+    // ヘッダーバナー
+    setText('s02-prop-title', prop.title || '');
+    const statusBadgeEl = document.getElementById('s02-status-badge');
+    if (statusBadgeEl) {
+      statusBadgeEl.textContent = prop.statusLabel || '';
+      statusBadgeEl.hidden = !prop.statusLabel;
+    }
+    const subtitleEl = document.getElementById('s02-prop-subtitle');
+    if (subtitleEl) {
+      subtitleEl.textContent = prop.subtitle || '';
+      subtitleEl.hidden = !prop.subtitle;
+    }
+
+    // ギャラリー
+    const galleryBoxEl = document.getElementById('s02-gallery-box');
+    if (galleryBoxEl) galleryBoxEl.setAttribute('data-prop', prop.id);
+    const hasMultiPhotos = vm.galleryItems.length > 1;
+    const prevBtn = document.getElementById('s02-gallery-prev-btn');
+    const nextBtn = document.getElementById('s02-gallery-next-btn');
+    if (prevBtn) prevBtn.hidden = !hasMultiPhotos;
+    if (nextBtn) nextBtn.hidden = !hasMultiPhotos;
+
+    const sliderTrack = document.getElementById('gallery-slider-track');
+    if (sliderTrack) {
+      sliderTrack.style.transform = `translateX(-${vm.initialIdx * 100}%)`;
+      sliderTrack.innerHTML = vm.gallerySlidesHtml;
+    }
+    const allPhotosBtn = document.getElementById('s02-gallery-all-btn');
+    if (allPhotosBtn) allPhotosBtn.onclick = () => openAllPhotosModal(prop.id);
+    setText('s02-gallery-all-count', String(vm.galleryItems.length));
+    setText('gallery-current-index', String(vm.initialIdx + 1));
+    setText('gallery-total-count', String(vm.galleryItems.length));
+
+    const thumbsWrapper = document.getElementById('s02-thumbs-wrapper');
+    const thumbsTrack = document.getElementById('gallery-thumbs-track');
+    if (thumbsWrapper) thumbsWrapper.hidden = !hasMultiPhotos;
+    if (thumbsTrack) thumbsTrack.innerHTML = hasMultiPhotos ? vm.galleryThumbsHtml : '';
+
+    // 物件募集概要
+    const descEl = document.getElementById('s02-overview-description');
+    if (descEl) {
+      if (prop.description) {
+        descEl.innerHTML = escapeHtml(prop.description).replace(/\n/g, '<br>');
+        descEl.hidden = false;
+      } else {
+        descEl.innerHTML = '';
+        descEl.hidden = true;
+      }
+    }
+
+    const specRentEl = document.getElementById('s02-spec-rent');
+    if (specRentEl) {
+      specRentEl.innerHTML = `<strong style="font-size:1.3rem; color:var(--accent-price);">${vm.rentMan}万円</strong> /月 （管理費等: ${escapeHtml(vm.mgmt)}）${prop.source && prop.rentTaxStatus === 'unknown' ? '<br><small>税区分は掲載元に確認</small>' : ''}`;
+    }
+    setText('s02-spec-condition', prop.condition || prop.listingStatusRaw || '掲載なし（要確認）');
+    setText('s02-spec-address', prop.address || '');
+    setText('s02-spec-access', prop.access || '');
+    const specAreaEl = document.getElementById('s02-spec-area');
+    if (specAreaEl) {
+      specAreaEl.innerHTML = `<strong>${prop.areaTsubo}坪</strong> （${prop.areaSqm}㎡）`;
+    }
+
+    // 展開式の詳細条件
+    const specsExtraEl = document.getElementById('s02-specs-extra');
+    const specsToggleBtn = document.getElementById('s02-specs-toggle-btn');
+    if (specsExtraEl) {
+      specsExtraEl.hidden = !vm.isDetailsDefaultOpen;
+      specsExtraEl.classList.toggle('is-expanded', vm.isDetailsDefaultOpen);
+    }
+    if (specsToggleBtn) {
+      specsToggleBtn.setAttribute('aria-expanded', String(vm.isDetailsDefaultOpen));
+    }
+    setText(
+      's02-spec-deposits',
+      `敷金: ${prop.deposit ?? '掲載なし（要確認）'} / 礼金: ${prop.keyMoney ?? '掲載なし（要確認）'} / 保証金: ${prop.securityDeposit ?? '掲載なし（要確認）'}`
+    );
+    const otherFeesEl = document.getElementById('s02-spec-other-fees');
+    if (otherFeesEl) {
+      otherFeesEl.innerHTML = prop.otherFees?.length
+        ? `<ul class="listing-fees">${prop.otherFees.map(f => `<li>${escapeHtml(f.name)}: ${escapeHtml(f.amountRaw)}</li>`).join('')}</ul>`
+        : '掲載なし';
+    }
+    setText('s02-spec-floor-structure', vm.floorStructure);
+    setText('s02-spec-built-year', prop.builtYear || '掲載なし（要確認）');
+    setText('s02-spec-handover', `${prop.listingStatusRaw || '掲載なし'} / ${prop.handover || '相談'}`);
+
+    const infraGridEl = document.getElementById('s02-infra-grid');
+    if (infraGridEl) infraGridEl.innerHTML = vm.infraBadgesHtml;
+
+    const featureRowEl = document.getElementById('s02-feature-tags-row');
+    const featureTagsEl = document.getElementById('s02-feature-tags');
+    if (featureRowEl && featureTagsEl) {
+      if (vm.featureTags.length) {
+        featureTagsEl.innerHTML = vm.featureTags.map(tag => `<span class="badge-feature">${escapeHtml(tag)}</span>`).join('');
+        featureRowEl.hidden = false;
+      } else {
+        featureTagsEl.innerHTML = '';
+        featureRowEl.hidden = true;
+      }
+    }
+
+    setText('s02-permit-status', `✓ ${prop.permitStatus || '取得相談可'}`);
+    const sourceNotesRowEl = document.getElementById('s02-source-notes-row');
+    const sourceNotesListEl = document.getElementById('s02-source-notes-list');
+    if (sourceNotesRowEl && sourceNotesListEl) {
+      if (prop.sourceNotes?.length) {
+        sourceNotesListEl.innerHTML = prop.sourceNotes.map(n => `<li>${escapeHtml(n)}</li>`).join('');
+        sourceNotesRowEl.hidden = false;
+      } else {
+        sourceNotesListEl.innerHTML = '';
+        sourceNotesRowEl.hidden = true;
+      }
+    }
+
+    const sourceInfoEl = document.getElementById('s02-source-info');
+    const agentFallbackEl = document.getElementById('s02-agent-fallback');
+    if (prop.source) {
+      if (sourceInfoEl) sourceInfoEl.innerHTML = renderSourceInformation(prop);
+      if (agentFallbackEl) agentFallbackEl.hidden = true;
+    } else {
+      if (sourceInfoEl) sourceInfoEl.innerHTML = '';
+      if (agentFallbackEl) {
+        agentFallbackEl.hidden = false;
+        setText('s02-agent-name', prop.agent ? prop.agent.name : (prop.broker ? prop.broker.name : '株式会社宇都宮不動産 本店'));
+        setText('s02-agent-license', `${prop.agent ? prop.agent.license : '栃木県知事 (4) 第12345号'} / 免許番号・取引態様: 専任媒介`);
+        setText('s02-prop-code-id', prop.id);
+      }
+    }
+
+    // 需要分析
+    setText('s02-kpi-score', String(prop.demandScore));
+    setText('s02-kpi-votes', String(prop.votesCount));
+    setText('s02-kpi-top-label', vm.activeDemands[0]?.label || '未集計');
+    setText('s02-kpi-top-sub', vm.activeDemands[0] ? `${vm.activeDemands[0].score} pt / 計${vm.activeDemands[0].votes}票` : '集計中');
+
+    const demandTopEl = document.getElementById('s02-demand-top-list');
+    if (demandTopEl) {
+      demandTopEl.classList.toggle('demand-ranking-list-top', vm.restDemands.length > 0);
+      demandTopEl.innerHTML = vm.top5DemandsHtml || '<p class="sample-note">まだ投票がありません。</p>';
+    }
+
+    const demandExtraWrapEl = document.getElementById('s02-demand-extra-wrap');
+    const demandExtraEl = document.getElementById('s02-demand-extra');
+    const demandExtraListEl = document.getElementById('s02-demand-extra-list');
+    const demandToggleBtn = document.getElementById('s02-demand-toggle-btn');
+    if (demandExtraWrapEl && demandExtraListEl) {
+      if (vm.restDemands.length > 0) {
+        demandExtraListEl.innerHTML = vm.restDemandsHtml;
+        setText('s02-demand-toggle-closed', `6位以下の希望業種を見る（${vm.restDemands.length}業種）`);
+        setText('s02-demand-toggle-open', `6位以下の希望業種を閉じる（${vm.restDemands.length}業種）`);
+        if (demandExtraEl) {
+          demandExtraEl.classList.remove('is-expanded');
+          demandExtraEl.setAttribute('hidden', 'until-found');
+        }
+        if (demandToggleBtn) demandToggleBtn.setAttribute('aria-expanded', 'false');
+        demandExtraWrapEl.hidden = false;
+      } else {
+        demandExtraListEl.innerHTML = '';
+        demandExtraWrapEl.hidden = true;
+      }
+    }
+
+    // サイドバー CTA
+    const showPriceBanner = state.currentRole === 'business' || state.currentRole === 'owner';
+    const priceBannerEl = document.getElementById('s02-cta-price-banner');
+    const demandBannerEl = document.getElementById('s02-cta-demand-banner');
+    if (priceBannerEl) priceBannerEl.hidden = !showPriceBanner;
+    if (demandBannerEl) demandBannerEl.hidden = showPriceBanner;
+
+    if (showPriceBanner) {
+      const taxSuffix = prop.rentTaxStatus === 'inclusive' ? '（税込）' : prop.rentTaxStatus === 'exclusive' ? '（税別）' : '';
+      setText('s02-cta-rent-label', `月額賃料${taxSuffix}`);
+      setText('s02-cta-rent-val', `${vm.rentMan}万円`);
+      setText('s02-cta-mgmt', `管理費等: ${vm.mgmt}`);
+    } else {
+      const top3El = document.getElementById('s02-top3-demand-list');
+      if (top3El) top3El.innerHTML = vm.top3DemandsHtml || '<p class="sample-note">まだ投票がありません。</p>';
+    }
+
+    const primaryCtaEl = document.getElementById('s02-primary-cta');
+    if (primaryCtaEl) {
+      primaryCtaEl.className = vm.primaryCtaClass;
+      primaryCtaEl.setAttribute('href', vm.primaryCtaHref);
+      primaryCtaEl.textContent = vm.primaryCtaLabel;
+    }
+
+    const followBtnEl = document.getElementById('s02-follow-btn');
+    if (followBtnEl) {
+      followBtnEl.setAttribute('data-follow-id', prop.id);
+      followBtnEl.setAttribute('aria-pressed', String(Boolean(vm.isFollowed)));
+      followBtnEl.textContent = vm.isFollowed ? 'フォロー中・解除する' : '開店のようすをフォローする';
+      followBtnEl.onclick = () => handleToggleFollow(prop.id);
+    }
+
+    const showSecondaryNav = state.currentRole !== 'resident';
+    const sideHrEl = document.getElementById('s02-side-hr');
+    const secondaryNavEl = document.getElementById('s02-side-secondary-nav');
+    if (sideHrEl) sideHrEl.hidden = !showSecondaryNav;
+    if (secondaryNavEl) secondaryNavEl.hidden = !showSecondaryNav;
+
+    const navDemandEl = document.getElementById('s02-nav-demand');
+    const navOpeningEl = document.getElementById('s02-nav-opening');
+    const navPrEl = document.getElementById('s02-nav-pr');
+    if (navDemandEl) navDemandEl.setAttribute('href', resolveScreenHref(`#s07?id=${prop.id}`));
+    if (navOpeningEl) navOpeningEl.setAttribute('href', resolveScreenHref(`#s05?id=${prop.id}`));
+    if (navPrEl) {
+      navPrEl.setAttribute('href', resolveScreenHref(`#s33?id=${prop.id}`));
+      navPrEl.hidden = state.currentRole !== 'owner';
+    }
+
+    // 所在地 & Google Map
+    setText('s02-side-address', prop.address || '');
+    const mapEl = document.getElementById('s02-location-map');
+    if (mapEl) {
+      mapEl.setAttribute('data-prop-id', prop.id);
+      mapEl.setAttribute('data-lat', String(prop.location?.lat || 36.559312));
+      mapEl.setAttribute('data-lng', String(prop.location?.lng || 139.882105));
+      mapEl.setAttribute('data-title', prop.title || '対象物件');
+    }
+  }
+
+  function renderS02(params) {
+    const vm = buildS02ViewModel(params);
+    if (!vm) return renderEmptyState('S02', "物件が見つかりません", "掲載が終了したか、まだ物件が登録されていません。", "#s01", "物件一覧へ");
+
+    const { prop, state, isFollowed, rentMan, mgmt, activeDemands, top3DemandsHtml, top5DemandsHtml, restDemands, restDemandsHtml, floorStructure, infraBadgesHtml, featureTags, isDetailsDefaultOpen, galleryItems, initialIdx, gallerySlidesHtml, galleryThumbsHtml } = vm;
+
     setTimeout(() => {
       initGallerySlider();
     }, 0);
-
-    const activeItem = galleryItems[initialIdx] || galleryItems[0];
-    const kindLabel = getKindLabel(activeItem.kind);
 
     return `
       <section class="screen-view s02-view" data-screen="S02">
@@ -972,53 +1428,46 @@ window.MachirikuScreens = (function() {
           <!-- 左メインコンテンツ -->
           <div class="detail-main-pane">
             <!-- 写真ギャラリー (アットホーム × HOME'S仕様 カルーセル) -->
-            <div class="detail-gallery-box" id="s02-gallery-box" data-prop="${prop.id}">
+            <div class="detail-gallery-box" id="s02-gallery-box" data-prop="${prop.id}" role="region" aria-roledescription="carousel" aria-label="物件写真ギャラリー">
               <!-- メイン写真プレビュー -->
               <div class="gallery-main-container">
                 ${galleryItems.length > 1 ? `
                   <button type="button" class="gallery-nav-btn prev" onclick="MachirikuScreens.navGallery(-1)" aria-label="前の写真">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
                   </button>
                 ` : ''}
                 <div class="gallery-main-view" id="gallery-main-view">
                   <div class="gallery-slider-track" id="gallery-slider-track" style="transform: translateX(-${initialIdx * 100}%);">
-                    ${galleryItems.map((item, idx) => `
-                      <div class="gallery-slide-item" data-index="${idx}">
-                        <img src="${escapeHtml(item.url)}" alt="${escapeHtml(prop.title)} - ${escapeHtml(item.label || '')}" loading="${idx === initialIdx ? 'eager' : 'lazy'}" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
-                      </div>
-                    `).join('')}
+                    ${gallerySlidesHtml}
                   </div>
                 </div>
                 ${galleryItems.length > 1 ? `
                   <button type="button" class="gallery-nav-btn next" onclick="MachirikuScreens.navGallery(1)" aria-label="次の写真">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
                   </button>
                 ` : ''}
                 <!-- 右上: すべての写真ボタン -->
                 <button type="button" class="btn-gallery-all-overlay" onclick="MachirikuScreens.openAllPhotosModal('${prop.id}')" title="すべての写真を一覧表示">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:4px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>すべての写真 (${galleryItems.length}枚)
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-1px; margin-right:4px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>すべての写真 (${galleryItems.length}枚)
                 </button>
                 <!-- 右下: 枚数カウンター -->
                 <div class="gallery-counter-badge">
                   <span id="gallery-current-index">${initialIdx + 1}</span> / <span id="gallery-total-count">${galleryItems.length}</span>
                 </div>
               </div>
+              <p id="s02-gallery-status" class="visually-hidden" role="status" aria-live="polite"></p>
 
               <!-- サムネイルカルーセル（添付画像完全準拠） -->
               ${galleryItems.length > 1 ? `
                 <div class="gallery-carousel-wrapper">
                   <button type="button" class="carousel-arrow-btn prev" onclick="MachirikuScreens.scrollThumbs(-1)" aria-label="前のサムネイル">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
                   </button>
                   <div class="gallery-thumbs-track" id="gallery-thumbs-track">
-                    ${galleryItems.map((img, i) => `
-                      <button type="button" class="gallery-thumb-btn ${i === initialIdx ? 'is-selected' : ''}" data-index="${i}" onclick="MachirikuScreens.selectGalleryImage(${i})" title="${escapeHtml(img.label)}">
-                        <img src="${escapeHtml(img.url)}" alt="${escapeHtml(img.label)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="MachirikuScreens.handlePropertyImageError(this)">
-                      </button>
-                    `).join('')}
+                    ${galleryThumbsHtml}
                   </div>
                   <button type="button" class="carousel-arrow-btn next" onclick="MachirikuScreens.scrollThumbs(1)" aria-label="次のサムネイル">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
                   </button>
                 </div>
               ` : ''}
@@ -1027,56 +1476,98 @@ window.MachirikuScreens = (function() {
             <!-- 物件概要カード (アットホーム仕様) -->
             <div class="detail-card">
               <h2 class="detail-card-title">物件募集概要</h2>
-              <table class="specs-table">
+              ${prop.description ? `
+                <div class="property-overview-description">
+                  ${escapeHtml(prop.description).replace(/\n/g, '<br>')}
+                </div>
+              ` : ''}
+
+              <!-- 常時表示の基本5項目 + 展開式の詳細項目（列幅固定でシームレス連結＋アニメーション対応） -->
+              <table class="specs-table specs-table-core" aria-label="物件の基本情報">
                 <tbody>
                   <tr>
-                    <th>賃料 / 管理費等</th>
+                    <th scope="row">賃料 / 管理費等</th>
                     <td><strong style="font-size:1.3rem; color:var(--accent-price);">${rentMan}万円</strong> /月 （管理費等: ${mgmt}）${prop.source && prop.rentTaxStatus === 'unknown' ? '<br><small>税区分は掲載元に確認</small>' : ''}</td>
                   </tr>
                   <tr>
-                    <th>敷金 / 礼金 / 保証金</th>
-                    <td>敷金: ${escapeHtml(prop.deposit ?? '掲載なし（要確認）')} / 礼金: ${escapeHtml(prop.keyMoney ?? '掲載なし（要確認）')} / 保証金: ${escapeHtml(prop.securityDeposit ?? '掲載なし（要確認）')}</td>
+                    <th scope="row">居抜き・設備状態</th>
+                    <td>${escapeHtml(prop.condition || prop.listingStatusRaw || '掲載なし（要確認）')}</td>
                   </tr>
                   <tr>
-                    <th>所在地</th>
+                    <th scope="row">所在地</th>
                     <td>${escapeHtml(prop.address)}</td>
                   </tr>
-                  ${prop.otherFees?.length ? `<tr><th>その他の掲載費用</th><td><ul class="listing-fees">${prop.otherFees.map(f => `<li>${escapeHtml(f.name)}: ${escapeHtml(f.amountRaw)}</li>`).join('')}</ul></td></tr>` : ''}
                   <tr>
-                    <th>交通・最寄駅</th>
+                    <th scope="row">交通・最寄駅</th>
                     <td>${escapeHtml(prop.access)}</td>
                   </tr>
                   <tr>
-                    <th>使用部分面積</th>
+                    <th scope="row">使用部分面積</th>
                     <td><strong>${prop.areaTsubo}坪</strong> （${prop.areaSqm}㎡）</td>
                   </tr>
-                  <tr>
-                    <th>階数・構造</th>
-                    <td>${escapeHtml(prop.floor)} / ${escapeHtml(prop.structure)}（${escapeHtml(prop.builtYear)}）</td>
-                  </tr>
-                  <tr>
-                    <th>現況 / 引渡し</th>
-                    <td>${escapeHtml(prop.listingStatusRaw || '掲載なし')} / ${escapeHtml(prop.handover)}</td>
-                  </tr>
-                  <tr>
-                    <th>業種条件</th>
-                    <td>${escapeHtml(prop.condition)}</td>
-                  </tr>
-                  <tr>
-                    <th>主要設備</th>
-                    <td>
-                      <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
-                        ${(prop.facilities || ['電気','上水道','下水道']).map(fac => `<span class="badge-feature">${escapeHtml(fac)}</span>`).join('')}
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <th>飲食店営業許可</th>
-                    <td><span class="badge-check-ok">✔ ${escapeHtml(prop.permitStatus || "取得相談可")}</span></td>
-                  </tr>
-                  ${prop.sourceNotes?.length ? `<tr><th>掲載情報の備考</th><td><ul class="listing-fees">${prop.sourceNotes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul></td></tr>` : ''}
                 </tbody>
               </table>
+
+              <div id="s02-specs-extra" class="s02-collapse-panel${isDetailsDefaultOpen ? ' is-expanded' : ''}" ${isDetailsDefaultOpen ? '' : 'hidden'}>
+                <table class="specs-table specs-table-extra" aria-label="詳細な契約・設備条件">
+                  <tbody>
+                    <tr>
+                      <th scope="row">敷金 / 礼金 / 保証金</th>
+                      <td>敷金: ${escapeHtml(prop.deposit ?? '掲載なし（要確認）')} / 礼金: ${escapeHtml(prop.keyMoney ?? '掲載なし（要確認）')} / 保証金: ${escapeHtml(prop.securityDeposit ?? '掲載なし（要確認）')}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">その他の掲載費用</th>
+                      <td>
+                        ${prop.otherFees?.length
+                          ? `<ul class="listing-fees">${prop.otherFees.map(f => `<li>${escapeHtml(f.name)}: ${escapeHtml(f.amountRaw)}</li>`).join('')}</ul>`
+                          : '掲載なし'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th scope="row">階数・構造</th>
+                      <td>${escapeHtml(floorStructure)}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">築年月</th>
+                      <td>${escapeHtml(prop.builtYear || '掲載なし（要確認）')}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">現況・引渡し</th>
+                      <td>${escapeHtml(prop.listingStatusRaw || '掲載なし')} / ${escapeHtml(prop.handover || '相談')}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">基本インフラ設備</th>
+                      <td>
+                        <ul class="infra-facility-grid" role="list" aria-label="基本インフラ設備">
+                          ${infraBadgesHtml}
+                        </ul>
+                      </td>
+                    </tr>
+                    ${featureTags.length ? `
+                      <tr>
+                        <th scope="row">立地・空間の特徴</th>
+                        <td>
+                          <div class="feature-tag-list">
+                            ${featureTags.map(tag => `<span class="badge-feature">${escapeHtml(tag)}</span>`).join('')}
+                          </div>
+                        </td>
+                      </tr>
+                    ` : ''}
+                    <tr>
+                      <th scope="row">飲食店営業許可</th>
+                      <td><span class="badge-check-ok">✓ ${escapeHtml(prop.permitStatus || "取得相談可")}</span></td>
+                    </tr>
+                    ${prop.sourceNotes?.length ? `<tr><th scope="row">掲載情報の備考</th><td><ul class="listing-fees">${prop.sourceNotes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul></td></tr>` : ''}
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="disclosure-footer-action">
+                <button type="button" class="detail-specs-toggle" aria-expanded="${isDetailsDefaultOpen}" aria-controls="s02-specs-extra" onclick="MachirikuScreens.toggleS02Section('s02-specs-extra', this)">
+                  <span class="toggle-label-closed">詳細な契約・設備条件を表示する</span>
+                  <span class="toggle-label-open">詳細な契約・設備条件を閉じる</span>
+                </button>
+              </div>
 
               ${prop.source ? renderSourceInformation(prop) : `
                 <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px dashed var(--border-color); display:flex; justify-content:space-between; align-items:center; font-size:0.875rem; color:var(--text-sub);">
@@ -1089,10 +1580,6 @@ window.MachirikuScreens = (function() {
                   </div>
                 </div>
               `}
-
-              <div style="margin-top:1.25rem; font-size:0.9rem; line-height:1.7; color:var(--text-sub);">
-                ${escapeHtml(prop.description).replace(/\n/g, '<br>')}
-              </div>
             </div>
 
             <!-- Decidim風 住民需要分析セクション -->
@@ -1100,31 +1587,56 @@ window.MachirikuScreens = (function() {
               <h2 class="detail-card-title" style="color:var(--primary-700); border-bottom-color:var(--border-color);">
                 住民の需要データ・リクエスト状況
               </h2>
-              <p style="font-size:0.875rem; color:var(--primary-800); margin-bottom:1.25rem;">
-                マチリクでは、近隣住民が『この空き店舗に欲しい業種』を1位〜3位の順位投票で集計しています。
-              </p>
               
               <div class="civic-kpi-bar">
                 <div class="civic-kpi-item">
                   <div class="civic-kpi-label">需要総合スコア</div>
                   <div class="civic-kpi-val">${prop.demandScore} <span style="font-size:1rem;">pt</span></div>
+                  <div class="civic-kpi-sub">順位重み × 近隣距離係数の合算</div>
                 </div>
                 <div class="civic-kpi-item">
                   <div class="civic-kpi-label">住民投票総数</div>
                   <div class="civic-kpi-val">${prop.votesCount} <span style="font-size:1rem;">人</span></div>
+                  <div class="civic-kpi-sub">投票した実人数（1人最大3業種）</div>
                 </div>
                 <div class="civic-kpi-item">
                   <div class="civic-kpi-label">最多リクエスト</div>
                   <div class="civic-kpi-val" style="font-size:1.15rem; margin-top:0.6rem;">
-                    ${prop.topDemands[0]?.label || '未集計'}
+                    ${escapeHtml(activeDemands[0]?.label || '未集計')}
                   </div>
+                  <div class="civic-kpi-sub">${activeDemands[0] ? `${activeDemands[0].score} pt / 計${activeDemands[0].votes}票` : '集計中'}</div>
                 </div>
               </div>
 
-              <h3 style="font-size:0.95rem; font-weight:800; color:var(--primary-700); margin-bottom:0.75rem;">希望業種ランキング Top 4</h3>
-              <div class="demand-bar-list">
-                ${topDemandsHtml || '<p class="sample-note">まだ投票がありません。</p>'}
+              <div class="demand-ranking-header-row">
+                <h3 style="font-size:0.95rem; font-weight:800; color:var(--primary-700); margin:0;">希望業種ランキング</h3>
+                <ul class="demand-legend-list" role="list" aria-label="グラフ凡例">
+                  <li><span class="demand-legend-swatch rank-1" aria-hidden="true"></span>第1希望</li>
+                  <li><span class="demand-legend-swatch rank-2" aria-hidden="true"></span>第2希望</li>
+                  <li><span class="demand-legend-swatch rank-3" aria-hidden="true"></span>第3希望</li>
+                </ul>
               </div>
+              <div class="demand-bar-list ${restDemands.length > 0 ? 'demand-ranking-list-top' : ''}">
+                ${top5DemandsHtml || '<p class="sample-note">まだ投票がありません。</p>'}
+              </div>
+
+              ${restDemands.length > 0 ? `
+                <div id="s02-demand-extra" class="s02-collapse-panel" data-until-found="true" hidden="until-found">
+                  <div class="demand-bar-list demand-extra-inner">
+                    ${restDemandsHtml}
+                  </div>
+                </div>
+                <div class="disclosure-footer-action">
+                  <button type="button" class="detail-specs-toggle" aria-expanded="false" aria-controls="s02-demand-extra" onclick="MachirikuScreens.toggleS02Section('s02-demand-extra', this)">
+                    <span class="toggle-label-closed">6位以下の希望業種を見る（${restDemands.length}業種）</span>
+                    <span class="toggle-label-open">6位以下の希望業種を閉じる（${restDemands.length}業種）</span>
+                  </button>
+                </div>
+              ` : ''}
+
+              <p class="demand-scoring-note">
+                マチリクでは、近隣住民が『この空き店舗に欲しい業種』を第1〜第3希望（各 1.0 / 0.6 / 0.3 × 店舗からの近隣距離係数）で集計し、熱量と商圏の近さをスコア化しています。
+              </p>
 
             </div>
           </div>
@@ -1150,15 +1662,7 @@ window.MachirikuScreens = (function() {
               `}
 
               <div class="cta-buttons-stack">
-                ${state.currentRole === 'resident' ? `
-                  <a class="btn-cta-vote" href="#s03?id=${prop.id}">${hasVoted ? '投票内容を変更する' : '欲しいお店に投票する'}</a>
-                ` : state.currentRole === 'business' ? `
-                  <a class="btn-cta-apply" href="#s08?id=${prop.id}">この物件に出店を申し込む</a>
-                ` : state.currentRole === 'owner' && prop.ownerId === state.currentUser.id ? `
-                  <a class="btn-cta-apply" href="#s12?id=${prop.id}">物件の掲載内容を編集する</a>
-                ` : `
-                  <a class="btn-cta-apply" href="#s07?id=${prop.id}">この物件の需要を確認する</a>
-                `}
+                <a class="${vm.primaryCtaClass}" href="${escapeHtml(vm.primaryCtaHref)}">${escapeHtml(vm.primaryCtaLabel)}</a>
                 <button type="button" class="btn-secondary" data-follow-id="${prop.id}" aria-pressed="${Boolean(isFollowed)}" style="width:100%; justify-content:center;" onclick="MachirikuScreens.handleToggleFollow('${prop.id}')">
                   ${isFollowed ? 'フォロー中・解除する' : '開店のようすをフォローする'}
                 </button>
@@ -1167,19 +1671,19 @@ window.MachirikuScreens = (function() {
               <hr style="border:none; border-top:1px solid var(--border-color); margin:1.25rem 0;">
 
               ${state.currentRole !== 'resident' ? `<nav aria-label="物件に関する情報">
-                <a class="secondary-action" href="#s07?id=${prop.id}">住民の需要を見る</a>
-                <a class="secondary-action" href="#s05?id=${prop.id}">開店の予定を見る</a>
-                ${state.currentRole === 'owner' ? `<a class="secondary-action" href="#s33?id=${prop.id}">PR掲載について</a>` : ''}
+                <a class="secondary-action" href="${escapeHtml(resolveScreenHref(`#s07?id=${prop.id}`))}">住民の需要を見る</a>
+                <a class="secondary-action" href="${escapeHtml(resolveScreenHref(`#s05?id=${prop.id}`))}">開店の予定を見る</a>
+                ${state.currentRole === 'owner' ? `<a class="secondary-action" href="${escapeHtml(resolveScreenHref(`#s33?id=${prop.id}`))}">PR掲載について</a>` : ''}
               </nav>` : ''}
             </div>
 
-            <!-- 物件所在地GoogleMapカード（独立カード：横幅・左端位置を上位CTAカード内要素と完全同期） -->
-            <div class="detail-card" style="padding:1rem var(--space-6); display:block;">
-              <div style="font-weight:700; font-size:0.875rem; margin-bottom:0.5rem; color:var(--text-main);">所在地・周辺情報</div>
-              <div style="font-size:0.875rem; color:var(--text-sub); margin-bottom:0.75rem;">
+            <!-- 物件所在地GoogleMapカード（上位CTAカードと横幅を一致） -->
+            <div class="detail-card side-location-card">
+              <h3 class="side-location-title">所在地・周辺情報</h3>
+              <div class="side-location-address">
                 ${escapeHtml(prop.address)}
               </div>
-              <div id="s02-location-map" data-lat="${prop.location?.lat || 36.559312}" data-lng="${prop.location?.lng || 139.882105}" data-title="${escapeHtml(prop.title)}" style="width:100%; height:200px; border-radius:var(--radius-sm); border:1px solid var(--border-color); overflow:hidden; background:var(--bg-subtle);"></div>
+              <div id="s02-location-map" class="side-location-map" data-prop-id="${prop.id}" data-lat="${prop.location?.lat || 36.559312}" data-lng="${prop.location?.lng || 139.882105}" data-title="${escapeHtml(prop.title)}"></div>
             </div>
           </div>
         </div>
@@ -5452,6 +5956,60 @@ window.MachirikuScreens = (function() {
     }
   }
 
+  function toggleS02Section(targetId, btn) {
+    if (typeof document === 'undefined') return;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    const isExpanded = target.classList.contains('is-expanded');
+    const nextOpen = !isExpanded;
+
+    if (btn) {
+      btn.setAttribute('aria-expanded', String(nextOpen));
+    }
+
+    if (nextOpen) {
+      target.removeAttribute('hidden');
+      void target.offsetHeight;
+      target.classList.add('is-expanded');
+    } else {
+      target.classList.remove('is-expanded');
+      const transitions = typeof target.getAnimations === 'function'
+        ? target.getAnimations().filter((a) => (typeof CSSTransition !== 'undefined' ? a instanceof CSSTransition : true))
+        : [];
+      const finalizeClose = () => {
+        if (!target.classList.contains('is-expanded')) {
+          if (target.dataset.untilFound === 'true') {
+            target.setAttribute('hidden', 'until-found');
+          } else {
+            target.setAttribute('hidden', '');
+          }
+          if (btn && typeof btn.scrollIntoView === 'function') {
+            btn.scrollIntoView({ block: 'nearest' });
+          }
+        }
+      };
+      if (transitions.length > 0) {
+        Promise.allSettled(transitions.map((t) => t.finished)).then(finalizeClose);
+      } else {
+        finalizeClose();
+      }
+    }
+  }
+
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('beforematch', (event) => {
+      const target = event.target;
+      if (!target || !target.id) return;
+      if (target.classList && target.classList.contains('s02-collapse-panel')) {
+        target.classList.add('is-expanded');
+      }
+      const trigger = document.querySelector(`button[aria-controls="${CSS.escape(target.id)}"]`);
+      if (trigger) {
+        trigger.setAttribute('aria-expanded', 'true');
+      }
+    });
+  }
+
   function handleCatCheckboxChange(catId, isChecked) {
     if (isChecked) {
       if (!catPopoverState.pendingCategories.includes(catId)) {
@@ -6023,6 +6581,11 @@ window.MachirikuScreens = (function() {
 
     const idxEl = document.getElementById('gallery-current-index');
     if (idxEl) idxEl.textContent = String(currentGallery.index + 1);
+    const statusEl = document.getElementById('s02-gallery-status');
+    if (statusEl) {
+      const labelText = item.label ? `：${item.label}` : '';
+      statusEl.textContent = `${currentGallery.index + 1}枚目 / ${currentGallery.items.length}枚${labelText}`;
+    }
     const captionEl = document.getElementById('gallery-caption-text');
     if (captionEl) captionEl.textContent = item.label;
     const kindEl = document.getElementById('gallery-kind-label');
@@ -6030,15 +6593,18 @@ window.MachirikuScreens = (function() {
 
     const track = document.getElementById('gallery-thumbs-track');
     if (track) {
+      const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       const btns = track.querySelectorAll('.gallery-thumb-btn');
       btns.forEach((btn, idx) => {
         if (idx === currentGallery.index) {
           btn.classList.add('is-selected');
+          btn.setAttribute('aria-current', 'true');
           if (btn.scrollIntoView) {
-            btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            btn.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest', inline: 'center' });
           }
         } else {
           btn.classList.remove('is-selected');
+          btn.setAttribute('aria-current', 'false');
         }
       });
     }
@@ -6129,41 +6695,62 @@ window.MachirikuScreens = (function() {
   function openAllPhotosModal(propId) {
     const prop = store.getPropertyById(propId);
     if (!prop) return;
-    const items = (prop.gallery && prop.gallery.length) ? prop.gallery : currentGallery.items;
+    const rawItems = (prop.gallery && prop.gallery.length) ? prop.gallery : currentGallery.items;
+    const items = rawItems.map(item => ({
+      ...item,
+      url: resolveAssetUrl(item.url || IMAGE_PLACEHOLDER)
+    }));
     modalGalleryItems = items;
     closeAllPhotosModal();
 
     const modalHtml = `
-      <div class="photos-modal-overlay" id="photos-modal" onclick="if(event.target === this) MachirikuScreens.closeAllPhotosModal()">
+      <dialog class="photos-modal-overlay photos-modal-dialog" id="photos-modal" aria-labelledby="photos-modal-title" onclick="if(event.target === this) MachirikuScreens.closeAllPhotosModal()">
         <div class="photos-modal-box">
           <div class="photos-modal-header">
-            <h3 class="photos-modal-title">${escapeHtml(prop.title)} の写真 (${items.length}枚)</h3>
+            <h2 id="photos-modal-title" class="photos-modal-title">${escapeHtml(prop.title)} の写真 (${items.length}枚)</h2>
             <button type="button" class="photos-modal-close-btn" onclick="MachirikuScreens.closeAllPhotosModal()" aria-label="閉じる">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
           <div class="photos-modal-grid" id="photos-modal-grid">
             ${items.map((item, idx) => `
-              <div class="photo-tile-item" onclick="MachirikuScreens.openLightbox(${idx})" title="クリックして拡大表示">
-                <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label || prop.title)}" loading="lazy">
-                <div class="photo-tile-hover-overlay">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              <button type="button" class="photo-tile-item" onclick="MachirikuScreens.openLightbox(${idx})" aria-label="${escapeHtml(item.label || `${prop.title} の写真 ${idx + 1}`)}を拡大表示" title="クリックして拡大表示">
+                <img src="${escapeHtml(item.url)}" alt="" loading="lazy" fetchpriority="low">
+                <div class="photo-tile-hover-overlay" aria-hidden="true">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                 </div>
-              </div>
+              </button>
             `).join('')}
           </div>
         </div>
-      </div>
+      </dialog>
     `;
     if (document.body && document.body.insertAdjacentHTML) {
       document.body.insertAdjacentHTML('beforeend', modalHtml);
+      const modalEl = document.getElementById('photos-modal');
+      if (modalEl) {
+        modalEl.addEventListener('close', () => {
+          closeLightbox();
+          if (modalEl.isConnected) modalEl.remove();
+        }, { once: true });
+        if (typeof modalEl.showModal === 'function') {
+          modalEl.showModal();
+        } else {
+          modalEl.setAttribute('open', '');
+        }
+      }
     }
   }
 
   function closeAllPhotosModal() {
-    const modal = document.getElementById('photos-modal');
-    if (modal) modal.remove();
     closeLightbox();
+    const modal = document.getElementById('photos-modal');
+    if (modal) {
+      if (typeof modal.close === 'function' && modal.open) {
+        modal.close();
+      }
+      if (modal.isConnected) modal.remove();
+    }
   }
 
   let lightboxKeyHandler = null;
@@ -6177,26 +6764,41 @@ window.MachirikuScreens = (function() {
     const total = modalGalleryItems.length;
 
     const lightboxHtml = `
-      <div class="lightbox-overlay" id="lightbox-modal" onclick="if(event.target === this) MachirikuScreens.closeLightbox()">
+      <dialog class="lightbox-overlay lightbox-dialog" id="lightbox-modal" aria-label="写真の拡大表示" onclick="if(event.target === this) MachirikuScreens.closeLightbox()">
         <button type="button" class="lightbox-close-btn" onclick="MachirikuScreens.closeLightbox()" aria-label="拡大表示を閉じる">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
         ${total > 1 ? `
           <button type="button" class="lightbox-nav-btn prev" onclick="event.stopPropagation(); MachirikuScreens.navLightbox(-1)" aria-label="前の写真">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
           </button>
           <button type="button" class="lightbox-nav-btn next" onclick="event.stopPropagation(); MachirikuScreens.navLightbox(1)" aria-label="次の写真">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
           </button>
         ` : ''}
         <div class="lightbox-content-box" onclick="event.stopPropagation()">
           <img id="lightbox-img" src="${escapeHtml(item.url)}" alt="${escapeHtml(item.label || '')}" class="lightbox-image">
           <div class="lightbox-counter">${idx + 1} / ${total}</div>
         </div>
-      </div>
+      </dialog>
     `;
     if (document.body && document.body.insertAdjacentHTML) {
       document.body.insertAdjacentHTML('beforeend', lightboxHtml);
+      const lbEl = document.getElementById('lightbox-modal');
+      if (lbEl) {
+        lbEl.addEventListener('close', () => {
+          if (typeof window !== 'undefined' && lightboxKeyHandler) {
+            window.removeEventListener('keydown', lightboxKeyHandler);
+            lightboxKeyHandler = null;
+          }
+          if (lbEl.isConnected) lbEl.remove();
+        }, { once: true });
+        if (typeof lbEl.showModal === 'function') {
+          lbEl.showModal();
+        } else {
+          lbEl.setAttribute('open', '');
+        }
+      }
     }
 
     if (typeof window !== 'undefined') {
@@ -6211,11 +6813,16 @@ window.MachirikuScreens = (function() {
   }
 
   function closeLightbox() {
-    const lb = document.getElementById('lightbox-modal');
-    if (lb) lb.remove();
     if (typeof window !== 'undefined' && lightboxKeyHandler) {
       window.removeEventListener('keydown', lightboxKeyHandler);
       lightboxKeyHandler = null;
+    }
+    const lb = document.getElementById('lightbox-modal');
+    if (lb) {
+      if (typeof lb.close === 'function' && lb.open) {
+        lb.close();
+      }
+      if (lb.isConnected) lb.remove();
     }
   }
 
@@ -6236,7 +6843,7 @@ window.MachirikuScreens = (function() {
 
     // DOMを破棄せず、画像とカウンターのみをスムーズにインプレース更新（裏画面の露出を完全防止）
     img.style.opacity = '0.5';
-    img.src = item.url;
+    img.src = resolveAssetUrl(item.url);
     img.alt = item.label || '';
     img.onload = () => { img.style.opacity = '1'; };
     setTimeout(() => { if (img) img.style.opacity = '1'; }, 80);
@@ -6282,6 +6889,9 @@ window.MachirikuScreens = (function() {
     const title = container.getAttribute('data-title') || '対象物件';
     if (isNaN(lat) || isNaN(lng)) return;
 
+    const mapPropId = container.getAttribute('data-prop-id') || `${lat},${lng}`;
+    if (container.dataset.nativeMapPropId === mapPropId && s02GoogleMap) return;
+
     function renderNativeMap() {
       const pos = { lat, lng };
       s02GoogleMap = new google.maps.Map(container, {
@@ -6299,6 +6909,7 @@ window.MachirikuScreens = (function() {
         map: s02GoogleMap,
         title: title
       });
+      container.dataset.nativeMapPropId = mapPropId;
     }
 
     if (typeof google !== 'undefined' && google.maps && google.maps.Map) {
@@ -6323,7 +6934,7 @@ window.MachirikuScreens = (function() {
 
   return {
     renderEmptyState, resetSearch, handlePropertyImageError,
-    renderS01, renderS02, renderS03, renderS04, renderS05, renderS06, renderS07,
+    renderS01, hydrateS02, renderS02, renderS03, renderS04, renderS05, renderS06, renderS07,
     renderS08, renderS09, renderS10, renderS11, renderS12, renderS13, renderS14,
     renderS15, renderS16, renderS17, renderS18, renderS19, renderS20, renderS21,
     renderS22, renderS23, renderS24, renderS25, renderS26, renderS27, renderS28,
@@ -6348,6 +6959,7 @@ window.MachirikuScreens = (function() {
     applyRentFilters,
     toggleCatPopover,
     toggleDemandAccordion,
+    toggleS02Section,
     closeCatPopover,
     handleCatCheckboxChange,
     toggleAllCategories,

@@ -656,13 +656,15 @@ window.MachirikuMap = (function() {
     const mgmt = prop.managementFee == null ? '管理費等なし' : `管 ${Number(prop.managementFee).toLocaleString('ja-JP')}円`;
     const topDemand = prop.topDemands && prop.topDemands[0];
     const topDemandLabel = topDemand ? `${topDemand.label} (${topDemand.votes}票 / ${topDemand.score}pt)` : "需要集計中";
+    const ctx = (typeof window !== 'undefined' && window.__MACHIRIKU_CONTEXT_PATH__ !== undefined) ? window.__MACHIRIKU_CONTEXT_PATH__ : null;
+    const detailHref = ctx !== null ? `${ctx}/property/detail.jsp?id=${encodeURIComponent(prop.id)}` : `#s02?id=${encodeURIComponent(prop.id)}`;
 
     card.innerHTML = `
       <div class="map-mobile-card-inner">
         <button type="button" class="map-mobile-card-close" onclick="event.stopPropagation(); MachirikuMap.closeMobileMapCard(); return false;" aria-label="閉じる">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
-        <a href="#s02?id=${prop.id}" class="map-mobile-card-link">
+        <a href="${detailHref}" class="map-mobile-card-link">
           <div class="map-mobile-card-thumb">
             <img src="${prop.coverImage || 'assets/property-placeholder.svg'}" alt="${prop.title}">
             <span class="map-mobile-card-badge">${prop.statusLabel}</span>
@@ -675,7 +677,7 @@ window.MachirikuMap = (function() {
             <div class="map-mobile-card-demand">最多需要: <strong>${topDemandLabel}</strong></div>
           </div>
         </a>
-        <a href="#s02?id=${prop.id}" class="map-mobile-card-action">物件詳細を見る</a>
+        <a href="${detailHref}" class="map-mobile-card-action">物件詳細を見る</a>
       </div>
     `;
 
@@ -711,6 +713,8 @@ window.MachirikuMap = (function() {
     const mgmt = prop.managementFee == null ? '管理費等なし' : `管理費 ${Number(prop.managementFee).toLocaleString('ja-JP')}円`;
     const topDemand = prop.topDemands && prop.topDemands[0];
     const topDemandLabel = topDemand ? `${topDemand.label} (${topDemand.votes}票 / ${topDemand.score}pt)` : "需要集計中";
+    const ctx = (typeof window !== 'undefined' && window.__MACHIRIKU_CONTEXT_PATH__ !== undefined) ? window.__MACHIRIKU_CONTEXT_PATH__ : null;
+    const detailHref = ctx !== null ? `${ctx}/property/detail.jsp?id=${encodeURIComponent(prop.id)}` : `#s02?id=${encodeURIComponent(prop.id)}`;
 
     const contentString = `
       <div class="gmap-info-window">
@@ -720,11 +724,11 @@ window.MachirikuMap = (function() {
           ${prop.isPr ? '<span class="info-window-pr">PR枠</span>' : ''}
         </div>
         <div class="info-window-body">
-          <h4 class="info-window-title"><a href="#s02?id=${prop.id}">${prop.title}</a></h4>
+          <h4 class="info-window-title"><a href="${detailHref}">${prop.title}</a></h4>
           <div class="info-window-rent"><strong>${rentMan}万円</strong><small>/月</small> <span class="info-window-mgmt">${mgmt}</span></div>
           <div class="info-window-specs">${prop.areaTsubo}坪 (${prop.areaSqm}m²) ・ ${prop.floor}</div>
           <div class="info-window-demand">最多需要: <strong>${topDemandLabel}</strong></div>
-          <a href="#s02?id=${prop.id}" class="info-window-btn">物件詳細を見る</a>
+          <a href="${detailHref}" class="info-window-btn">物件詳細を見る</a>
         </div>
       </div>
     `;
