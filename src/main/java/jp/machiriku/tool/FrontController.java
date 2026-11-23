@@ -10,13 +10,22 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jp.machiriku.servlet.ProfileIconSupport;
 
-// *.actionへのリクエストを受け取り、URLから対応するActionクラスを呼び出す。
-@WebServlet(urlPatterns = {"*.action"})
+/** Action URLへのリクエストを受け取り、対応するActionを呼び出す。 */
+@WebServlet("*.action")
 @MultipartConfig(fileSizeThreshold = 64 * 1024, maxFileSize = ProfileIconSupport.MAX_REQUEST_BYTES,
         maxRequestSize = ProfileIconSupport.MAX_REQUEST_BYTES)
 public class FrontController extends HttpServlet {
 
-    // 画面表示とフォーム送信の共通振り分け処理。
+    /** Servletコンテナが各画面への振り分けに使う共通の入口を生成する。 */
+    public FrontController() { }
+
+    /**
+     * 画面表示やフォーム送信を、同じリクエストのまま対象のActionに渡す。
+     * @param req Action URLへのリクエスト。
+     * @param resp Actionからの応答を返すレスポンス。
+     * @throws ServletException Servletで処理を続行できなかった場合。
+     * @throws IOException レスポンスを送信できなかった場合。
+     */
     @Override
     public void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         try {

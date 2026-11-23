@@ -25,6 +25,9 @@ import jp.machiriku.tool.PhoneNumbers;
 public class ProfileDao extends Dao {
     private static final String USER_COLUMNS = "user_id, display_name, email, user_role, "
             + "line_subject, account_status, created_at, updated_at, withdrawn_at";
+    /** 管理画面の順序を優先し、列追加前のDBでは従来のID順で表示する。 */
+    private static final String INDUSTRY_DISPLAY_ORDER = "ORDER BY COALESCE((to_jsonb(c)->>'display_order')::integer,c.category_id),c.category_id, "
+            + "COALESCE((to_jsonb(i)->>'display_order')::integer,i.industry_type_id),i.industry_type_id";
 
     protected Connection openConnection() throws SQLException { return getConnection(); }
 
@@ -186,7 +189,7 @@ public class ProfileDao extends Dao {
                     + "JOIN industry_types i ON i.industry_type_id=u.industry_type_id "
                     + "JOIN industry_categories c ON c.category_id=i.category_id "
                     + "WHERE u.user_id=? AND i.is_active AND c.is_active "
-                    + "ORDER BY c.category_id, i.industry_type_id")) {
+                    + INDUSTRY_DISPLAY_ORDER)) {
                 statement.setInt(1, userId);
                 try (ResultSet rows = statement.executeQuery()) {
                     List<String> codes = new ArrayList<>();
@@ -209,12 +212,16 @@ public class ProfileDao extends Dao {
         return result;
     }
 
-    /** 住民画面のタブ・ピル選択用に、DBで有効な業種カテゴリと業種コードの階層を取得する。 */
+    /**
+     * 住民画面の選択欄に表示する有効なカテゴリ・業種の階層を、マスターの設定順に取得する。
+     * @return カテゴリごとに業種コードと名称をまとめた一覧。
+     * @throws SQLException 業種マスターを参照できなかった場合。
+     */
     public List<Map<String, Object>> listResidentTaxonomy() throws SQLException {
         String sql = "SELECT c.category_id, c.category_code, c.category_name, i.industry_code, i.industry_name "
                 + "FROM industry_categories c JOIN industry_types i ON i.category_id = c.category_id "
                 + "WHERE c.is_active AND i.is_active AND i.industry_code IS NOT NULL "
-                + "ORDER BY c.category_id, i.industry_type_id";
+                + INDUSTRY_DISPLAY_ORDER;
         try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(sql);
                 ResultSet rows = statement.executeQuery()) {
             Map<Integer, Map<String, Object>> categories = new LinkedHashMap<>();
@@ -241,11 +248,15 @@ public class ProfileDao extends Dao {
         }
     }
 
-    /** 有効な業種だけを、DBのマスターID付きで画面へ渡す。 */
+    /**
+     * 有効なカテゴリに属する有効な業種を、マスターの設定順に取得する。
+     * @return フォームに表示する業種IDと名称の一覧。
+     * @throws SQLException 業種マスターを参照できなかった場合。
+     */
     public List<RegistrationChoice> listIndustries() throws SQLException {
         String sql = "SELECT i.industry_type_id, c.category_name || ' / ' || i.industry_name AS label "
                 + "FROM industry_types i JOIN industry_categories c ON c.category_id=i.category_id "
-                + "WHERE i.is_active AND c.is_active ORDER BY c.category_id,i.industry_type_id";
+                + "WHERE i.is_active AND c.is_active " + INDUSTRY_DISPLAY_ORDER;
         try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(sql);
                 ResultSet rows = statement.executeQuery()) {
             List<RegistrationChoice> choices = new ArrayList<>();

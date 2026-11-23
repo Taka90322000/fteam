@@ -253,7 +253,13 @@ public final class RegistrationForms {
         return List.copyOf(result);
     }
 
-    private static String email(String value) {
+    /**
+     * 登録画面と管理画面で共通のメールアドレス検証を行う。
+     * @param value 入力値。空欄の場合は未登録とする。
+     * @return 保存するメールアドレス。空欄ならnull。
+     * @throws IllegalArgumentException 文字数または形式が不正な場合。
+     */
+    public static String email(String value) {
         String email = optional(value, 254, "メールアドレス");
         if (email != null && !email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) { throw invalid("メールアドレスを確認してください。"); }
         return email;

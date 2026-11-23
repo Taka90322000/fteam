@@ -605,17 +605,24 @@ window.MachirikuApp = (function() {
     }
   }
 
+  /**
+   * 利用区分に応じたデモ画面のメニューと、サーバー側の画面へのリンクを表示する。
+   * @param {string} role 現在の利用区分。
+   */
   function renderSubnavLinks(role) {
     const container = document.querySelector(".subnav-links");
     if (!container) return;
     if (renderedNavRole === role) return;
     renderedNavRole = role;
+    // 利用区分に関係なく開ける掲載物件へのリンクを、メニュー描画後に戻す。
+    const siteLink = container.querySelector("[data-site-link]");
     const items = ROLE_NAV_MENUS[role] || ROLE_NAV_MENUS.resident;
     container.innerHTML = items.map(item => {
       const sId = item.hash.replace("#", "").toLowerCase();
       const isActive = currentScreenId === sId ? "is-active" : "";
       return `<a href="${item.hash}" class="subnav-link ${isActive}" ${isActive ? 'aria-current="page"' : ''}>${item.label}</a>`;
     }).join("");
+    if (siteLink) container.append(siteLink);
   }
 
   function updateSubnavActive() {
