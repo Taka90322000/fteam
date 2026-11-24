@@ -3,7 +3,7 @@
   <jsp:param name="title" value="物件詳細 | マチリク" />
   <jsp:param name="description" value="宇都宮市の空き店舗詳細・住民需要ランキング・出店応募・投票ページ。" />
   <jsp:param name="pageScreenId" value="s02" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261124_focus_v2" />
 </jsp:include>
 
     <section id="s02-empty-state" class="screen-view empty-state" data-screen="S02" hidden>
@@ -256,5 +256,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="s02" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261124_focus_v2" />
 </jsp:include>

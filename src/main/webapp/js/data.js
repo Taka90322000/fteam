@@ -2401,6 +2401,74 @@ window.MACHIRIKU_DATA = (function() {
   const INITIAL_APPLICATIONS = [];
   const INITIAL_SURVEYS = [];
   const INITIAL_COUPONS = [];
+  const INITIAL_OFFERS = [];
+  const INITIAL_TENANCIES = [];
+  const INITIAL_OPENING_PLANS = [];
+
+  // S13: オファー候補事業主プロフィール一覧（business_profiles / business_qualifications / user_preferred_industries 準拠）
+  const OFFER_CANDIDATE_BUSINESSES = [
+    {
+      id: "usr-biz-01",
+      name: "鈴木 健太",
+      businessName: "合同会社日光珈琲舎",
+      representativeName: "鈴木 健太",
+      employeeCount: 4,
+      preferredArea: "宇都宮市中心市街地・オリオン通り・釜川周辺",
+      preferredIndustries: ["I0101", "I0107"],
+      experienceYears: "飲食業界歴12年（うち店舗統括マネージャー5年）",
+      managementExperience: "都内カフェ・バル2店舗の立ち上げおよび運営統括を経験",
+      qualifications: ["調理師免許", "食品衛生責任者", "防火管理者（甲種）"],
+      story: "地元栃木の魅力を食と空間で発信し、地域の生産者と住民が日常的に集えるサードプレイスづくりを目指しています。"
+    },
+    {
+      id: "usr-biz-02",
+      name: "小林 誠",
+      businessName: "麺処 こばやし",
+      representativeName: "小林 誠",
+      employeeCount: 3,
+      preferredArea: "東武宇都宮駅・池上町・大通り周辺",
+      preferredIndustries: ["I0103", "I0104"],
+      experienceYears: "飲食業界歴9年（ラーメン専門店料理長5年）",
+      managementExperience: "路面店（18席）の仕込み・原価管理・スタッフ育成を担当",
+      qualifications: ["調理師免許", "食品衛生責任者"],
+      story: "宇都宮の地元野菜と自家製麺を使った毎日通える一杯を届けたく、居抜き設備を活かせる中心街店舗を探しています。"
+    },
+    {
+      id: "usr-biz-03",
+      name: "渡辺 美咲",
+      businessName: "宇都宮ベーカリーラボ",
+      representativeName: "渡辺 美咲",
+      employeeCount: 2,
+      preferredArea: "宇都宮市江野町・ユニオン通り・馬場通り周辺",
+      preferredIndustries: ["I0107", "I0106"],
+      experienceYears: "製パン・焼菓子製造歴7年",
+      managementExperience: "週末マルシェ・ポップアップ出店を3年間継続運営",
+      qualifications: ["食品衛生責任者", "菓子製造業許可"],
+      story: "朝の通勤・通学時に焼きたてパンとコーヒーを気軽に買える街角のベーカリーを宇都宮中心街に開きたいと考えています。"
+    },
+    {
+      id: "usr-biz-04",
+      name: "佐藤 彩香",
+      businessName: "Salon Mignon 宇都宮",
+      representativeName: "佐藤 彩香",
+      employeeCount: 2,
+      preferredArea: "戸祭・競輪場通り・駐車場付きロードサイド",
+      preferredIndustries: ["I0301", "I0303"],
+      experienceYears: "美容師歴10年（店長経験3年）",
+      managementExperience: "完全予約制ヘアサロンの顧客管理・店舗運営を担当",
+      qualifications: ["美容師免許・美容所開設届"],
+      story: "子育て世代や近隣住民の方が車で気軽に立ち寄れる、落ち着いたプライベートヘアサロンを出店希望です。"
+    }
+  ];
+
+  // S13: オーナーからの優遇・支援提案条件マスタ
+  const OFFER_INCENTIVE_OPTIONS = [
+    { key: "free_rent", label: "フリーレント1ヶ月相談可" },
+    { key: "interior_support", label: "内装改修工事の補助相談可" },
+    { key: "deposit_split", label: "敷金・保証金の分納相談可" },
+    { key: "popup_trial", label: "ポップアップ短期お試し出店可" },
+    { key: "inuki_transfer", label: "居抜き設備の無償譲渡可" }
+  ];
 
   // 資格・許可・必要書類マスタ (machiriku_schema.sql: qualifications 準拠)
   const QUALIFICATIONS = [
@@ -2568,6 +2636,11 @@ window.MACHIRIKU_DATA = (function() {
     INITIAL_APPLICATIONS,
     INITIAL_SURVEYS,
     INITIAL_COUPONS,
+    INITIAL_OFFERS,
+    INITIAL_TENANCIES,
+    INITIAL_OPENING_PLANS,
+    OFFER_CANDIDATE_BUSINESSES,
+    OFFER_INCENTIVE_OPTIONS,
     QUALIFICATIONS,
     QUALIFICATIONS_MAP,
     INDUSTRY_QUALIFICATION_REQUIREMENTS,

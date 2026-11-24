@@ -3,7 +3,7 @@
   <jsp:param name="title" value="物件削除完了 | マチリク" />
   <jsp:param name="description" value="登録物件の削除処理が完了しました。" />
   <jsp:param name="pageScreenId" value="o09" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261124_focus_v2" />
 </jsp:include>
 
     <section id="o09-section" class="screen-view" data-screen="O09">
@@ -42,5 +42,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o09" />
-  <jsp:param name="assetVersion" value="20261118_prop_v5" />
+  <jsp:param name="assetVersion" value="20261124_focus_v2" />
 </jsp:include>

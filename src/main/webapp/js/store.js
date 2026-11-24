@@ -27,6 +27,9 @@ window.MachirikuStore = (function() {
       applications: JSON.parse(JSON.stringify(data.INITIAL_APPLICATIONS)),
       surveys: JSON.parse(JSON.stringify(data.INITIAL_SURVEYS)),
       coupons: JSON.parse(JSON.stringify(data.INITIAL_COUPONS)),
+      offers: JSON.parse(JSON.stringify(data.INITIAL_OFFERS || [])),
+      tenancies: JSON.parse(JSON.stringify(data.INITIAL_TENANCIES || [])),
+      openingPlans: JSON.parse(JSON.stringify(data.INITIAL_OPENING_PLANS || [])),
       notifications: [],
       adminReports: [],
       filters: {
@@ -137,6 +140,9 @@ window.MachirikuStore = (function() {
           saved.users.business.preferredIndustries = [...(initial.users.business.preferredIndustries || [])];
         }
       }
+      if (!Array.isArray(saved.offers)) saved.offers = [];
+      if (!Array.isArray(saved.tenancies)) saved.tenancies = [];
+      if (!Array.isArray(saved.openingPlans)) saved.openingPlans = [];
       return { ...initial, ...saved, currentRole, currentUser: saved.users[currentRole], filters: loadedFilters };
     } catch (_) {
       // Damaged or unavailable local storage must never prevent previewing a screen.
@@ -626,34 +632,508 @@ window.MachirikuStore = (function() {
     return chk;
   }
 
-  // 出店計画公開 (S15)
-  function publishStorePlan(planData) {
-    const prop = getPropertyById(planData.propId);
-    if (prop) {
-      prop.status = planData.isOpenNow ? "opened" : "preparing";
-      prop.statusLabel = planData.isOpenNow ? "営業中（アンケート＆クーポン実施中）" : `開店準備中（${planData.openDate} OPEN予定）`;
-      prop.storePlan = {
-        storeName: planData.storeName,
-        operatorName: state.currentUser.name,
-        progressStatus: planData.progressStatus || "PREPARING",
-        concept: planData.concept,
-        openDate: planData.openDate,
-        message: planData.message
-      };
+  // =========================================================================
+  // 事業主オファー管理 (S13 / offers テーブル準拠)
+  // =========================================================================
+  const OFFER_STATUS_LABELS = {
+    DRAFT: "下書き",
+    SENT: "送信済み（回答待ち）",
+    ACCEPTED: "承諾済み",
+    DECLINED: "辞退"
+  };
+
+  function getOffers() {
+    return Array.isArray(state.offers) ? state.offers : [];
+  }
+
+  function getOfferById(id) {
+    return getOffers().find(o => o.id === id);
+  }
+
+  function saveOffer(offerData) {
+    if (!Array.isArray(state.offers)) state.offers = [];
+    const prop = getPropertyById(offerData.propId);
+    const bizList = data.OFFER_CANDIDATE_BUSINESSES || [];
+    const biz = bizList.find(b => b.id === offerData.businessUserId) || null;
+    const nowText = new Date().toLocaleString("ja-JP");
+    const status = ["DRAFT", "SENT", "ACCEPTED", "DECLINED"].includes(offerData.offerStatus)
+      ? offerData.offerStatus
+      : "SENT";
+    const creationKind = offerData.creationKind === "AUTO" ? "AUTO" : "MANUAL";
+
+    const existing = offerData.id ? getOfferById(offerData.id) : null;
+    if (existing) {
+      existing.propId = offerData.propId || existing.propId;
+      existing.propTitle = prop ? prop.title : (offerData.propTitle || existing.propTitle);
+      existing.businessUserId = offerData.businessUserId || existing.businessUserId;
+      existing.businessName = biz ? biz.businessName : (offerData.businessName || existing.businessName);
+      existing.businessRepName = biz ? biz.name : (offerData.businessRepName || existing.businessRepName);
+      existing.creationKind = creationKind;
+      existing.incentives = Array.isArray(offerData.incentives) ? [...offerData.incentives] : (existing.incentives || []);
+      existing.message = String(offerData.message || "").trim();
+      existing.offerStatus = status;
+      existing.statusLabel = OFFER_STATUS_LABELS[status] || status;
+      if (status === "SENT" && !existing.sentAt) {
+        existing.sentAt = nowText;
+      }
+      existing.updatedAt = nowText;
+
+      if (status === "SENT") {
+        state.notifications.unshift({
+          id: "notif-" + Date.now(),
+          type: "offer",
+          title: `【出店オファー】${existing.propTitle}のオーナーから出店打診が届きました`,
+          body: `${existing.businessName}様へ個別オファーが送信されました。応募状況確認画面から詳細を確認できます。`,
+          date: "たった今",
+          linkScreen: "b02",
+          isRead: false
+        });
+      }
+      notify();
+      return existing;
     }
 
-    // 全体通知
+    const newOffer = {
+      id: "offer-" + Date.now(),
+      propId: offerData.propId || "",
+      propTitle: prop ? prop.title : (offerData.propTitle || ""),
+      ownerUserId: state.users?.owner?.id || "usr-owner-01",
+      ownerName: state.users?.owner?.name || "物件オーナー",
+      businessUserId: offerData.businessUserId || "usr-biz-01",
+      businessName: biz ? biz.businessName : (offerData.businessName || "出店事業主"),
+      businessRepName: biz ? biz.name : (offerData.businessRepName || ""),
+      creationKind,
+      incentives: Array.isArray(offerData.incentives) ? [...offerData.incentives] : [],
+      message: String(offerData.message || "").trim(),
+      offerStatus: status,
+      statusLabel: OFFER_STATUS_LABELS[status] || status,
+      sentAt: status === "SENT" ? nowText : null,
+      respondedAt: null,
+      responseNote: "",
+      createdAt: nowText,
+      updatedAt: nowText
+    };
+
+    state.offers.unshift(newOffer);
+    if (status === "SENT") {
+      state.notifications.unshift({
+        id: "notif-" + Date.now(),
+        type: "offer",
+        title: `【出店オファー】${newOffer.propTitle}のオーナーから出店打診が届きました`,
+        body: `${newOffer.businessName}様へ出店オファーが届きました。条件を確認して応募へ進めます。`,
+        date: "たった今",
+        linkScreen: "b02",
+        isRead: false
+      });
+    }
+    notify();
+    return newOffer;
+  }
+
+  function updateOfferStatus(offerId, nextStatus, responseNote = "") {
+    const offer = getOfferById(offerId);
+    if (!offer) return null;
+    if (!["DRAFT", "SENT", "ACCEPTED", "DECLINED"].includes(nextStatus)) return null;
+    const nowText = new Date().toLocaleString("ja-JP");
+    offer.offerStatus = nextStatus;
+    offer.statusLabel = OFFER_STATUS_LABELS[nextStatus] || nextStatus;
+    offer.updatedAt = nowText;
+    if (nextStatus === "SENT") {
+      offer.sentAt = nowText;
+      state.notifications.unshift({
+        id: "notif-" + Date.now(),
+        type: "offer",
+        title: `【出店オファー】${offer.propTitle}のオーナーから出店打診が届きました`,
+        body: `${offer.businessName}様へ出店オファーが送信されました。`,
+        date: "たった今",
+        linkScreen: "b02",
+        isRead: false
+      });
+    } else if (nextStatus === "ACCEPTED" || nextStatus === "DECLINED") {
+      offer.respondedAt = nowText;
+      if (responseNote) offer.responseNote = String(responseNote).trim();
+      state.notifications.unshift({
+        id: "notif-" + Date.now(),
+        type: "offer",
+        title: nextStatus === "ACCEPTED"
+          ? `【オファー承諾】${offer.businessName}様がオファーを承諾しました`
+          : `【オファー辞退】${offer.businessName}様より回答がありました`,
+        body: `${offer.propTitle}へのオファーが「${offer.statusLabel}」に更新されました。`,
+        date: "たった今",
+        linkScreen: "s13",
+        isRead: false
+      });
+    }
+    notify();
+    return offer;
+  }
+
+  // =========================================================================
+  // 契約成立・物件引渡し記録 (S14 / tenancies テーブル準拠)
+  // =========================================================================
+  const TENANCY_STATUS_LABELS = {
+    CONTRACTED: "契約成立（引渡し確認待ち）",
+    HANDED_OVER: "引渡し完了・開店準備中",
+    OPEN: "営業中・オープン済み",
+    CLOSED: "営業終了",
+    CANCELLED: "契約キャンセル"
+  };
+
+  function getTenancies() {
+    return Array.isArray(state.tenancies) ? state.tenancies : [];
+  }
+
+  function getTenancyById(id) {
+    return getTenancies().find(t => t.id === id);
+  }
+
+  function getTenancyByApplicationId(appId) {
+    return getTenancies().find(t => t.applicationId === appId);
+  }
+
+  function getTenancyByPropertyId(propId) {
+    return getTenancies().find(t => t.propId === propId && t.tenancyStatus !== "CANCELLED");
+  }
+
+  function saveTenancy(tenancyData) {
+    if (!Array.isArray(state.tenancies)) state.tenancies = [];
+    const app = tenancyData.applicationId ? getApplicationById(tenancyData.applicationId) : null;
+    const propId = tenancyData.propId || app?.propId || "";
+    const prop = getPropertyById(propId);
+    const startOn = String(tenancyData.contractStartOn || "").trim();
+    const endOn = String(tenancyData.contractEndOn || "").trim();
+    if (startOn && endOn && endOn < startOn) {
+      return { success: false, message: "契約終了日は契約開始日以降の日付を指定してください。" };
+    }
+
+    const nowText = new Date().toLocaleString("ja-JP");
+    const storeName = String(tenancyData.storeName || app?.storeName || "").trim() || "新規出店店舗";
+    let record = tenancyData.id
+      ? getTenancyById(tenancyData.id)
+      : (tenancyData.applicationId ? getTenancyByApplicationId(tenancyData.applicationId) : null);
+
+    if (record) {
+      record.storeName = storeName;
+      record.contractKind = tenancyData.contractKind || record.contractKind || app?.contractKind || "LONG";
+      record.contractStartOn = startOn || record.contractStartOn;
+      record.contractEndOn = endOn || record.contractEndOn;
+      record.agreedRent = Number(tenancyData.agreedRent ?? record.agreedRent ?? prop?.rent ?? 0);
+      record.contractTerm = String(tenancyData.contractTerm || record.contractTerm || "").trim();
+      record.confirmedDate = String(tenancyData.confirmedDate || record.confirmedDate || new Date().toISOString().slice(0, 10));
+      record.checklist = Array.isArray(tenancyData.checklist) ? [...tenancyData.checklist] : (record.checklist || []);
+      record.handoverNotes = String(tenancyData.handoverNotes ?? record.handoverNotes ?? "").trim();
+      record.updatedAt = nowText;
+    } else {
+      record = {
+        id: "ten-" + Date.now(),
+        applicationId: tenancyData.applicationId || "",
+        propId: propId,
+        propTitle: prop ? prop.title : (app?.propTitle || ""),
+        businessUserId: app?.applicantId || state.users?.business?.id || "usr-biz-01",
+        applicantName: app?.applicantName || state.users?.business?.name || "",
+        genreId: app?.genreId || "",
+        genreName: app?.genreName || "",
+        storeName,
+        contractKind: tenancyData.contractKind || app?.contractKind || "LONG",
+        contractStartOn: startOn,
+        contractEndOn: endOn,
+        agreedRent: Number(tenancyData.agreedRent ?? app?.targetRent ?? prop?.rent ?? 0),
+        contractTerm: String(tenancyData.contractTerm || "").trim(),
+        tenancyStatus: "CONTRACTED",
+        statusLabel: TENANCY_STATUS_LABELS.CONTRACTED,
+        confirmedDate: String(tenancyData.confirmedDate || new Date().toISOString().slice(0, 10)),
+        confirmedAt: nowText,
+        ownerHandoverAt: null,
+        businessHandoverAt: null,
+        openedOn: null,
+        checklist: Array.isArray(tenancyData.checklist) ? [...tenancyData.checklist] : [],
+        handoverNotes: String(tenancyData.handoverNotes || "").trim(),
+        createdAt: nowText,
+        updatedAt: nowText
+      };
+      state.tenancies.unshift(record);
+    }
+
+    if (app) {
+      app.storeName = storeName;
+      if (record.agreedRent > 0) app.targetRent = record.agreedRent;
+      if (app.status === "submitted" || app.status === "consulting") {
+        app.status = "approved";
+        app.statusLabel = "出店合意（契約調整へ）";
+      }
+    }
+
+    if (prop && prop.status !== "opened" && prop.status !== "preparing") {
+      prop.status = "agreed";
+      prop.statusLabel = "契約成立・引渡し手続き中";
+      prop.contractedStoreName = storeName;
+    }
+
     state.notifications.unshift({
       id: "notif-" + Date.now(),
-      type: "progress",
-      title: `【開店計画公開】『${planData.storeName}』の出店準備が始まりました！`,
-      body: `${planData.openDate}にオープン予定です。応援メッセージを送りましょう。`,
+      type: "contract",
+      title: `【契約記録保存】${record.propTitle}（${storeName}）`,
+      body: "契約情報が記録されました。オーナー・事業主双方で物件引渡し確認を完了してください。",
       date: "たった今",
-      linkScreen: "s05",
+      linkScreen: "s14",
       isRead: false
     });
 
     notify();
+    return { success: true, tenancy: record };
+  }
+
+  function confirmTenancyHandover(tenancyId, actorRole = "owner") {
+    const record = getTenancyById(tenancyId);
+    if (!record) return { success: false, message: "契約記録が見つかりません。" };
+    const nowText = new Date().toLocaleString("ja-JP");
+    if (actorRole === "business") {
+      record.businessHandoverAt = nowText;
+    } else {
+      record.ownerHandoverAt = nowText;
+    }
+    record.updatedAt = nowText;
+
+    const bothConfirmed = Boolean(record.ownerHandoverAt && record.businessHandoverAt);
+    if (bothConfirmed && record.tenancyStatus === "CONTRACTED") {
+      record.tenancyStatus = "HANDED_OVER";
+      record.statusLabel = TENANCY_STATUS_LABELS.HANDED_OVER;
+
+      const app = record.applicationId ? getApplicationById(record.applicationId) : null;
+      if (app) {
+        app.status = "contracted";
+        app.statusLabel = "契約成立・引渡し完了";
+      }
+      const prop = getPropertyById(record.propId);
+      if (prop) {
+        prop.status = "preparing";
+        prop.listingStatus = "CONTRACTED";
+        prop.statusLabel = "出店決定・開店準備中";
+        prop.contractedStoreName = record.storeName;
+      }
+      state.notifications.unshift({
+        id: "notif-" + Date.now(),
+        type: "progress",
+        title: `【引渡し完了】${record.propTitle}で『${record.storeName}』の開店準備が始まります`,
+        body: "オーナー・事業主双方の引渡し確認が完了しました。事業主は出店計画を作成・公開できます。",
+        date: "たった今",
+        linkScreen: "s15",
+        isRead: false
+      });
+    } else {
+      state.notifications.unshift({
+        id: "notif-" + Date.now(),
+        type: "contract",
+        title: actorRole === "business"
+          ? `【受領確認済】${record.storeName}様が物件受領を確認しました`
+          : `【引渡し確認済】${record.propTitle}のオーナーが引渡しを確認しました`,
+        body: "相手側の確認が完了すると引渡し完了となり、出店計画の公開へ進めます。",
+        date: "たった今",
+        linkScreen: "s14",
+        isRead: false
+      });
+    }
+
+    notify();
+    return { success: true, tenancy: record, bothConfirmed };
+  }
+
+  // =========================================================================
+  // 出店計画・お知らせ管理 (S15 / S05 / opening_plans テーブル準拠)
+  // =========================================================================
+  const PROGRESS_STATUS_LABELS = {
+    PREPARING: "開店準備中",
+    CONSTRUCTION: "内装・設備工事中",
+    DATE_FIXED: "オープン日決定",
+    OPENED: "開店・営業中"
+  };
+
+  const PUBLICATION_STATUS_LABELS = {
+    DRAFT: "下書き（非公開）",
+    PUBLISHED: "住民に公開中",
+    ARCHIVED: "アーカイブ"
+  };
+
+  function getOpeningPlans(propId) {
+    const all = Array.isArray(state.openingPlans) ? state.openingPlans : [];
+    return propId ? all.filter(p => p.propId === propId) : all;
+  }
+
+  function getOpeningPlanById(planId) {
+    return getOpeningPlans().find(p => p.id === planId);
+  }
+
+  function syncPropertyStorePlan(propId) {
+    const prop = getPropertyById(propId);
+    if (!prop) return;
+    const published = getOpeningPlans(propId).filter(p => p.publicationStatus === "PUBLISHED");
+    const latest = published[0] || null;
+    const tenancy = getTenancyByPropertyId(propId);
+
+    if (latest) {
+      const isOpen = latest.progressStatus === "OPENED";
+      prop.status = isOpen ? "opened" : "preparing";
+      prop.listingStatus = "CONTRACTED";
+      prop.contractedStoreName = latest.storeName || prop.contractedStoreName;
+      prop.statusLabel = isOpen
+        ? "営業中"
+        : (latest.plannedOpenOn ? `${PROGRESS_STATUS_LABELS[latest.progressStatus] || "開店準備中"}（${latest.plannedOpenOn} OPEN予定）` : (PROGRESS_STATUS_LABELS[latest.progressStatus] || "開店準備中"));
+      prop.storePlan = {
+        planId: latest.id,
+        storeName: latest.storeName,
+        operatorName: latest.operatorName || state.users?.business?.name || "",
+        progressStatus: latest.progressStatus,
+        progressLabel: PROGRESS_STATUS_LABELS[latest.progressStatus] || latest.progressStatus,
+        title: latest.title,
+        concept: latest.body,
+        openDate: latest.plannedOpenOn || "",
+        message: latest.body,
+        publishedAt: latest.publishedAt || "",
+        photos: Array.isArray(latest.photos) ? latest.photos : []
+      };
+      if (tenancy) {
+        if (isOpen) {
+          tenancy.tenancyStatus = "OPEN";
+          tenancy.statusLabel = TENANCY_STATUS_LABELS.OPEN;
+          tenancy.openedOn = latest.plannedOpenOn || tenancy.openedOn || new Date().toISOString().slice(0, 10);
+        } else if (tenancy.tenancyStatus === "OPEN") {
+          tenancy.tenancyStatus = "HANDED_OVER";
+          tenancy.statusLabel = TENANCY_STATUS_LABELS.HANDED_OVER;
+        }
+      }
+    } else if (tenancy) {
+      prop.storePlan = null;
+      if (tenancy.tenancyStatus === "HANDED_OVER" || tenancy.tenancyStatus === "OPEN") {
+        prop.status = "preparing";
+        prop.statusLabel = "出店決定・開店準備中";
+      }
+    } else {
+      prop.storePlan = null;
+    }
+  }
+
+  function saveOpeningPlan(planData) {
+    if (!Array.isArray(state.openingPlans)) state.openingPlans = [];
+    const prop = getPropertyById(planData.propId);
+    if (!prop) return { success: false, message: "対象物件が見つかりません。" };
+
+    const progressStatus = ["PREPARING", "CONSTRUCTION", "DATE_FIXED", "OPENED"].includes(planData.progressStatus)
+      ? planData.progressStatus
+      : "PREPARING";
+    const publicationStatus = ["DRAFT", "PUBLISHED", "ARCHIVED"].includes(planData.publicationStatus)
+      ? planData.publicationStatus
+      : "PUBLISHED";
+    const plannedOpenOn = String(planData.plannedOpenOn || planData.openDate || "").trim();
+
+    if (progressStatus === "OPENED" && publicationStatus === "PUBLISHED" && !plannedOpenOn) {
+      return { success: false, message: "「開店・営業中」として公開する場合は実開店日を入力してください。" };
+    }
+
+    const tenancy = getTenancyByPropertyId(prop.id);
+    const nowText = new Date().toLocaleString("ja-JP");
+    const storeName = String(planData.storeName || tenancy?.storeName || prop.contractedStoreName || "").trim();
+    const title = String(planData.title || `${storeName || prop.title} 開店準備のお知らせ`).trim();
+    const body = String(planData.body || planData.message || "").trim();
+    const photos = Array.isArray(planData.photos) ? planData.photos.filter(ph => ph && ph.url) : [];
+
+    let record = planData.id ? getOpeningPlanById(planData.id) : null;
+    const wasPublished = Boolean(record && record.publicationStatus === "PUBLISHED");
+
+    if (record) {
+      record.propId = prop.id;
+      record.propTitle = prop.title;
+      record.tenancyId = tenancy ? tenancy.id : (record.tenancyId || "");
+      record.storeName = storeName;
+      record.title = title;
+      record.body = body;
+      record.plannedOpenOn = plannedOpenOn;
+      record.progressStatus = progressStatus;
+      record.progressLabel = PROGRESS_STATUS_LABELS[progressStatus] || progressStatus;
+      record.publicationStatus = publicationStatus;
+      record.publicationLabel = PUBLICATION_STATUS_LABELS[publicationStatus] || publicationStatus;
+      record.photos = photos;
+      if (publicationStatus === "PUBLISHED" && !record.publishedAt) {
+        record.publishedAt = nowText;
+      }
+      record.updatedAt = nowText;
+    } else {
+      record = {
+        id: "plan-" + Date.now(),
+        tenancyId: tenancy ? tenancy.id : "",
+        propId: prop.id,
+        propTitle: prop.title,
+        storeName,
+        operatorName: state.currentUser?.name || state.users?.business?.name || "出店事業主",
+        title,
+        body,
+        plannedOpenOn,
+        progressStatus,
+        progressLabel: PROGRESS_STATUS_LABELS[progressStatus] || progressStatus,
+        publicationStatus,
+        publicationLabel: PUBLICATION_STATUS_LABELS[publicationStatus] || publicationStatus,
+        photos,
+        publishedAt: publicationStatus === "PUBLISHED" ? nowText : null,
+        createdAt: nowText,
+        updatedAt: nowText
+      };
+      state.openingPlans.unshift(record);
+    }
+
+    syncPropertyStorePlan(prop.id);
+
+    if (publicationStatus === "PUBLISHED" && !wasPublished) {
+      state.notifications.unshift({
+        id: "notif-" + Date.now(),
+        type: "progress",
+        title: `【開店のようす更新】『${storeName}』${title}`,
+        body: plannedOpenOn
+          ? `${record.progressLabel}（${plannedOpenOn} 予定）。開店のようすページで最新情報をご覧いただけます。`
+          : `${record.progressLabel}の最新お知らせが公開されました。`,
+        date: "たった今",
+        linkScreen: "s05",
+        isRead: false
+      });
+    }
+
+    notify();
+    return { success: true, plan: record };
+  }
+
+  function updateOpeningPlanPublication(planId, nextPubStatus) {
+    const plan = getOpeningPlanById(planId);
+    if (!plan || !["DRAFT", "PUBLISHED", "ARCHIVED"].includes(nextPubStatus)) return null;
+    const nowText = new Date().toLocaleString("ja-JP");
+    plan.publicationStatus = nextPubStatus;
+    plan.publicationLabel = PUBLICATION_STATUS_LABELS[nextPubStatus] || nextPubStatus;
+    plan.updatedAt = nowText;
+    if (nextPubStatus === "PUBLISHED") {
+      plan.publishedAt = nowText;
+      state.notifications.unshift({
+        id: "notif-" + Date.now(),
+        type: "progress",
+        title: `【開店のようす公開】『${plan.storeName}』${plan.title}`,
+        body: `${plan.progressLabel}のお知らせが公開されました。`,
+        date: "たった今",
+        linkScreen: "s05",
+        isRead: false
+      });
+    }
+    syncPropertyStorePlan(plan.propId);
+    notify();
+    return plan;
+  }
+
+  // 出店計画公開 (S15 旧互換)
+  function publishStorePlan(planData) {
+    return saveOpeningPlan({
+      propId: planData.propId,
+      storeName: planData.storeName,
+      title: planData.title || `${planData.storeName} 開店計画のお知らせ`,
+      body: planData.message || planData.concept || "",
+      plannedOpenOn: planData.openDate || planData.plannedOpenOn || "",
+      progressStatus: planData.isOpenNow ? "OPENED" : (planData.progressStatus || "PREPARING"),
+      publicationStatus: "PUBLISHED"
+    });
   }
 
   // 来店アンケート作成 (S23)
@@ -1120,6 +1600,20 @@ window.MachirikuStore = (function() {
     updateApplicationStatus,
     addApplicationMessage,
     updateApplicationCheck,
+    getOffers,
+    getOfferById,
+    saveOffer,
+    updateOfferStatus,
+    getTenancies,
+    getTenancyById,
+    getTenancyByApplicationId,
+    getTenancyByPropertyId,
+    saveTenancy,
+    confirmTenancyHandover,
+    getOpeningPlans,
+    getOpeningPlanById,
+    saveOpeningPlan,
+    updateOpeningPlanPublication,
     publishStorePlan,
     createSurvey,
     submitSurveyResponse,

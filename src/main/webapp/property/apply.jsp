@@ -3,7 +3,7 @@
   <jsp:param name="title" value="出店応募 | マチリク" />
   <jsp:param name="description" value="出店計画・契約希望条件・必要資格を確認してオーナーへ応募します。" />
   <jsp:param name="pageScreenId" value="b01" />
-  <jsp:param name="assetVersion" value="20261120_o10_v4" />
+  <jsp:param name="assetVersion" value="20261124_matching_v1" />
 </jsp:include>
 
     <section id="b01-empty-state" class="screen-view empty-state" data-screen="B01" hidden>
@@ -44,7 +44,7 @@
           <p id="b01-complete-summary"></p>
           <div class="complete-actions">
             <a id="b01-complete-detail-btn" class="btn-secondary" href="${pageContext.request.contextPath}/property/detail.jsp">物件詳細へ戻る</a>
-            <a class="btn-primary" href="${pageContext.request.contextPath}/index.jsp#s09">応募状況を確認する</a>
+            <a class="btn-primary" href="${pageContext.request.contextPath}/matching/applications.jsp">応募状況を確認する</a>
           </div>
         </div>
 
@@ -152,5 +152,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="b01" />
-  <jsp:param name="assetVersion" value="20261120_o10_v4" />
+  <jsp:param name="assetVersion" value="20261124_matching_v1" />
 </jsp:include>

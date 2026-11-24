@@ -1710,7 +1710,7 @@ window.MachirikuPropertyPages = (function () {
       const canHandover = app.status === "approved" || app.status === "contracted";
       handoverBox.hidden = !canHandover;
       if (canHandover) {
-        handoverLink.href = indexUrl(`#s14?id=${encodeURIComponent(app.id)}`);
+        handoverLink.href = `${getCtx()}/matching/contract.jsp?id=${encodeURIComponent(app.id)}`;
       }
     }
   }

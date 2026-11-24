@@ -40,7 +40,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#1b4332">
   <title><%= escapeHtml(request.getParameter("title") != null ? request.getParameter("title") : "マチリク | 宇都宮の空き店舗と、欲しいお店") %></title>
-  <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css">
+  <link rel="stylesheet" href="${pageContext.request.contextPath}/css/main.css?v=20261124_focus_v2">
 </head>
 <body>
   <a class="skip-link" href="#main-app-container">本文へ移動</a>

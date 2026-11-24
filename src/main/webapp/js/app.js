@@ -141,24 +141,33 @@ window.MachirikuApp = (function() {
     s02: '/property/detail.jsp',
     r01: '/property/vote.jsp',
     s03: '/property/vote.jsp',
+    s05: '/matching/progress.jsp',
     b01: '/property/apply.jsp',
     s08: '/property/apply.jsp',
+    b02: '/matching/applications.jsp',
     o01: '/property/manage.jsp',
     s11: '/property/manage.jsp',
     o02: '/property/analytics.jsp',
     s07: '/property/analytics.jsp',
     o03: '/property/apply-list.jsp',
-    s09: '/property/apply-list.jsp',
     o04: '/property/add.jsp',
     o05: '/property/add-confirm.jsp',
     o06: '/property/edit.jsp',
     o07: '/property/edit-confirm.jsp',
     o08: '/property/delete-confirm.jsp',
-    o09: '/property/delete-complete.jsp'
+    o09: '/property/delete-complete.jsp',
+    o10: '/property/apply-detail.jsp',
+    s13: '/matching/offer.jsp',
+    s14: '/matching/contract.jsp',
+    s15: '/matching/opening-plan.jsp'
   };
 
   function resolveJspRoutePath(screenId, params = {}) {
     const id = String(screenId || '').toLowerCase();
+    if (id === 's09') {
+      const role = store?.getState?.()?.currentRole || '';
+      return role === 'business' ? '/matching/applications.jsp' : '/property/apply-list.jsp';
+    }
     if (id === 's12') {
       return (params && params.id) ? '/property/edit.jsp' : '/property/add.jsp';
     }
@@ -201,6 +210,7 @@ window.MachirikuApp = (function() {
   const SCREEN_PERMISSIONS = {
     // 出店事業主（および管理者）向け機能
     s08: ['business', 'admin'],
+    b02: ['business', 'admin'],
     s15: ['business', 'admin'],
     s21: ['business', 'admin'],
     s22: ['business', 'admin'],
@@ -322,18 +332,23 @@ window.MachirikuApp = (function() {
 
   function handleHashChange() {
     const previousScreenId = currentScreenId;
+    const isInitialLoad = renderedScreenId === null;
     if (previousScreenId === 's01' && typeof window !== 'undefined') {
       screenScrollPositions['s01'] = window.scrollY || window.pageYOffset || 0;
     }
 
     const fixedScreen = getFixedScreen();
     const rawHash = (typeof window !== 'undefined' && window.location && window.location.hash) ? window.location.hash.slice(1) : '';
-    const parsed = parseHash();
+    if (renderedScreenId !== null && rawHash === 'main-app-container') {
+      return;
+    }
+    const effectiveHash = rawHash === 'main-app-container' ? '' : rawHash;
+    const parsed = effectiveHash ? parseHash() : { screenId: fixedScreen || 's01', params: {} };
     const contextPath = getContextPath();
 
     if (fixedScreen) {
       const fixedJspPath = resolveJspRoutePath(fixedScreen, getQueryParams());
-      if (rawHash) {
+      if (effectiveHash) {
         const targetJspPath = resolveJspRoutePath(parsed.screenId, parsed.params);
         if (parsed.screenId !== fixedScreen && (!targetJspPath || targetJspPath !== fixedJspPath)) {
           window.location.replace(buildScreenUrl(parsed.screenId, parsed.params));
@@ -342,7 +357,7 @@ window.MachirikuApp = (function() {
       }
       currentScreenId = fixedScreen;
       const fixedParams = (typeof window !== 'undefined' && window.__MACHIRIKU_FIXED_PARAMS__) ? window.__MACHIRIKU_FIXED_PARAMS__ : {};
-      currentParams = Object.assign({}, fixedParams, getQueryParams(), rawHash ? parsed.params : {});
+      currentParams = Object.assign({}, fixedParams, getQueryParams(), effectiveHash ? parsed.params : {});
     } else {
       currentScreenId = parsed.screenId;
       currentParams = parsed.params;
@@ -418,7 +433,9 @@ window.MachirikuApp = (function() {
         window.scrollTo({ top: 0, behavior: "auto" });
       }
     }
-    document.getElementById('main-app-container')?.focus?.({ preventScroll: true });
+    if (!isInitialLoad && !getFixedScreen() && previousScreenId !== currentScreenId) {
+      document.getElementById('main-app-container')?.focus?.({ preventScroll: true });
+    }
   }
 
   function navigate(screenId, params = {}) {
@@ -505,6 +522,14 @@ window.MachirikuApp = (function() {
       return;
     }
 
+    if (fixedScreen && window.MachirikuMatchingPages && typeof window.MachirikuMatchingPages.supports === 'function' && window.MachirikuMatchingPages.supports(fixedScreen)) {
+      window.MachirikuMatchingPages.hydrate(fixedScreen, currentParams);
+      renderedScreenId = fixedScreen;
+      updateSubnavActive();
+      updateDocumentTitle();
+      return;
+    }
+
     if (fixedScreen && window.MachirikuPropertyPages && typeof window.MachirikuPropertyPages.hydrate === 'function') {
       window.MachirikuPropertyPages.hydrate(fixedScreen, currentParams);
       renderedScreenId = fixedScreen;
@@ -585,8 +610,10 @@ window.MachirikuApp = (function() {
   }
 
   const FIXED_PAGE_TITLES = {
+    s05: '開店のようす・出店進捗 | マチリク',
     r01: '投票 | マチリク',
     b01: '出店応募 | マチリク',
+    b02: '応募状況確認 | マチリク',
     o01: '登録物件管理 | マチリク',
     o02: '物件需要分析 | マチリク',
     o03: '出店希望確認 | マチリク',
@@ -595,7 +622,11 @@ window.MachirikuApp = (function() {
     o06: '物件編集 | マチリク',
     o07: '物件編集確認 | マチリク',
     o08: '物件削除確認 | マチリク',
-    o09: '物件削除完了 | マチリク'
+    o09: '物件削除完了 | マチリク',
+    o10: '出店応募詳細 | マチリク',
+    s13: '事業主への出店オファー | マチリク',
+    s14: '契約成立・物件引渡し記録 | マチリク',
+    s15: '出店計画の作成・公開 | マチリク'
   };
 
   function updateDocumentTitle() {
@@ -672,7 +703,8 @@ window.MachirikuApp = (function() {
       { hash: "#s01", label: "物件検索" },
       { hash: "#s07", label: "需要詳細分析" },
       { hash: "#s08", label: "出店応募" },
-      { hash: "#s09", label: "応募管理" },
+      { hash: "#b02", label: "応募状況確認" },
+      { hash: "#s14", label: "契約引渡し" },
       { hash: "#s15", label: "出店計画公開" },
       { hash: "#s22", label: "来店アンケート" },
       { hash: "#s28", label: "クーポン管理" },

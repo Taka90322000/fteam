@@ -36,7 +36,7 @@
   }
   String assetVersion = request.getParameter("assetVersion");
   if (assetVersion == null || assetVersion.trim().isEmpty()) {
-    assetVersion = "20261124_merge_v1";
+    assetVersion = "20261124_matching_v1";
   }
   String profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/user/Profile.action";
 %>
@@ -126,7 +126,7 @@
     <div class="subnav-links">
       <a href="${pageContext.request.contextPath}/index.jsp#s01" class="subnav-link<%= pageScreenId.isEmpty() ? " is-active" : "" %>"<%= pageScreenId.isEmpty() ? " aria-current=\"page\"" : "" %>>物件を探す</a>
       <a href="${pageContext.request.contextPath}/index.jsp#s04" class="subnav-link">フォロー</a>
-      <a href="${pageContext.request.contextPath}/index.jsp#s05" class="subnav-link">開店のようす</a>
+      <a href="${pageContext.request.contextPath}/matching/progress.jsp" class="subnav-link<%= "s05".equalsIgnoreCase(pageScreenId) ? " is-active" : "" %>"<%= "s05".equalsIgnoreCase(pageScreenId) ? " aria-current=\"page\"" : "" %>>開店のようす</a>
       <a href="${pageContext.request.contextPath}/index.jsp#s30" class="subnav-link">クーポン</a>
     </div>
   </nav>

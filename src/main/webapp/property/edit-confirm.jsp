@@ -3,7 +3,7 @@
   <jsp:param name="title" value="物件編集確認 | マチリク" />
   <jsp:param name="description" value="変更前と変更後の差分を確認し、物件情報の更新を確定します。" />
   <jsp:param name="pageScreenId" value="o07" />
-  <jsp:param name="assetVersion" value="20261119_o07_v18" />
+  <jsp:param name="assetVersion" value="20261124_focus_v2" />
 </jsp:include>
 
     <section id="o07-empty-state" class="screen-view empty-state" data-screen="O07" hidden>
@@ -52,5 +52,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o07" />
-  <jsp:param name="assetVersion" value="20261119_o07_v18" />
+  <jsp:param name="assetVersion" value="20261124_focus_v2" />
 </jsp:include>

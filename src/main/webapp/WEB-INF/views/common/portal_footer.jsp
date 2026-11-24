@@ -43,7 +43,7 @@
   }
   String assetVersion = request.getParameter("assetVersion");
   if (assetVersion == null || assetVersion.trim().isEmpty()) {
-    assetVersion = "20261124_merge_v1";
+    assetVersion = "20261124_matching_v1";
   }
   boolean enableHashRedirect = "true".equalsIgnoreCase(request.getParameter("enableHashRedirect"));
 
@@ -127,6 +127,7 @@
   <script defer src="${pageContext.request.contextPath}/js/store.js?v=<%= Html.escape(assetVersion) %>"></script>
   <script defer src="${pageContext.request.contextPath}/js/screens.js?v=<%= Html.escape(assetVersion) %>"></script>
   <script defer src="${pageContext.request.contextPath}/js/property-pages.js?v=<%= Html.escape(assetVersion) %>"></script>
+  <script defer src="${pageContext.request.contextPath}/js/matching-pages.js?v=<%= Html.escape(assetVersion) %>"></script>
   <script defer src="${pageContext.request.contextPath}/js/app.js?v=<%= Html.escape(assetVersion) %>"></script>
   <script>
     window.__MACHIRIKU_CONTEXT_PATH__ = "${pageContext.request.contextPath}";
@@ -194,13 +195,14 @@
         '#s02': '/property/detail.jsp',
         '#s03': '/property/vote.jsp',
         '#r01': '/property/vote.jsp',
+        '#s05': '/matching/progress.jsp',
         '#s08': '/property/apply.jsp',
         '#b01': '/property/apply.jsp',
+        '#b02': '/matching/applications.jsp',
         '#s11': '/property/manage.jsp',
         '#o01': '/property/manage.jsp',
         '#s07': '/property/analytics.jsp',
         '#o02': '/property/analytics.jsp',
-        '#s09': '/property/apply-list.jsp',
         '#o03': '/property/apply-list.jsp',
         '#o04': '/property/add.jsp',
         '#o05': '/property/add-confirm.jsp',
@@ -208,7 +210,10 @@
         '#o07': '/property/edit-confirm.jsp',
         '#o08': '/property/delete-confirm.jsp',
         '#o09': '/property/delete-complete.jsp',
-        '#o10': '/property/apply-detail.jsp'
+        '#o10': '/property/apply-detail.jsp',
+        '#s13': '/matching/offer.jsp',
+        '#s14': '/matching/contract.jsp',
+        '#s15': '/matching/opening-plan.jsp'
       };
       function checkServletRedirect() {
         var rawHash = window.location.hash || '';
@@ -217,6 +222,13 @@
         var qIdx = rawHash.indexOf('?');
         var qs = qIdx >= 0 ? rawHash.slice(qIdx) : '';
 
+        if (hashBase === '#s09') {
+          var curRole = (window.MachirikuStore && window.MachirikuStore.getState)
+            ? (window.MachirikuStore.getState().currentRole || '')
+            : '';
+          window.location.replace(ctx + (curRole === 'business' ? '/matching/applications.jsp' : '/property/apply-list.jsp') + qs);
+          return true;
+        }
         if (hashBase === '#s12') {
           var hasId = /(?:^\?|&)id=/.test(qs);
           window.location.replace(ctx + (hasId ? '/property/edit.jsp' + qs : '/property/add.jsp'));

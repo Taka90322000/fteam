@@ -3,7 +3,7 @@
   <jsp:param name="title" value="出店応募詳細 | マチリク" />
   <jsp:param name="description" value="事業主から届いた出店応募の詳細、保有資格の確認、面談調整や承認・返信を行います。" />
   <jsp:param name="pageScreenId" value="o10" />
-  <jsp:param name="assetVersion" value="20261120_o10_v4" />
+  <jsp:param name="assetVersion" value="20261124_matching_v1" />
 </jsp:include>
 
     <section id="o10-empty-state" class="screen-view empty-state" data-screen="O10" hidden>
@@ -75,7 +75,7 @@
             <div id="o10-actions-stack" class="apply-action-stack"></div>
             <div id="o10-handover-box" class="o10-handover-box" hidden>
               <p class="o10-handover-note">出店合意・契約成立済みのため、契約引渡し手続き画面へ進めます。</p>
-              <a id="o10-handover-link" class="btn-primary btn-sm" href="${pageContext.request.contextPath}/index.jsp#s14">契約引渡し手続きへ進む →</a>
+              <a id="o10-handover-link" class="btn-primary btn-sm" href="${pageContext.request.contextPath}/matching/contract.jsp">契約引渡し手続きへ進む →</a>
             </div>
           </section>
         </aside>
@@ -84,5 +84,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o10" />
-  <jsp:param name="assetVersion" value="20261120_o10_v4" />
+  <jsp:param name="assetVersion" value="20261124_matching_v1" />
 </jsp:include>

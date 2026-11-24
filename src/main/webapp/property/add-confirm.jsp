@@ -3,7 +3,7 @@
   <jsp:param name="title" value="物件登録確認 | マチリク" />
   <jsp:param name="description" value="新規登録する空き店舗の入力内容を確認し、登録を確定します。" />
   <jsp:param name="pageScreenId" value="o05" />
-  <jsp:param name="assetVersion" value="20261119_o05_v9" />
+  <jsp:param name="assetVersion" value="20261124_focus_v2" />
 </jsp:include>
 
     <section id="o05-empty-state" class="screen-view empty-state" data-screen="O05" hidden>
@@ -48,5 +48,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o05" />
-  <jsp:param name="assetVersion" value="20261119_o05_v9" />
+  <jsp:param name="assetVersion" value="20261124_focus_v2" />
 </jsp:include>
