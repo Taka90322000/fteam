@@ -211,7 +211,15 @@ public class RegistrationFormsTest {
         for (String[] address : new String[][] {
                 { "日本、〒320-0033 栃木県宇都宮市本町1-1", "栃木県", "宇都宮市", "本町1-1" },
                 { "東京都新宿区西新宿1-1", "東京都", "新宿区", "西新宿1-1" },
-                { "大阪府大阪市北区梅田1-1", "大阪府", "大阪市北区", "梅田1-1" } }) {
+                { "大阪府大阪市北区梅田1-1", "大阪府", "大阪市北区", "梅田1-1" },
+                { "愛知県名古屋市中村区名駅1-1-4", "愛知県", "名古屋市中村区", "名駅1-1-4" },
+                { "栃木県芳賀郡市貝町市塙1-1", "栃木県", "芳賀郡市貝町", "市塙1-1" },
+                { "富山県中新川郡上市町法音寺1", "富山県", "中新川郡上市町", "法音寺1" },
+                { "北海道余市郡余市町黒川町1-1", "北海道", "余市郡余市町", "黒川町1-1" },
+                { "千葉県市川市市川1-1-1", "千葉県", "市川市", "市川1-1-1" },
+                { "三重県四日市市諏訪町1-5", "三重県", "四日市市", "諏訪町1-5" },
+                { "福島県郡山市朝日1-23-7", "福島県", "郡山市", "朝日1-23-7" },
+                { "栃木県宇都宮市平出町1区", "栃木県", "宇都宮市", "平出町1区" } }) {
             var location = RegistrationForms.location("HOME", address[0], "36.561123", "139.883123", true);
             assertEquals("HOME", location.kind());
             assertEquals(address[1], location.prefecture());
@@ -247,6 +255,40 @@ public class RegistrationFormsTest {
         }
         rejects(() -> RegistrationForms.business(businessFields(), List.of("1"), List.of("0")));
         rejects(() -> RegistrationForms.business(businessFields(), List.of("1"), List.of("qualification-name")));
+    }
+
+    @Test
+    public void businessAndOwnerAcceptOptionalSecondaryNumbersInTheSameFormat() {
+        Map<String, String> business = businessFields();
+        business.put("secondaryPhone", "０２８－６３３－９９８８");
+        assertEquals("+81286339988", RegistrationForms.business(business, List.of("1"), List.of()).secondaryPhoneE164());
+        Map<String, String> owner = ownerFields();
+        owner.put("secondaryPhone", "+81 90 1234 5678");
+        assertEquals("+819012345678", RegistrationForms.owner(owner, List.of("1")).secondaryPhoneE164());
+
+        for (String blank : new String[] { null, "", " \t" }) {
+            business.put("secondaryPhone", blank);
+            owner.put("secondaryPhone", blank);
+            assertNull(RegistrationForms.business(business, List.of("1"), List.of()).secondaryPhoneE164());
+            assertNull(RegistrationForms.owner(owner, List.of("1")).secondaryPhoneE164());
+        }
+    }
+
+    @Test
+    public void businessAndOwnerRejectDuplicateOrInvalidSecondaryNumbers() {
+        Map<String, String> business = businessFields();
+        Map<String, String> owner = ownerFields();
+        for (String secondary : new String[] { "invalid", "+819012345678" }) {
+            business.put("secondaryPhone", secondary);
+            rejects(() -> RegistrationForms.business(business, List.of("1"), List.of()));
+        }
+        for (String secondary : new String[] { "invalid", "+81286339988" }) {
+            owner.put("secondaryPhone", secondary);
+            rejects(() -> RegistrationForms.owner(owner, List.of("1")));
+        }
+        business.put("phone", " ");
+        business.put("secondaryPhone", "028-633-9988");
+        rejects(() -> RegistrationForms.business(business, List.of("1"), List.of()));
     }
 
     @Test

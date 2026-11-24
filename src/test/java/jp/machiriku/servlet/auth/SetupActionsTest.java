@@ -42,7 +42,7 @@ public class SetupActionsTest {
         request.parameters.put("displayName", "不正なリクエスト名");
         request.parameters.put("email", "attacker@example.com");
         FakeDao dao = new FakeDao();
-        new ResidentAction(dao).execute(request.request, request.response);
+        execute(new ResidentAction(dao), request);
         assertEquals(RESIDENT_VIEW, request.forwarded);
         assertEquals("検証済みLINE表示名", request.attributes.get("displayName"));
         assertEquals("verified@example.com", request.attributes.get("email"));
@@ -56,20 +56,107 @@ public class SetupActionsTest {
     }
 
     @Test
+    public void membersWhoCompletedSetupElsewhereAreRedirectedToProfileEditing() throws Exception {
+        for (String role : List.of("RESIDENT", "BUSINESS", "OWNER")) {
+            Harness request = authenticated("GET", role);
+            request.parameters.put("preview", "1");
+            FakeDao dao = new FakeDao();
+            dao.currentMember = (User) authenticated("GET", role).sessionValues.get("user");
+            dao.currentMember.setAccountStatus("ACTIVE");
+            Action action = setupAction(role, dao);
+            execute(action, request);
+            assertEquals("/machiriku/jp/machiriku/servlet/user/Profile.action", request.redirect);
+            assertNull(request.forwarded);
+            assertEquals(1, createdDaos(action));
+            assertEquals(0, dao.saves);
+        }
+    }
+
+    @Test
+    public void completedMembersCannotSubmitAnOldSetupFormEvenWithValidCsrf() throws Exception {
+        for (String role : List.of("RESIDENT", "BUSINESS", "OWNER")) {
+            Harness request = setupPost(role);
+            User savedUser = (User) request.sessionValues.get("user");
+            savedUser.setAccountStatus("ACTIVE");
+            savedUser.setDisplayName("まち太郎");
+            savedUser.setEmail("contact@example.com");
+            request.sessionValues.put("lineDisplayName", "LINE太郎");
+            request.sessionValues.put("lineEmail", "line@example.com");
+            request.sessionValues.put("emailNotify", false);
+            FakeDao dao = new FakeDao();
+            Action action = setupAction(role, dao);
+            execute(action, request);
+            assertEquals(403, request.status);
+            assertNull(request.forwarded);
+            assertNull(request.redirect);
+            assertEquals(1, createdDaos(action));
+            assertSame(savedUser, request.sessionValues.get("user"));
+            assertEquals("まち太郎", savedUser.getDisplayName());
+            assertEquals("contact@example.com", savedUser.getEmail());
+            assertEquals(false, request.sessionValues.get("emailNotify"));
+        }
+    }
+
+    @Test
+    public void stalePendingSessionsCannotCompleteSetupAfterTheDatabaseRejectsTheState() throws Exception {
+        for (String role : List.of("RESIDENT", "BUSINESS", "OWNER")) {
+            Harness request = setupPost(role);
+            User previous = (User) request.sessionValues.get("user");
+            FakeDao dao = new FakeDao();
+            dao.failure = new SQLException("The registration is already complete.", "28000");
+            execute(setupAction(role, dao), request);
+            assertEquals(403, request.status);
+            assertEquals(1, dao.saves);
+            assertSame(previous, request.sessionValues.get("user"));
+            assertNull(request.sessionValues.get("isOnboarded"));
+            assertNull(request.forwarded);
+        }
+    }
+
+    @Test
+    public void loggingOutDuringSetupSaveDoesNotCreateAnotherSession() throws Exception {
+        for (String role : List.of("RESIDENT", "BUSINESS", "OWNER")) {
+            Harness request = setupPost(role);
+            FakeDao dao = new FakeDao();
+            dao.afterSave = request.session::invalidate;
+
+            execute(setupAction(role, dao), request);
+
+            assertEquals(1, dao.saves);
+            assertFalse(request.hasSession);
+            assertTrue(request.sessionValues.isEmpty());
+            assertEquals(0, request.sessionCreations);
+            assertEquals("/machiriku/jp/machiriku/servlet/auth/Login.action", request.redirect);
+        }
+    }
+
+    @Test
+    public void anonymousResidentPreviewRemainsAReadOnlyDisplay() throws Exception {
+        Harness request = new Harness("GET");
+        request.parameters.put("preview", "1");
+        ResidentAction action = new ResidentAction(new FakeDao());
+        execute(action, request);
+        assertEquals(RESIDENT_VIEW, request.forwarded);
+        assertEquals("LINEユーザー", request.attributes.get("displayName"));
+        assertEquals(0, action.created);
+    }
+
+    @Test
     public void businessGetLoadsMasterOptionsButDoesNotGuessRepresentativeName() throws Exception {
         Harness request = authenticated("GET", "BUSINESS");
         request.sessionValues.put("lineDisplayName", "LINEの事業表示名");
         request.sessionValues.put("lineEmail", "line-business@example.com");
         request.parameters.put("representativeName", "不正な代表者名");
         FakeDao dao = new FakeDao();
-        dao.profileContact = Map.of("phone", "+819012345678", "iconImageUrl", "/assets/business.png");
-        new BusinessAction(dao).execute(request.request, request.response);
+        dao.profileContact = Map.of("phone", "090-1234-5678", "secondaryPhone", "028-633-9988", "iconImageUrl", "/assets/business.png");
+        execute(new BusinessAction(dao), request);
         assertEquals(BUSINESS_VIEW, request.forwarded);
         assertEquals("", request.attributes.get("displayName"));
         assertEquals("line-business@example.com", request.attributes.get("email"));
         assertEquals("", values(request).get("businessName"));
         assertEquals("", values(request).get("representativeName"));
-        assertEquals("+819012345678", values(request).get("phone"));
+        assertEquals("090-1234-5678", values(request).get("phone"));
+        assertEquals("028-633-9988", values(request).get("secondaryPhone"));
         assertEquals("/assets/business.png", values(request).get("iconImageUrl"));
         assertEquals(42, dao.contactUserId);
         assertEquals("BUSINESS", dao.contactRole);
@@ -91,14 +178,15 @@ public class SetupActionsTest {
         request.parameters.put("displayName", "不正な名前");
         request.parameters.put("email", "attacker@example.invalid");
         FakeDao dao = new FakeDao();
-        dao.profileContact = Map.of("phone", "+81286339988", "iconImageUrl", "https://example.com/owner.png");
-        new OwnerAction(dao).execute(request.request, request.response);
+        dao.profileContact = Map.of("phone", "028-633-9988", "secondaryPhone", "090-1234-5678", "iconImageUrl", "https://example.com/owner.png");
+        execute(new OwnerAction(dao), request);
         assertEquals(OWNER_VIEW, request.forwarded);
         assertEquals("検証済みオーナー名", request.attributes.get("displayName"));
         assertEquals("検証済みオーナー名", values(request).get("representativeName"));
         assertEquals("line-owner@example.invalid", values(request).get("email"));
         assertEquals("", values(request).get("company"));
-        assertEquals("+81286339988", values(request).get("phone"));
+        assertEquals("028-633-9988", values(request).get("phone"));
+        assertEquals("090-1234-5678", values(request).get("secondaryPhone"));
         assertEquals("https://example.com/owner.png", values(request).get("iconImageUrl"));
         assertEquals(42, dao.contactUserId);
         assertEquals("OWNER", dao.contactRole);
@@ -113,7 +201,7 @@ public class SetupActionsTest {
         Harness request = authenticated("GET", "OWNER");
         request.sessionValues.put("lineDisplayName", "LINEオーナー");
         request.sessionValues.put("lineEmail", "");
-        new OwnerAction(new FakeDao()).execute(request.request, request.response);
+        execute(new OwnerAction(new FakeDao()), request);
         assertEquals("LINEオーナー", values(request).get("representativeName"));
         assertEquals("", values(request).get("email"));
         assertEquals("", values(request).get("company"));
@@ -129,7 +217,7 @@ public class SetupActionsTest {
             FakeDao dao = new FakeDao();
             dao.contactFailure = new SQLException("private database details", "42501");
             Action action = "OWNER".equals(role) ? new OwnerAction(dao) : new BusinessAction(dao);
-            action.execute(request.request, request.response);
+            execute(action, request);
             assertEquals("verified@example.invalid", values(request).get("email"));
             assertEquals("", values(request).get("phone"));
             assertEquals("", values(request).get("iconImageUrl"));
@@ -143,13 +231,13 @@ public class SetupActionsTest {
     @Test
     public void oldSessionsFallbackToStoredUserButExplicitUnavailableLineEmailStaysEmpty() throws Exception {
         Harness request = authenticated("GET", "RESIDENT");
-        new ResidentAction(new FakeDao()).execute(request.request, request.response);
+        execute(new ResidentAction(new FakeDao()), request);
         assertEquals("保存済み表示名", request.attributes.get("displayName"));
         assertEquals("stored@example.com", request.attributes.get("email"));
         request = authenticated("GET", "RESIDENT");
         request.sessionValues.put("lineDisplayName", "今回のLINE表示名");
         request.sessionValues.put("lineEmail", "");
-        new ResidentAction(new FakeDao()).execute(request.request, request.response);
+        execute(new ResidentAction(new FakeDao()), request);
         assertEquals("今回のLINE表示名", request.attributes.get("displayName"));
         assertEquals("", request.attributes.get("email"));
         assertEquals("", values(request).get("email"));
@@ -164,7 +252,7 @@ public class SetupActionsTest {
                 request.sessionValues.put("userRole", business ? "business" : "resident");
                 FakeDao dao = new FakeDao();
                 Action action = action(business, dao);
-                action.execute(request.request, request.response);
+                execute(action, request);
                 assertEquals("/machiriku/jp/machiriku/servlet/auth/Login.action", request.redirect);
                 assertEquals(0, createdDaos(action));
                 assertEquals(0, dao.saves);
@@ -179,40 +267,42 @@ public class SetupActionsTest {
                 Harness request = authenticated(method, business ? "RESIDENT" : "BUSINESS");
                 prepareCsrf(request);
                 Action action = action(business, new FakeDao());
-                action.execute(request.request, request.response);
+                execute(action, request);
                 assertEquals(403, request.status);
-                assertEquals(0, createdDaos(action));
+                assertEquals(1, createdDaos(action));
+                assertEquals(0, daoFor(action).saves);
+                assertNull(request.forwarded);
             }
         }
     }
 
     @Test
-    public void missingOrMismatchedCsrfRejectsBeforeDaoCreation() throws Exception {
+    public void missingOrMismatchedCsrfRejectsBeforeSaving() throws Exception {
         for (boolean business : new boolean[] { false, true }) {
             for (String csrf : new String[] { null, "", "forged-token" }) {
                 Harness request = authenticated("POST", business ? "BUSINESS" : "RESIDENT");
                 request.sessionValues.put("onboardingCsrfToken", TOKEN);
                 if (csrf != null) { request.parameters.put("csrfToken", csrf); }
                 Action action = action(business, new FakeDao());
-                action.execute(request.request, request.response);
+                execute(action, request);
                 assertEquals(403, request.status);
-                assertEquals(0, createdDaos(action));
+                assertEquals(0, daoFor(action).saves);
                 assertNull(request.sessionValues.get("isOnboarded"));
             }
             Harness request = authenticated("POST", business ? "BUSINESS" : "RESIDENT");
             request.parameters.put("csrfToken", TOKEN);
             Action action = action(business, new FakeDao());
-            action.execute(request.request, request.response);
+            execute(action, request);
             assertEquals(403, request.status);
-            assertEquals(0, createdDaos(action));
+            assertEquals(0, daoFor(action).saves);
         }
     }
 
     @Test
-    public void ownerRequiresAuthenticatedOwnerAndValidCsrfBeforeAnyDao() throws Exception {
+    public void ownerRequiresAuthenticatedOwnerAndValidCsrfBeforeSaving() throws Exception {
         Harness loggedOut = new Harness("GET");
         OwnerAction noLogin = new OwnerAction(new FakeDao());
-        noLogin.execute(loggedOut.request, loggedOut.response);
+        execute(noLogin, loggedOut);
         assertEquals("/machiriku/jp/machiriku/servlet/auth/Login.action", loggedOut.redirect);
         assertEquals(0, noLogin.created);
         for (String role : new String[] { "RESIDENT", "BUSINESS" }) {
@@ -220,9 +310,10 @@ public class SetupActionsTest {
                 Harness request = authenticated(method, role);
                 prepareCsrf(request);
                 OwnerAction action = new OwnerAction(new FakeDao());
-                action.execute(request.request, request.response);
+                execute(action, request);
                 assertEquals(403, request.status);
-                assertEquals(0, action.created);
+                assertEquals(0, action.dao.saves);
+                assertNull(request.forwarded);
             }
         }
         for (String token : new String[] { null, "", "forged-token" }) {
@@ -230,17 +321,17 @@ public class SetupActionsTest {
             if (token == null) { request.parameters.remove("csrfToken"); }
             else { request.parameters.put("csrfToken", token); }
             OwnerAction action = new OwnerAction(new FakeDao());
-            action.execute(request.request, request.response);
+            execute(action, request);
             assertEquals(403, request.status);
-            assertEquals(0, action.created);
+            assertEquals(0, action.dao.saves);
             assertNull(request.sessionValues.get("isOnboarded"));
         }
         Harness noSessionToken = ownerPost();
         noSessionToken.sessionValues.remove("onboardingCsrfToken");
         OwnerAction action = new OwnerAction(new FakeDao());
-        action.execute(noSessionToken.request, noSessionToken.response);
+        execute(action, noSessionToken);
         assertEquals(403, noSessionToken.status);
-        assertEquals(0, action.created);
+        assertEquals(0, action.dao.saves);
     }
 
     @Test
@@ -252,7 +343,7 @@ public class SetupActionsTest {
         prepareCsrf(request);
         FakeDao dao = new FakeDao();
         ResidentAction action = new ResidentAction(dao);
-        action.execute(request.request, request.response);
+        execute(action, request);
         assertEquals("/machiriku/jp/machiriku/servlet/auth/Login.action", request.redirect);
         assertEquals(0, action.created);
         assertEquals(0, dao.saves);
@@ -261,7 +352,7 @@ public class SetupActionsTest {
         Harness loggedIn = residentPost();
         loggedIn.parameters.put("preview", "true");
         FakeDao loggedInDao = new FakeDao();
-        new ResidentAction(loggedInDao).execute(loggedIn.request, loggedIn.response);
+        execute(new ResidentAction(loggedInDao), loggedIn);
         assertEquals(42, loggedInDao.savedUserId);
         assertEquals(1, loggedInDao.saves);
         assertEquals("/machiriku/index.jsp?onboarded=1", loggedIn.redirect);
@@ -273,7 +364,7 @@ public class SetupActionsTest {
         request.parameters.put("email", " ");
         User previous = (User) request.sessionValues.get("user");
         FakeDao dao = new FakeDao();
-        new ResidentAction(dao).execute(request.request, request.response);
+        execute(new ResidentAction(dao), request);
         assertEquals(1, dao.saves);
         assertEquals(42, dao.savedUserId);
         assertEquals("新しい住民名", dao.residentInput.displayName());
@@ -297,7 +388,7 @@ public class SetupActionsTest {
         request.parameters.put("industry", "自由な表示名では保存しない");
         request.parameters.put("userId", "1");
         FakeDao dao = new FakeDao();
-        new ResidentAction(dao).execute(request.request, request.response);
+        execute(new ResidentAction(dao), request);
         assertEquals(42, dao.savedUserId);
         assertEquals(List.of("I0101", "I0201"), dao.residentInput.preferredIndustryCodes());
         assertEquals("/machiriku/index.jsp?onboarded=1", request.redirect);
@@ -306,19 +397,24 @@ public class SetupActionsTest {
     @Test
     public void ownerPostSavesValidatedFieldsAndCompletesSessionOnlyAfterSave() throws Exception {
         Harness request = ownerPost();
+        request.parameters.put("secondaryPhone", "090-1234-5678");
         request.parameters.put("userId", "1");
         request.parameters.put("userRole", "admin");
         request.parameters.put("email", " ");
+        // 旧フォームのURL項目が送られても、DBのアイコンを保持する。
+        request.parameters.put("iconImageUrl", "https://example.invalid/submitted.png");
         FakeDao dao = new FakeDao();
+        dao.profileContact = Map.of("iconImageUrl", "https://example.com/owner.png");
         User previous = (User) request.sessionValues.get("user");
-        new OwnerAction(dao).execute(request.request, request.response);
+        execute(new OwnerAction(dao), request);
         assertEquals(1, dao.saves);
         assertEquals(42, dao.savedUserId);
         assertEquals("入力した代表者名", dao.ownerInput.representativeName());
         assertEquals("テスト不動産", dao.ownerInput.company());
         assertNull(dao.ownerInput.email());
         assertEquals("+81286339988", dao.ownerInput.phoneE164());
-        assertEquals("https://example.com/owner.png", dao.ownerInput.iconImageUrl());
+        assertEquals("+819012345678", dao.ownerInput.secondaryPhoneE164());
+        assertNull(dao.ownerInput.iconImageUrl());
         assertEquals("https://example.com/owner.png", request.sessionValues.get("iconImageUrl"));
         assertEquals("+81286339988", request.sessionValues.get("phone"));
         assertEquals(List.of(1, 2), dao.ownerInput.industryTypeIds());
@@ -336,14 +432,17 @@ public class SetupActionsTest {
     @Test
     public void businessPostPersistsNormalizedPhoneMasterIdsAndPolygonBeforeSessionUpdate() throws Exception {
         Harness request = businessPost();
+        request.parameters.put("secondaryPhone", "+81 28 633 9988");
         FakeDao dao = new FakeDao();
-        new BusinessAction(dao).execute(request.request, request.response);
+        dao.profileContact = Map.of("iconImageUrl", "/assets/business.png");
+        execute(new BusinessAction(dao), request);
         assertEquals(1, dao.saves);
         assertEquals(42, dao.savedUserId);
         assertEquals("新しい事業所", dao.businessInput.businessName());
         assertEquals("代表者氏名", dao.businessInput.representativeName());
         assertEquals("+819012345678", dao.businessInput.phoneE164());
-        assertEquals("/assets/business.png", dao.businessInput.iconImageUrl());
+        assertEquals("+81286339988", dao.businessInput.secondaryPhoneE164());
+        assertNull(dao.businessInput.iconImageUrl());
         assertEquals("/assets/business.png", request.sessionValues.get("iconImageUrl"));
         assertEquals("+819012345678", request.sessionValues.get("phone"));
         assertEquals(List.of(1), dao.businessInput.industryTypeIds());
@@ -363,7 +462,7 @@ public class SetupActionsTest {
         request.parameters.remove("emailNotify");
         User previous = (User) request.sessionValues.get("user");
         FakeDao dao = new FakeDao();
-        new ResidentAction(dao).execute(request.request, request.response);
+        execute(new ResidentAction(dao), request);
         assertEquals(RESIDENT_VIEW, request.forwarded);
         assertEquals(" ", values(request).get("name"));
         assertEquals("not-an-email", values(request).get("email"));
@@ -376,13 +475,31 @@ public class SetupActionsTest {
     }
 
     @Test
+    public void invalidSecondaryPhonePreservesBothInputsForEachRegistrationRole() throws Exception {
+        for (String role : List.of("OWNER", "BUSINESS")) {
+            Harness request = "OWNER".equals(role) ? ownerPost() : businessPost();
+            request.parameters.put("secondaryPhone", "invalid");
+            User previous = (User) request.sessionValues.get("user");
+            FakeDao dao = new FakeDao();
+            Action action = "OWNER".equals(role) ? new OwnerAction(dao) : new BusinessAction(dao);
+            execute(action, request);
+            assertEquals(0, dao.saves);
+            assertEquals("invalid", values(request).get("secondaryPhone"));
+            assertEquals(request.parameters.get("phone"), values(request).get("phone"));
+            assertSame(previous, request.sessionValues.get("user"));
+            assertNull(request.sessionValues.get("isOnboarded"));
+            assertTrue(request.attributes.get("errorMessage").toString().contains("追加の電話番号"));
+        }
+    }
+
+    @Test
     public void invalidResidentDesiredIndustriesRemainVisibleAndAreNotSaved() throws Exception {
         Harness request = residentPost();
         request.parameters.put("preferredIndustries", "[\"not-a-code\"]");
         request.parameters.remove("emailNotify");
         User previous = (User) request.sessionValues.get("user");
         FakeDao dao = new FakeDao();
-        new ResidentAction(dao).execute(request.request, request.response);
+        execute(new ResidentAction(dao), request);
         assertEquals(RESIDENT_VIEW, request.forwarded);
         assertEquals("[\"not-a-code\"]", values(request).get("preferredIndustries"));
         assertFalse(values(request).containsKey("emailNotify"));
@@ -403,7 +520,7 @@ public class SetupActionsTest {
         User previous = (User) request.sessionValues.get("user");
         FakeDao dao = new FakeDao();
         dao.failure = new SQLException("private inactive industry details", "23514");
-        new ResidentAction(dao).execute(request.request, request.response);
+        execute(new ResidentAction(dao), request);
         assertEquals(RESIDENT_VIEW, request.forwarded);
         assertEquals(selectedCodes, values(request).get("preferredIndustries"));
         assertEquals(List.of("I0101", "I0201"), dao.residentInput.preferredIndustryCodes());
@@ -422,8 +539,9 @@ public class SetupActionsTest {
         request.parameters.put("company", "入力中の会社名");
         request.parameters.remove("emailNotify");
         FakeDao dao = new FakeDao();
+        dao.profileContact = Map.of("iconImageUrl", "https://example.com/owner.png");
         User previous = (User) request.sessionValues.get("user");
-        new OwnerAction(dao).execute(request.request, request.response);
+        execute(new OwnerAction(dao), request);
         assertEquals(OWNER_VIEW, request.forwarded);
         assertEquals(" ", values(request).get("representativeName"));
         assertEquals("入力中の会社名", values(request).get("company"));
@@ -440,9 +558,10 @@ public class SetupActionsTest {
     public void ownerSqlErrorPreservesInputsAndDoesNotExposeDatabaseDetails() throws Exception {
         Harness request = ownerPost();
         FakeDao dao = new FakeDao();
+        dao.profileContact = Map.of("iconImageUrl", "https://example.com/owner.png");
         dao.failure = new SQLException("private connection and email details", "23505");
         User previous = (User) request.sessionValues.get("user");
-        new OwnerAction(dao).execute(request.request, request.response);
+        execute(new OwnerAction(dao), request);
         assertEquals(OWNER_VIEW, request.forwarded);
         assertEquals("入力した代表者名", values(request).get("representativeName"));
         assertEquals("テスト不動産", values(request).get("company"));
@@ -461,8 +580,9 @@ public class SetupActionsTest {
         request.parameters.remove("emailNotify");
         User previous = (User) request.sessionValues.get("user");
         FakeDao dao = new FakeDao();
+        dao.profileContact = Map.of("iconImageUrl", "/assets/business.png");
         dao.failure = new SQLException("private email and database details", "23505");
-        new BusinessAction(dao).execute(request.request, request.response);
+        execute(new BusinessAction(dao), request);
         assertEquals(BUSINESS_VIEW, request.forwarded);
         assertEquals("新しい事業所", values(request).get("businessName"));
         assertEquals("/assets/business.png", values(request).get("iconImageUrl"));
@@ -494,7 +614,7 @@ public class SetupActionsTest {
         User user = new User();
         user.setUserId(42);
         user.setUserRole(role);
-        user.setAccountStatus("ACTIVE");
+        user.setAccountStatus("PENDING");
         user.setDisplayName("保存済み表示名");
         user.setEmail("stored@example.com");
         request.sessionValues.put("user", user);
@@ -529,7 +649,6 @@ public class SetupActionsTest {
         request.parameters.put("representativeName", "代表者氏名");
         request.parameters.put("email", "new-business@example.com");
         request.parameters.put("phone", "090-1234-5678");
-        request.parameters.put("iconImageUrl", "/assets/business.png");
         request.parameters.put("preferredArea", "宇都宮市本町周辺");
         request.parameters.put("preferredAreaPoints", TRIANGLE);
         request.parameters.put("employeeCount", "3");
@@ -548,7 +667,6 @@ public class SetupActionsTest {
         request.parameters.put("company", "テスト不動産");
         request.parameters.put("email", "owner@example.invalid");
         request.parameters.put("phone", "028-633-9988");
-        request.parameters.put("iconImageUrl", "https://example.com/owner.png");
         request.parameters.put("emailNotify", "on");
         request.multiple.put("preferredIndustry", new String[] { "1", "2" });
         return request;
@@ -558,8 +676,40 @@ public class SetupActionsTest {
         return business ? new BusinessAction(dao) : new ResidentAction(dao);
     }
 
+    private static Action setupAction(String role, FakeDao dao) {
+        return switch (role) {
+            case "RESIDENT" -> new ResidentAction(dao);
+            case "BUSINESS" -> new BusinessAction(dao);
+            case "OWNER" -> new OwnerAction(dao);
+            default -> throw new IllegalArgumentException(role);
+        };
+    }
+
+    private static Harness setupPost(String role) {
+        return switch (role) {
+            case "RESIDENT" -> residentPost();
+            case "BUSINESS" -> businessPost();
+            case "OWNER" -> ownerPost();
+            default -> throw new IllegalArgumentException(role);
+        };
+    }
+
     private static int createdDaos(Action action) {
-        return action instanceof BusinessAction business ? business.created : ((ResidentAction) action).created;
+        if (action instanceof BusinessAction business) { return business.created; }
+        if (action instanceof OwnerAction owner) { return owner.created; }
+        return ((ResidentAction) action).created;
+    }
+
+    private static FakeDao daoFor(Action action) {
+        if (action instanceof BusinessAction business) { return business.dao; }
+        if (action instanceof OwnerAction owner) { return owner.dao; }
+        return ((ResidentAction) action).dao;
+    }
+
+    private static void execute(Action action, Harness request) throws Exception {
+        FakeDao dao = daoFor(action);
+        if (dao.currentMember == null) { dao.currentMember = (User) request.sessionValues.get("user"); }
+        action.execute(request.request, request.response);
     }
 
     private static final class ResidentAction extends ResidentSetupAction {
@@ -599,7 +749,13 @@ public class SetupActionsTest {
         Map<String, String> profileContact = Map.of();
         int contactUserId;
         String contactRole;
+        User currentMember;
+        Runnable afterSave = () -> { };
 
+        @Override public User findUserById(int userId) {
+            assertEquals(currentMember.getUserId(), userId);
+            return currentMember;
+        }
         @Override public Map<String, String> findProfileContact(int userId, String role) throws SQLException {
             contactUserId = userId; contactRole = role;
             if (contactFailure != null) { throw contactFailure; }
@@ -607,20 +763,49 @@ public class SetupActionsTest {
         }
         @Override public List<RegistrationChoice> listIndustries() { industryReads++; return industries; }
         @Override public List<RegistrationChoice> listQualifications() { qualificationReads++; return qualifications; }
-        @Override public User saveResident(int userId, ResidentProfileInput input) throws SQLException {
+        @Override public List<Map<String, Object>> listResidentTaxonomy() {
+            return List.of(Map.of("id", "C01", "name", "飲食", "subcategories", List.of(Map.of("id", "I0101", "name", "カフェ・喫茶店"))));
+        }
+        @Override public User completeResidentSetup(int userId, ResidentProfileInput input) throws SQLException {
             saves++; savedUserId = userId; residentInput = input;
             if (failure != null) { throw failure; }
             return saved(userId, "RESIDENT", input.displayName(), input.email());
         }
-        @Override public User saveBusiness(int userId, BusinessProfileInput input) throws SQLException {
+        /**
+         * 事業主の初期登録で選択されたアイコンの扱いを、DBを使わず確認する。
+         * @param userId 保存対象の会員ID
+         * @param input 検証済みの事業主プロフィール
+         * @param pendingOnly 初期登録ならtrue
+         * @param iconChange アイコンの変更内容
+         * @return 保存後の会員とアイコン参照先
+         * @throws SQLException DBエラーの検証用に例外を指定した場合
+         */
+        @Override public SavedProfile saveBusiness(int userId, BusinessProfileInput input, boolean pendingOnly, IconChange iconChange) throws SQLException {
+            assertTrue(pendingOnly);
             saves++; savedUserId = userId; businessInput = input;
             if (failure != null) { throw failure; }
-            return saved(userId, "BUSINESS", input.businessName(), input.email());
+            // アイコンを未選択のときは保存済みの値を返す。
+            String previous = profileContact.get("iconImageUrl");
+            return new SavedProfile(saved(userId, "BUSINESS", input.businessName(), input.email()),
+                    iconChange.keepExisting() ? previous : iconChange.replacement(), previous);
         }
-        @Override public User saveOwner(int userId, OwnerProfileInput input) throws SQLException {
+        /**
+         * オーナーの初期登録で選択されたアイコンの扱いを、DBを使わず確認する。
+         * @param userId 保存対象の会員ID
+         * @param input 検証済みのオーナープロフィール
+         * @param pendingOnly 初期登録ならtrue
+         * @param iconChange アイコンの変更内容
+         * @return 保存後の会員とアイコン参照先
+         * @throws SQLException DBエラーの検証用に例外を指定した場合
+         */
+        @Override public SavedProfile saveOwner(int userId, OwnerProfileInput input, boolean pendingOnly, IconChange iconChange) throws SQLException {
+            assertTrue(pendingOnly);
             saves++; savedUserId = userId; ownerInput = input;
             if (failure != null) { throw failure; }
-            return saved(userId, "OWNER", "保存済み表示名", input.email());
+            // アイコンを未選択のときは保存済みの値を返す。
+            String previous = profileContact.get("iconImageUrl");
+            return new SavedProfile(saved(userId, "OWNER", "保存済み表示名", input.email()),
+                    iconChange.keepExisting() ? previous : iconChange.replacement(), previous);
         }
         private User saved(int id, String role, String name, String email) {
             savedUser = new User();
@@ -629,6 +814,7 @@ public class SetupActionsTest {
             savedUser.setAccountStatus("ACTIVE");
             savedUser.setDisplayName(name);
             savedUser.setEmail(email);
+            afterSave.run();
             return savedUser;
         }
     }
@@ -639,6 +825,7 @@ public class SetupActionsTest {
         final Map<String, Object> attributes = new HashMap<>();
         final Map<String, Object> sessionValues = new HashMap<>();
         boolean hasSession = true;
+        int sessionCreations;
         String redirect;
         String forwarded;
         int status;
@@ -648,7 +835,9 @@ public class SetupActionsTest {
 
         Harness(String method) {
             session = proxy(HttpSession.class, (ignored, call, arguments) -> {
+                if (!hasSession) { throw new IllegalStateException("Session was invalidated"); }
                 return switch (call.getName()) {
+                    case "invalidate" -> { hasSession = false; sessionValues.clear(); yield null; }
                     case "getAttribute" -> sessionValues.get(arguments[0]);
                     case "setAttribute" -> { sessionValues.put((String) arguments[0], arguments[1]); yield null; }
                     case "removeAttribute" -> { sessionValues.remove(arguments[0]); yield null; }
@@ -670,7 +859,13 @@ public class SetupActionsTest {
                     case "getParameterNames" -> Collections.enumeration(parameters.keySet());
                     case "getAttribute" -> attributes.get(arguments[0]);
                     case "setAttribute" -> { attributes.put((String) arguments[0], arguments[1]); yield null; }
-                    case "getSession" -> hasSession ? session : null;
+                    case "getSession" -> {
+                        if (!hasSession && (arguments == null || Boolean.TRUE.equals(arguments[0]))) {
+                            sessionCreations++;
+                            hasSession = true;
+                        }
+                        yield hasSession ? session : null;
+                    }
                     case "getRequestDispatcher" -> {
                         String path = (String) arguments[0];
                         yield proxy(RequestDispatcher.class, (dispatcher, dispatch, dispatchArguments) -> {

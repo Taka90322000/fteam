@@ -10,13 +10,16 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import jp.machiriku.bean.BusinessProfileInput;
 import jp.machiriku.bean.LocationInput;
 import jp.machiriku.bean.OwnerProfileInput;
+import jp.machiriku.bean.ProfileSettings;
 import jp.machiriku.bean.RegistrationChoice;
 import jp.machiriku.bean.ResidentProfileInput;
 import jp.machiriku.bean.User;
+import jp.machiriku.tool.PhoneNumbers;
 
 /** 初期設定の関連テーブルを1トランザクションで保存する。途中失敗時に一部だけ登録されることを防ぐ。 */
 public class ProfileDao extends Dao {
@@ -24,6 +27,17 @@ public class ProfileDao extends Dao {
             + "line_subject, account_status, created_at, updated_at, withdrawn_at";
 
     protected Connection openConnection() throws SQLException { return getConnection(); }
+
+    /** プロフィールへのアクセス時に、会員の現在の状態を取得する。 */
+    public User findUserById(int userId) throws SQLException {
+        try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(
+                "SELECT " + USER_COLUMNS + " FROM users WHERE user_id=?")) {
+            statement.setInt(1, userId);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next() ? UserDao.readUser(rows) : null;
+            }
+        }
+    }
 
     /** プロフィールに移した電話番号とアイコンの保存先を、再表示用に取得する。 */
     public Map<String, String> findProfileContact(int userId, String role) throws SQLException {
@@ -33,21 +47,97 @@ public class ProfileDao extends Dao {
             default -> throw new IllegalArgumentException("プロフィールの利用区分が正しくありません。");
         };
         try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(
-                "SELECT phone_e164,icon_image_url FROM " + table + " WHERE user_id=?")) {
+                "SELECT phone_e164,secondary_phone_e164,icon_image_url FROM " + table + " WHERE user_id=?")) {
             statement.setInt(1, userId);
             try (ResultSet rows = statement.executeQuery()) {
                 if (!rows.next()) { return Map.of(); }
-                String phone = rows.getString("phone_e164");
+                String phone = PhoneNumbers.forDisplay(rows.getString("phone_e164")); // 画面に表示する国内形式の主番号。
+                String secondaryPhone = PhoneNumbers.forDisplay(rows.getString("secondary_phone_e164")); // 任意の追加番号。
                 String icon = rows.getString("icon_image_url");
-                return Map.of("phone", phone == null ? "" : phone, "iconImageUrl", icon == null ? "" : icon);
+                return Map.of("phone", phone, "secondaryPhone", secondaryPhone, "iconImageUrl", icon == null ? "" : icon);
             }
         }
     }
 
-    /** 登録済み住民のプロフィール・居住地・職場・通知・希望業種を再表示用に取得する。 */
+    /** 事業主・オーナーの編集項目と選択済みIDを、同じ接続で読み戻す。 */
+    public ProfileSettings findProfileSettings(int userId, String role) throws SQLException {
+        String table = switch (role) { // 認証済み会員の利用区分に対応するプロフィール。
+            case "BUSINESS" -> "business_profiles";
+            case "OWNER" -> "owner_profiles";
+            default -> throw new IllegalArgumentException("プロフィールの利用区分が正しくありません。");
+        };
+        boolean business = "BUSINESS".equals(role); // 出店希望範囲と資格を復元するかどうか。
+        String areaColumn = business
+                ? ", COALESCE((SELECT json_agg(json_build_object('lat', ST_Y(point.geom), 'lng', ST_X(point.geom)) ORDER BY point.path) "
+                    + "FROM ST_DumpPoints(ST_ExteriorRing(p.area)) point "
+                    + "WHERE point.path[1] < ST_NPoints(ST_ExteriorRing(p.area))), '[]'::json)::text AS area_points"
+                : ""; // 地図の入力形式に合わせた点列。末尾の閉じ点は除く。
+        Map<String, String> fields = new LinkedHashMap<>(); // 編集フォームへ渡す保存済みの値。
+        try (Connection connection = openConnection()) {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT p.*, u.email, n.email_enabled" + areaColumn + " FROM " + table + " p "
+                    + "JOIN users u ON u.user_id=p.user_id "
+                    + "LEFT JOIN notification_settings n ON n.user_id=p.user_id WHERE p.user_id=?")) {
+                statement.setInt(1, userId);
+                try (ResultSet row = statement.executeQuery()) {
+                    if (!row.next()) { return null; }
+                    fields.put("representativeName", row.getString("representative_name"));
+                    fields.put("email", emptyIfNull(row.getString("email")));
+                    fields.put("phone", PhoneNumbers.forDisplay(row.getString("phone_e164")));
+                    fields.put("secondaryPhone", PhoneNumbers.forDisplay(row.getString("secondary_phone_e164")));
+                    fields.put("iconImageUrl", emptyIfNull(row.getString("icon_image_url")));
+                    fields.put("emailNotify", row.getBoolean("email_enabled") ? "on" : "");
+                    if (business) {
+                        fields.put("businessName", row.getString("business_name"));
+                        fields.put("employeeCount", row.getString("employee_count"));
+                        fields.put("preferredArea", emptyIfNull(row.getString("preferred_area")));
+                        fields.put("preferredAreaPoints", row.getString("area_points"));
+                        fields.put("mgmtExperience", emptyIfNull(row.getString("management_experience")));
+                        fields.put("industryExperience", emptyIfNull(row.getString("industry_experience")));
+                    } else {
+                        fields.put("company", emptyIfNull(row.getString("company_name")));
+                    }
+                }
+            }
+
+            // 業種・資格のIDを復元し、表示名や画面の並び順では照合しない。
+            Set<String> industries = new LinkedHashSet<>(); // 会員が選択した希望業種のID。
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT industry_type_id FROM user_industry_preferences WHERE user_id=? ORDER BY industry_type_id")) {
+                statement.setInt(1, userId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) { industries.add(rows.getString("industry_type_id")); }
+                }
+            }
+            Set<String> qualifications = new LinkedHashSet<>(); // 選択中の資格・許認可のID。
+            if (business) {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT qualification_id FROM business_qualifications WHERE business_user_id=? AND is_active ORDER BY qualification_id")) {
+                    statement.setInt(1, userId);
+                    try (ResultSet rows = statement.executeQuery()) {
+                        while (rows.next()) { qualifications.add(rows.getString("qualification_id")); }
+                    }
+                }
+            }
+            return new ProfileSettings(fields, industries, qualifications);
+        }
+    }
+
+    /** 登録済み住民の氏名・メール・プロフィール・居住地・職場・通知・希望業種を再表示用に取得する。 */
     public Map<String, String> findResidentFields(int userId) throws SQLException {
         Map<String, String> result = new LinkedHashMap<>();
         try (Connection connection = openConnection()) {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT display_name, email FROM users WHERE user_id=?")) {
+                statement.setInt(1, userId);
+                try (ResultSet rows = statement.executeQuery()) {
+                    if (rows.next()) {
+                        String displayName = rows.getString("display_name");
+                        if (displayName != null) result.put("name", displayName);
+                        result.put("email", emptyIfNull(rows.getString("email")));
+                    }
+                }
+            }
             try (PreparedStatement statement = connection.prepareStatement(
                     "SELECT age_group, gender FROM resident_profiles WHERE user_id=?")) {
                 statement.setInt(1, userId);
@@ -61,15 +151,16 @@ public class ProfileDao extends Dao {
                 }
             }
             try (PreparedStatement statement = connection.prepareStatement(
-                    "SELECT location_kind, address_line, latitude, longitude FROM user_locations WHERE user_id=?")) {
+                    "SELECT location_kind, concat(prefecture, municipality, address_line) AS full_address, latitude, longitude "
+                    + "FROM user_locations WHERE user_id=?")) {
                 statement.setInt(1, userId);
                 try (ResultSet rows = statement.executeQuery()) {
                     while (rows.next()) {
                         String kind = rows.getString("location_kind");
-                        String addr = rows.getString("address_line");
+                        String addr = rows.getString("full_address"); // 都道府県・市区町村・番地を結合した住所。
                         BigDecimal lat = rows.getBigDecimal("latitude");
                         BigDecimal lng = rows.getBigDecimal("longitude");
-                        if ("LIVING".equals(kind)) {
+                        if ("HOME".equals(kind)) {
                             if (addr != null) result.put("livingAddress", addr);
                             if (lat != null) result.put("livingLat", lat.toPlainString());
                             if (lng != null) result.put("livingLng", lng.toPlainString());
@@ -91,7 +182,11 @@ public class ProfileDao extends Dao {
                 }
             }
             try (PreparedStatement statement = connection.prepareStatement(
-                    "SELECT i.industry_code FROM user_industry_preferences u JOIN industry_types i ON i.industry_type_id=u.industry_type_id WHERE u.user_id=?")) {
+                    "SELECT i.industry_code FROM user_industry_preferences u "
+                    + "JOIN industry_types i ON i.industry_type_id=u.industry_type_id "
+                    + "JOIN industry_categories c ON c.category_id=i.category_id "
+                    + "WHERE u.user_id=? AND i.is_active AND c.is_active "
+                    + "ORDER BY c.category_id, i.industry_type_id")) {
                 statement.setInt(1, userId);
                 try (ResultSet rows = statement.executeQuery()) {
                     List<String> codes = new ArrayList<>();
@@ -112,6 +207,38 @@ public class ProfileDao extends Dao {
             }
         }
         return result;
+    }
+
+    /** 住民画面のタブ・ピル選択用に、DBで有効な業種カテゴリと業種コードの階層を取得する。 */
+    public List<Map<String, Object>> listResidentTaxonomy() throws SQLException {
+        String sql = "SELECT c.category_id, c.category_code, c.category_name, i.industry_code, i.industry_name "
+                + "FROM industry_categories c JOIN industry_types i ON i.category_id = c.category_id "
+                + "WHERE c.is_active AND i.is_active AND i.industry_code IS NOT NULL "
+                + "ORDER BY c.category_id, i.industry_type_id";
+        try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(sql);
+                ResultSet rows = statement.executeQuery()) {
+            Map<Integer, Map<String, Object>> categories = new LinkedHashMap<>();
+            while (rows.next()) {
+                int categoryId = rows.getInt("category_id");
+                String rawCatCode = rows.getString("category_code");
+                String catId = (rawCatCode != null && !rawCatCode.isBlank()) ? rawCatCode.trim() : ("C" + categoryId);
+                String catName = rows.getString("category_name");
+                Map<String, Object> category = categories.computeIfAbsent(categoryId, k -> {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    map.put("id", catId);
+                    map.put("name", catName);
+                    map.put("subcategories", new ArrayList<Map<String, String>>());
+                    return map;
+                });
+                @SuppressWarnings("unchecked")
+                List<Map<String, String>> subcategories = (List<Map<String, String>>) category.get("subcategories");
+                Map<String, String> sub = new LinkedHashMap<>();
+                sub.put("id", rows.getString("industry_code"));
+                sub.put("name", rows.getString("industry_name"));
+                subcategories.add(sub);
+            }
+            return List.copyOf(categories.values());
+        }
     }
 
     /** 有効な業種だけを、DBのマスターID付きで画面へ渡す。 */
@@ -138,11 +265,20 @@ public class ProfileDao extends Dao {
     }
 
     public User saveResident(int userId, ResidentProfileInput input) throws SQLException {
+        return saveResident(userId, input, false);
+    }
+
+    /** 住民の初期設定を完了する。DBでも本登録前であることを確認する。 */
+    public User completeResidentSetup(int userId, ResidentProfileInput input) throws SQLException {
+        return saveResident(userId, input, true);
+    }
+
+    private User saveResident(int userId, ResidentProfileInput input, boolean pendingOnly) throws SQLException {
         if (input == null || input.home() == null || !"HOME".equals(input.home().kind())
                 || (input.work() != null && !"WORK".equals(input.work().kind()))) {
             throw new IllegalArgumentException("居住地と職場の入力内容を確認してください。");
         }
-        return save(userId, "RESIDENT", (connection, user) -> {
+        return save(userId, "RESIDENT", pendingOnly, (connection, user) -> {
             try (PreparedStatement statement = connection.prepareStatement(
                     "UPDATE users SET display_name=?,email=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
                 statement.setString(1, input.displayName());
@@ -172,15 +308,49 @@ public class ProfileDao extends Dao {
             // 住民が欲しい業種も、業種コードをDBの有効なIDへ変換して同じトランザクションで保存する。
             saveIndustryPreferences(connection, userId, resolveIndustryCodes(connection, input.preferredIndustryCodes()));
             saveNotifications(connection, userId, input.emailNotify() && nullable(input.email()) != null);
-        });
+            // 住民プロフィールではアイコンの参照先を扱わない。
+            return null;
+        }).user();
     }
 
-    /** オーナーの連絡先・プロフィール・誘致希望業種・通知設定をまとめて登録する。 */
+    /**
+     * オーナーのプロフィールを、入力に含まれるアイコン参照先で更新する。
+     * @param userId 更新する会員ID
+     * @param input 検証済みのプロフィール
+     * @return 保存後の会員情報
+     * @throws SQLException 会員が更新できない状態か、DB操作に失敗した場合
+     */
     public User saveOwner(int userId, OwnerProfileInput input) throws SQLException {
+        return saveOwner(userId, input, false, new IconChange(false, input == null ? null : input.iconImageUrl())).user();
+    }
+
+    /**
+     * オーナーの初期設定を完了し、入力に含まれるアイコン参照先を登録する。
+     * @param userId 本登録前の会員ID
+     * @param input 検証済みのプロフィール
+     * @return 保存後の会員情報
+     * @throws SQLException 会員が本登録前でないか、DB操作に失敗した場合
+     */
+    public User completeOwnerSetup(int userId, OwnerProfileInput input) throws SQLException {
+        return saveOwner(userId, input, true, new IconChange(false, input == null ? null : input.iconImageUrl())).user();
+    }
+
+    /**
+     * オーナーの各設定とアイコン参照先を同じトランザクションで保存する。
+     * @param userId 更新する会員ID
+     * @param input 検証済みのプロフィール
+     * @param pendingOnly 初期設定からの送信ならtrue
+     * @param iconChange アイコンの保持・差し替え・解除の指定
+     * @return 会員情報と更新前後のアイコン参照先
+     * @throws SQLException 会員の状態が更新を許可しないか、DB操作に失敗した場合
+     */
+    public SavedProfile saveOwner(int userId, OwnerProfileInput input, boolean pendingOnly, IconChange iconChange) throws SQLException {
         if (input == null || input.industryTypeIds() == null || input.industryTypeIds().isEmpty()) {
             throw new IllegalArgumentException("誘致希望業種を少なくとも1つ選択してください。");
         }
-        return save(userId, "OWNER", (connection, user) -> {
+        return save(userId, "OWNER", pendingOnly, (connection, user) -> {
+            // 同じ会員の更新を直列化した後に、現在のアイコンと今回の保存先を確定する。
+            IconReferences icons = iconReferences(connection, "owner_profiles", userId, iconChange);
             List<Integer> industries = uniqueIds(input.industryTypeIds());
             validateMasterIds(connection, industries, true);
             // LINE表示名は保持し、編集したオーナー氏名は専用プロフィールへ保存する。
@@ -191,27 +361,62 @@ public class ProfileDao extends Dao {
                 statement.executeUpdate();
             }
             try (PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO owner_profiles (user_id,representative_name,company_name,phone_e164,icon_image_url) VALUES (?,?,?,?,?) "
+                    "INSERT INTO owner_profiles (user_id,representative_name,company_name,phone_e164,icon_image_url,secondary_phone_e164) VALUES (?,?,?,?,?,?) "
                     + "ON CONFLICT (user_id) DO UPDATE SET representative_name=EXCLUDED.representative_name,"
                     + "company_name=EXCLUDED.company_name,phone_e164=EXCLUDED.phone_e164,"
-                    + "icon_image_url=EXCLUDED.icon_image_url,updated_at=CURRENT_TIMESTAMP")) {
+                    + "icon_image_url=EXCLUDED.icon_image_url,secondary_phone_e164=EXCLUDED.secondary_phone_e164,updated_at=CURRENT_TIMESTAMP")) {
                 statement.setInt(1, userId);
                 statement.setString(2, input.representativeName());
                 statement.setString(3, nullable(input.company()));
                 statement.setString(4, input.phoneE164());
-                statement.setString(5, nullable(input.iconImageUrl()));
+                statement.setString(5, icons.current());
+                statement.setString(6, nullable(input.secondaryPhoneE164()));
                 statement.executeUpdate();
             }
             saveIndustryPreferences(connection, userId, industries);
             saveNotifications(connection, userId, input.emailNotify() && nullable(input.email()) != null);
+            return icons;
         });
     }
 
+    /**
+     * 事業主のプロフィールを、入力に含まれるアイコン参照先で更新する。
+     * @param userId 更新する会員ID
+     * @param input 検証済みのプロフィール
+     * @return 保存後の会員情報
+     * @throws SQLException 会員が更新できない状態か、DB操作に失敗した場合
+     */
     public User saveBusiness(int userId, BusinessProfileInput input) throws SQLException {
+        return saveBusiness(userId, input, false, new IconChange(false, input == null ? null : input.iconImageUrl())).user();
+    }
+
+    /**
+     * 事業主の初期設定を完了し、入力に含まれるアイコン参照先を登録する。
+     * @param userId 本登録前の会員ID
+     * @param input 検証済みのプロフィール
+     * @return 保存後の会員情報
+     * @throws SQLException 会員が本登録前でないか、DB操作に失敗した場合
+     */
+    public User completeBusinessSetup(int userId, BusinessProfileInput input) throws SQLException {
+        return saveBusiness(userId, input, true, new IconChange(false, input == null ? null : input.iconImageUrl())).user();
+    }
+
+    /**
+     * 事業主の各設定とアイコン参照先を同じトランザクションで保存する。
+     * @param userId 更新する会員ID
+     * @param input 検証済みのプロフィール
+     * @param pendingOnly 初期設定からの送信ならtrue
+     * @param iconChange アイコンの保持・差し替え・解除の指定
+     * @return 会員情報と更新前後のアイコン参照先
+     * @throws SQLException 会員の状態が更新を許可しないか、DB操作に失敗した場合
+     */
+    public SavedProfile saveBusiness(int userId, BusinessProfileInput input, boolean pendingOnly, IconChange iconChange) throws SQLException {
         if (input == null || input.industryTypeIds() == null || input.industryTypeIds().isEmpty()) {
             throw new IllegalArgumentException("希望業種を指定してください。");
         }
-        return save(userId, "BUSINESS", (connection, user) -> {
+        return save(userId, "BUSINESS", pendingOnly, (connection, user) -> {
+            // 会員の行ロックで他の保存と順序をそろえ、直前のアイコンを取得する。
+            IconReferences icons = iconReferences(connection, "business_profiles", userId, iconChange);
             List<Integer> industries = uniqueIds(input.industryTypeIds());
             List<Integer> qualifications = uniqueIds(input.qualificationIds());
             validateMasterIds(connection, industries, true);
@@ -229,12 +434,13 @@ public class ProfileDao extends Dao {
             }
             // LINEの表示名は保持し、本人が入力した代表者名や電話番号は事業主プロフィールへ保存する。
             try (PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,phone_e164,icon_image_url,area) "
-                    + "VALUES (?,?,?,?,?,?,?,?,?,ST_SetSRID(ST_GeomFromGeoJSON(?),4326)) "
+                    "INSERT INTO business_profiles (user_id,business_name,representative_name,employee_count,preferred_area,industry_experience,management_experience,phone_e164,icon_image_url,area,secondary_phone_e164) "
+                    + "VALUES (?,?,?,?,?,?,?,?,?,ST_SetSRID(ST_GeomFromGeoJSON(?),4326),?) "
                     + "ON CONFLICT (user_id) DO UPDATE SET business_name=EXCLUDED.business_name,representative_name=EXCLUDED.representative_name,"
                     + "employee_count=EXCLUDED.employee_count,preferred_area=EXCLUDED.preferred_area,industry_experience=EXCLUDED.industry_experience,"
                     + "management_experience=EXCLUDED.management_experience,phone_e164=EXCLUDED.phone_e164,"
-                    + "icon_image_url=EXCLUDED.icon_image_url,area=EXCLUDED.area,updated_at=CURRENT_TIMESTAMP")) {
+                    + "icon_image_url=EXCLUDED.icon_image_url,area=EXCLUDED.area,"
+                    + "secondary_phone_e164=EXCLUDED.secondary_phone_e164,updated_at=CURRENT_TIMESTAMP")) {
                 statement.setInt(1, userId);
                 statement.setString(2, input.businessName());
                 statement.setString(3, input.representativeName());
@@ -243,8 +449,9 @@ public class ProfileDao extends Dao {
                 statement.setString(6, input.industryExperience());
                 statement.setString(7, input.managementExperience());
                 statement.setString(8, input.phoneE164());
-                statement.setString(9, nullable(input.iconImageUrl()));
+                statement.setString(9, icons.current());
                 statement.setString(10, areaGeoJson);
+                statement.setString(11, nullable(input.secondaryPhoneE164()));
                 statement.executeUpdate();
             }
             try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_industry_preferences WHERE user_id=?")) {
@@ -277,11 +484,42 @@ public class ProfileDao extends Dao {
                 if (!qualifications.isEmpty()) { statement.executeBatch(); }
             }
             saveNotifications(connection, userId, input.emailNotify() && nullable(input.email()) != null);
+            return icons;
         });
     }
 
-    /** 同じ会員の同時送信を直列化し、権限をDBでも再確認してから関連情報を保存する。 */
-    private User save(int userId, String requiredRole, SaveWork work) throws SQLException {
+    /**
+     * 同じ会員の保存を直列化し、保存済みのアイコンを保持または更新するための参照先を返す。
+     * @param connection 会員行をロックしたトランザクションの接続
+     * @param table コード側で指定する事業主・オーナーのプロフィールテーブル
+     * @param userId 対象の会員ID
+     * @param change アイコンの変更内容
+     * @return 既存の参照先と今回保存する参照先
+     * @throws SQLException 既存の参照先を読み取れなかった場合
+     */
+    private static IconReferences iconReferences(Connection connection, String table, int userId, IconChange change) throws SQLException {
+        // 差し替えや解除後に旧ファイルを片付けられるよう、更新前の参照先を記録する。
+        String previous = null;
+        // テーブル名は呼び出し元の定数に限定し、検索する会員IDはパラメーターで渡す。
+        try (PreparedStatement statement = connection.prepareStatement("SELECT icon_image_url FROM " + table + " WHERE user_id=?")) {
+            statement.setInt(1, userId);
+            try (ResultSet rows = statement.executeQuery()) {
+                if (rows.next()) { previous = rows.getString("icon_image_url"); }
+            }
+        }
+        return new IconReferences(previous, change.keepExisting() ? previous : nullable(change.replacement()));
+    }
+
+    /**
+     * 会員の権限をDBで再確認し、会員と各プロフィールを一括保存する。
+     * @param userId 更新する会員ID
+     * @param requiredRole 画面に対応する会員区分
+     * @param pendingOnly 初期設定のときだけtrue
+     * @param work 区分別の保存処理
+     * @return 保存後の会員情報とアイコン参照先
+     * @throws SQLException 会員が更新できない状態か、DB操作に失敗した場合
+     */
+    private SavedProfile save(int userId, String requiredRole, boolean pendingOnly, SaveWork work) throws SQLException {
         try (Connection connection = openConnection()) {
             boolean autoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
@@ -292,11 +530,14 @@ public class ProfileDao extends Dao {
                     statement.setInt(1, userId);
                     try (ResultSet rows = statement.executeQuery()) { current = rows.next() ? UserDao.readUser(rows) : null; }
                 }
+                // 古いセッションからの初期設定送信も、行ロック後のDB状態で拒否する。
                 if (current == null || !requiredRole.equals(current.getUserRole()) || current.getWithdrawnAt() != null
-                        || (!"PENDING".equals(current.getAccountStatus()) && !"ACTIVE".equals(current.getAccountStatus()))) {
+                        || (!"PENDING".equals(current.getAccountStatus()) && !"ACTIVE".equals(current.getAccountStatus()))
+                        || (pendingOnly && !"PENDING".equals(current.getAccountStatus()))) {
                     throw new SQLException("This account cannot complete the requested registration.", "28000");
                 }
-                work.run(connection, current);
+                // DBの確定後にファイルを整理するため、区分別の更新結果を保持する。
+                IconReferences icons = work.run(connection, current);
                 try (PreparedStatement statement = connection.prepareStatement(
                         "UPDATE users SET account_status='ACTIVE',updated_at=CURRENT_TIMESTAMP WHERE user_id=?")) {
                     statement.setInt(1, userId);
@@ -311,7 +552,7 @@ public class ProfileDao extends Dao {
                     }
                 }
                 connection.commit();
-                return saved;
+                return new SavedProfile(saved, icons == null ? null : icons.current(), icons == null ? null : icons.previous());
             } catch (SQLException | RuntimeException error) {
                 try { connection.rollback(); } catch (SQLException rollbackError) { error.addSuppressed(rollbackError); }
                 throw error;
@@ -421,6 +662,40 @@ public class ProfileDao extends Dao {
 
     private static String nullable(String value) { return value == null || value.isBlank() ? null : value; }
 
+    private static String emptyIfNull(String value) { return value == null ? "" : value; }
+
+    /**
+     * 画像の選択がない保存では既存の参照先を保持し、解除と差し替えを区別する。
+     * @param keepExisting trueなら既存の参照先を保持する
+     * @param replacement 差し替え先。keepExistingがfalseでnullなら解除する
+     */
+    public record IconChange(boolean keepExisting, String replacement) { }
+
+    /**
+     * 会員情報とアイコンの保存結果。旧ファイルの削除はこの結果を受け取ってから行う。
+     * @param user 保存後の会員情報
+     * @param iconImageUrl 保存されたアイコン参照先。未設定ならnull
+     * @param previousIconImageUrl 保存前のアイコン参照先。未設定ならnull
+     */
+    public record SavedProfile(User user, String iconImageUrl, String previousIconImageUrl) { }
+
+    /**
+     * トランザクション内で確定するアイコンの参照先。
+     * @param previous 更新前の参照先
+     * @param current 今回保存する参照先
+     */
+    private record IconReferences(String previous, String current) { }
+
+    /** 会員区分に応じたプロフィールの保存処理。 */
     @FunctionalInterface
-    private interface SaveWork { void run(Connection connection, User current) throws SQLException; }
+    private interface SaveWork {
+        /**
+         * ロック済みの会員に関連するプロフィールを更新する。
+         * @param connection 保存先のトランザクション接続
+         * @param current ロック後に取得した会員情報
+         * @return アイコン参照先の更新結果。アイコンを扱わない区分はnull
+         * @throws SQLException 関連データの読み書きに失敗した場合
+         */
+        IconReferences run(Connection connection, User current) throws SQLException;
+    }
 }

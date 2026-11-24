@@ -5,6 +5,7 @@
 # Tomcat・Maven・Javaとプロジェクト構成を確認し、不備があれば設定を作成しない。
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'dev-context.ps1')
 $tomcatHome = $env:CATALINA_HOME
 
 if ([string]::IsNullOrWhiteSpace($tomcatHome)) {
@@ -26,25 +27,13 @@ if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
     throw 'java not found. Install JDK 21 and check JAVA_HOME / PATH.'
 }
 
-# コンパイル結果と編集中のWebソースを、同じ開発用コンテキストへ割り当てる。
+# 初回配備で更新するコンテキストを用意する。
 $docBase = (Join-Path $projectRoot 'target\machiriku').Replace('\', '/')
-$webSource = (Join-Path $projectRoot 'src\main\webapp').Replace('\', '/')
 $contextFile = Join-Path $tomcatHome 'conf\Catalina\localhost\machiriku.xml'
 
 # 既存の設定は内容が一致する場合だけ再利用し、別プロジェクトの設定を上書きしない。
 if (Test-Path $contextFile) {
-    try {
-        [xml]$existing = Get-Content -LiteralPath $contextFile -Raw -Encoding UTF8
-    }
-    catch {
-        throw "Existing machiriku.xml is invalid. Correct or back it up first: $contextFile`n$($_.Exception.Message)"
-    }
-    $currentDocBase = $existing.DocumentElement.GetAttribute('docBase').Replace('\', '/')
-    $preNode = $existing.SelectSingleNode('/Context/Resources/PreResources')
-    $currentWebSource = if ($null -ne $preNode) { $preNode.GetAttribute('base').Replace('\', '/') } else { '' }
-    if (($currentDocBase -ne $docBase) -or ($currentWebSource -ne $webSource)) {
-        throw "Existing machiriku.xml points somewhere else or lacks PreResources. Not overwritten. Back it up or remove it while Tomcat is stopped, then run setup again: $contextFile"
-    }
+    Read-MachirikuContext -ContextFile $contextFile -ProjectRoot $projectRoot | Out-Null
     Write-Host "Tomcat context already configured: $contextFile" -ForegroundColor Green
 }
 else {
@@ -59,19 +48,6 @@ else {
     $context.SetAttribute('docBase', $docBase)
     $context.SetAttribute('reloadable', 'true')
     [void]$doc.AppendChild($context)
-
-    $resources = $doc.CreateElement('Resources')
-    $resources.SetAttribute('className', 'org.apache.catalina.webresources.StandardRoot')
-    [void]$context.AppendChild($resources)
-
-    # JSPや静的ファイルはソース側を優先して参照し、編集内容を開発中に確認しやすくする。
-    $preResources = $doc.CreateElement('PreResources')
-    $preResources.SetAttribute('className', 'org.apache.catalina.webresources.DirResourceSet')
-    $preResources.SetAttribute('base', $webSource)
-    $preResources.SetAttribute('webAppMount', '/')
-    $preResources.SetAttribute('internalPath', '/')
-    $preResources.SetAttribute('readOnly', 'true')
-    [void]$resources.AppendChild($preResources)
 
     $settings = [System.Xml.XmlWriterSettings]::new()
     $settings.Encoding = [System.Text.UTF8Encoding]::new($false)

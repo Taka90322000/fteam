@@ -33,6 +33,29 @@ public class UserDao extends Dao {
         }
     }
 
+    /** 本登録済みの事業主・オーナーについて、専用プロフィール上の代表者名を取得する。 */
+    public String findRepresentativeName(User user) throws SQLException {
+        if (user == null || !"ACTIVE".equals(user.getAccountStatus())) {
+            return null;
+        }
+        String table = switch (user.getUserRole()) {
+            case "BUSINESS" -> "business_profiles";
+            case "OWNER" -> "owner_profiles";
+            default -> null;
+        };
+        if (table == null) {
+            return null;
+        }
+        try (Connection connection = openConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "SELECT representative_name FROM " + table + " WHERE user_id = ?")) {
+            statement.setInt(1, user.getUserId());
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next() ? rows.getString("representative_name") : null;
+            }
+        }
+    }
+
     /** 新規会員を登録し、DBが採番・設定した値を含む保存後の会員情報を返す。 */
     public User insert(User user) throws SQLException {
         validate(user);

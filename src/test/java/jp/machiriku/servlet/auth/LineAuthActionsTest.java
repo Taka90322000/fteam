@@ -666,6 +666,55 @@ public class LineAuthActionsTest {
         }
     }
 
+    @Test
+    // ログアウトはGETやトークン不一致を拒否し、正当なPOST時のみセッションを破棄する。
+    public void logoutRequiresPostAndValidCsrfAndCanTransitionFromDemoToLineAuth() throws Exception {
+        Harness getRequest = authenticated("GET", "RESIDENT", "ACTIVE");
+        String validToken = LogoutAction.csrfToken(getRequest.session.proxy);
+        getRequest.parameters.put("csrfToken", validToken);
+        new LogoutAction().execute(getRequest.request, getRequest.response);
+        assertEquals(405, getRequest.status);
+        assertFalse(getRequest.session.invalidated);
+
+        for (String badToken : new String[] { null, "", "forged-token" }) {
+            Harness badPost = authenticated("POST", "RESIDENT", "ACTIVE");
+            LogoutAction.csrfToken(badPost.session.proxy);
+            if (badToken != null) { badPost.parameters.put("csrfToken", badToken); }
+            new LogoutAction().execute(badPost.request, badPost.response);
+            assertEquals(403, badPost.status);
+            assertFalse(badPost.session.invalidated);
+        }
+
+        Harness normalLogout = authenticated("POST", "RESIDENT", "ACTIVE");
+        normalLogout.parameters.put("csrfToken", LogoutAction.csrfToken(normalLogout.session.proxy));
+        Session activeSession = normalLogout.session;
+        new LogoutAction().execute(normalLogout.request, normalLogout.response);
+        assertTrue(activeSession.invalidated);
+        assertEquals("/machiriku/index.jsp?logged_out=1", normalLogout.redirect);
+
+        // デモセッションから通常のLINEログイン・新規会員登録へ戻る導線を確認する。
+        for (String[] transition : new String[][] {
+                { "login", "/machiriku/jp/machiriku/servlet/auth/Login.action" },
+                { "register", "/machiriku/jp/machiriku/servlet/auth/Register.action" } }) {
+            Harness demoExit = new Harness("POST");
+            demoExit.session.attributes.put("userRole", "resident");
+            demoExit.parameters.put("csrfToken", LogoutAction.csrfToken(demoExit.session.proxy));
+            demoExit.parameters.put("next", transition[0]);
+            Session demoSession = demoExit.session;
+            new LogoutAction().execute(demoExit.request, demoExit.response);
+            assertTrue(demoSession.invalidated);
+            assertEquals(transition[1], demoExit.redirect);
+
+            // セッション期限切れ後のログアウトPOSTも403にせず目的の画面へ案内する。
+            Harness expiredExit = new Harness("POST");
+            expiredExit.session = null;
+            expiredExit.parameters.put("next", transition[0]);
+            new LogoutAction().execute(expiredExit.request, expiredExit.response);
+            assertEquals(0, expiredExit.status);
+            assertEquals(transition[1], expiredExit.redirect);
+        }
+    }
+
     // 登録経由は住民・事業主・オーナーそれぞれの初期設定へ案内する。
     private static String registrationRedirect(String role) {
         return switch (role) {
@@ -784,6 +833,7 @@ public class LineAuthActionsTest {
         User afterConflict;
         User inserted;
         User updateResult;
+        String representativeName;
         SQLException insertFailure;
         SQLException updateFailure;
         CountDownLatch roleUpdateEntered;
@@ -798,6 +848,9 @@ public class LineAuthActionsTest {
             assertEquals("verified-line-subject", subject);
             finds++;
             return finds > 1 && afterConflict != null ? afterConflict : existing;
+        }
+        @Override public String findRepresentativeName(User user) {
+            return representativeName;
         }
         @Override public User insert(User value) throws SQLException {
             inserts++;

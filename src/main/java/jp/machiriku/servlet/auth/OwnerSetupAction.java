@@ -1,5 +1,6 @@
 package jp.machiriku.servlet.auth;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,18 +9,27 @@ import java.util.Set;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import jp.machiriku.bean.User;
 import jp.machiriku.dao.ProfileDao;
 import jp.machiriku.registration.RegistrationForms;
+import jp.machiriku.servlet.ProfileIconSupport;
 import jp.machiriku.tool.Action;
 
 /** LINE取得情報を初期表示し、オーナー情報と誘致希望業種をDBへ保存する。 */
 public class OwnerSetupAction extends Action {
     protected ProfileDao createProfileDao() { return new ProfileDao(); }
 
+    /**
+     * 初期設定フォームを表示し、送信時は画像とプロフィールを保存する。
+     * @param req 認証済みの会員から受け取ったリクエスト
+     * @param res 画面表示または保存結果のレスポンス
+     * @throws Exception セッションの確認や画面転送を続行できなかった場合
+     */
     @Override
     public void execute(HttpServletRequest req, HttpServletResponse res) throws Exception {
-        User user = OnboardingSupport.requireUser(req, res, "OWNER");
+        HttpSession session = req.getSession(false);
+        User user = OnboardingSupport.requireUser(req, res, session, "OWNER", this::createProfileDao);
         if (user == null) { return; }
         if (!"GET".equalsIgnoreCase(req.getMethod()) && !"POST".equalsIgnoreCase(req.getMethod())) {
             res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
@@ -29,29 +39,37 @@ public class OwnerSetupAction extends Action {
         Set<String> industries = Set.of();
         if ("POST".equalsIgnoreCase(req.getMethod())) {
             req.setCharacterEncoding("UTF-8");
-            if (!OnboardingSupport.validCsrf(req)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
-            fields = OnboardingSupport.fields(req, "representativeName", "company", "email", "phone", "iconImageUrl", "emailNotify");
+            if (!OnboardingSupport.validCsrf(req, session)) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
+            fields = OnboardingSupport.fields(req, "representativeName", "company", "email", "phone", "secondaryPhone", "emailNotify");
             industries = OnboardingSupport.selection(req, "preferredIndustry");
             try {
                 var input = RegistrationForms.owner(fields, OnboardingSupport.values(req, "preferredIndustry"));
-                User saved = createProfileDao().saveOwner(user.getUserId(), input);
+                // 画像を検証して発行した参照先を、本登録のトランザクションに渡す。
+                ProfileDao.SavedProfile savedProfile = ProfileIconSupport.save(req, user,
+                        icon -> createProfileDao().saveOwner(user.getUserId(), input, true, icon));
+                // セッションの表示名と通知設定に使うコミット済みの会員情報。
+                User saved = savedProfile.user();
                 // DBのcommit後にだけ、画面用の名前と初期設定完了状態を更新する。
-                OnboardingSupport.completed(req, saved, input.representativeName());
-                req.getSession().setAttribute("company", input.company() == null ? "" : input.company());
-                req.getSession().setAttribute("phone", input.phoneE164());
-                req.getSession().setAttribute("iconImageUrl", input.iconImageUrl() == null ? "" : input.iconImageUrl());
-                req.getSession().setAttribute("preferredIndustries", input.industryTypeIds());
-                req.getSession().setAttribute("emailNotify", input.emailNotify() && saved.getEmail() != null);
-                res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+                OnboardingSupport.completed(req, res, session, saved, input.representativeName(), current -> {
+                    current.setAttribute("company", input.company() == null ? "" : input.company());
+                    current.setAttribute("phone", input.phoneE164());
+                    current.setAttribute("iconImageUrl", savedProfile.iconImageUrl() == null ? "" : savedProfile.iconImageUrl());
+                    current.setAttribute("preferredIndustries", input.industryTypeIds());
+                    current.setAttribute("emailNotify", input.emailNotify() && saved.getEmail() != null);
+                });
                 return;
             } catch (IllegalArgumentException e) {
                 req.setAttribute("errorMessage", e.getMessage());
+            } catch (IOException e) {
+                // 画像を読み書きできない場合、以前のアイコンを表示したフォームへ戻す。
+                req.getServletContext().log("Could not save an owner profile icon.");
+                req.setAttribute("errorMessage", "アイコン画像を保存できませんでした。時間をおいて再度お試しください。");
             } catch (SQLException e) {
                 OnboardingSupport.logDatabaseError(req, e);
                 if ("28000".equals(e.getSQLState())) { res.sendError(HttpServletResponse.SC_FORBIDDEN); return; }
                 String message;
                 if ("23505".equals(e.getSQLState())) {
-                    message = "このメールアドレスまたは電話番号は既に登録されています。入力内容を確認してください。";
+                    message = "このメールアドレスは既に登録されています。入力内容を確認してください。";
                 } else if ("42P01".equals(e.getSQLState()) || "42501".equals(e.getSQLState())) {
                     message = "オーナー登録の準備が完了していません。管理者に確認してください。";
                 } else {
@@ -59,11 +77,13 @@ public class OwnerSetupAction extends Action {
                 }
                 req.setAttribute("errorMessage", message);
             }
+            ProfileIconSupport.restorePreview(req, createProfileDao(), user, fields);
         } else {
             fields = new LinkedHashMap<>();
-            fields.put("representativeName", OnboardingSupport.lineValue(req.getSession(), "lineDisplayName", user.getDisplayName()));
-            fields.put("email", OnboardingSupport.lineValue(req.getSession(), "lineEmail", user.getEmail()));
+            fields.put("representativeName", OnboardingSupport.lineValue(session, "lineDisplayName", user.getDisplayName()));
+            fields.put("email", OnboardingSupport.lineValue(session, "lineEmail", user.getEmail()));
             fields.put("phone", "");
+            fields.put("secondaryPhone", "");
             fields.put("iconImageUrl", "");
             fields.put("company", "");
             fields.put("emailNotify", "on");
@@ -80,7 +100,6 @@ public class OwnerSetupAction extends Action {
         req.setAttribute("email", fields.get("email"));
         req.setAttribute("role", "owner");
         req.setAttribute("roleLabel", "物件オーナー");
-        req.setAttribute("csrfToken", OnboardingSupport.csrfToken(req.getSession()));
         req.setAttribute("selectedIndustries", industries);
         try {
             req.setAttribute("industryChoices", createProfileDao().listIndustries());
@@ -91,6 +110,8 @@ public class OwnerSetupAction extends Action {
                 req.setAttribute("errorMessage", "誘致希望業種を取得できませんでした。時間をおいて画面を開き直してください。");
             }
         }
-        req.getRequestDispatcher("/WEB-INF/views/auth/owner_setup.jsp").forward(req, res);
+        if (OnboardingSupport.prepareView(req, res, session)) {
+            req.getRequestDispatcher("/WEB-INF/views/auth/owner_setup.jsp").forward(req, res);
+        }
     }
 }

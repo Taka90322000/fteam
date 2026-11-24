@@ -1,7 +1,12 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="jp.machiriku.bean.User,jp.machiriku.tool.Html" %>
+<%@ page import="jp.machiriku.bean.User,jp.machiriku.servlet.auth.LogoutAction,jp.machiriku.tool.Html" %>
 <%
   User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
+  String rawSessionRole = session.getAttribute("userRole") instanceof String ? (String) session.getAttribute("userRole") : null;
+  boolean isDemoSession = currentUser == null && rawSessionRole != null
+      && java.util.Set.of("resident", "business", "owner", "admin").contains(rawSessionRole);
+  String logoutCsrfToken = LogoutAction.csrfToken(session);
+
   String displayName = (String) session.getAttribute("userName");
   if (displayName == null && currentUser != null) {
     displayName = currentUser.getDisplayName();
@@ -9,7 +14,7 @@
   if (displayName == null || displayName.trim().isEmpty()) {
     displayName = "LINEユーザー";
   }
-  String userRole = (String) session.getAttribute("userRole");
+  String userRole = rawSessionRole;
   if (userRole == null && currentUser != null && currentUser.getUserRole() != null) {
     userRole = currentUser.getUserRole().toLowerCase(java.util.Locale.ROOT);
   }
@@ -31,7 +36,7 @@
   }
   String assetVersion = request.getParameter("assetVersion");
   if (assetVersion == null || assetVersion.trim().isEmpty()) {
-    assetVersion = "20261118_prop_v5";
+    assetVersion = "20261124_merge_v1";
   }
   String profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/user/Profile.action";
 %>
@@ -62,19 +67,35 @@
         <% if (currentUser == null) { %>
           <label class="role-picker" id="header-role-picker-wrap" for="preview-role">デモ表示
             <select id="preview-role" onchange="MachirikuStore.setRole(this.value)">
-              <option value="resident">地域住民</option>
-              <option value="business">出店事業主</option>
-              <option value="owner">物件オーナー</option>
-              <option value="admin">運営管理者</option>
+              <option value="resident" <%= "resident".equalsIgnoreCase(userRole) ? "selected" : "" %>>地域住民</option>
+              <option value="business" <%= "business".equalsIgnoreCase(userRole) ? "selected" : "" %>>出店事業主</option>
+              <option value="owner" <%= "owner".equalsIgnoreCase(userRole) ? "selected" : "" %>>物件オーナー</option>
+              <option value="admin" <%= "admin".equalsIgnoreCase(userRole) ? "selected" : "" %>>運営管理者</option>
             </select>
           </label>
           <span id="header-role-badge" class="header-role-badge" style="display:none;">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             <span id="header-role-badge-text">地域住民</span>
           </span>
-          <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
-            <span>ログイン</span>
-          </a>
+          <% if (isDemoSession) { %>
+            <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;">
+              <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+              <input type="hidden" name="next" value="login">
+              <button type="submit" class="btn-header-action profile-link" style="border:none; cursor:pointer; font:inherit;">
+                <span>ログイン</span>
+              </button>
+            </form>
+            <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('デモ表示を終了してログアウトしますか？');">
+              <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+              <button type="submit" class="btn-header-action" style="border:none; cursor:pointer; font:inherit;">
+                <span>デモ終了</span>
+              </button>
+            </form>
+          <% } else { %>
+            <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action" class="btn-header-action profile-link">
+              <span>ログイン</span>
+            </a>
+          <% } %>
         <% } else { %>
           <label class="role-picker" id="header-role-picker-wrap" for="preview-role" style="display:none;">利用者
             <select id="preview-role" onchange="MachirikuStore.setRole(this.value)">

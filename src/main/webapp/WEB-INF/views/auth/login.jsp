@@ -1,8 +1,9 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="jp.machiriku.config.AppConfig" %>
+<%@ page import="jp.machiriku.config.AppConfig,jp.machiriku.tool.Html" %>
 <%-- ログイン画面。認証処理そのものはLineLoginActionとコールバック側で実行する。 --%>
 <jsp:include page="/WEB-INF/views/common/header.jsp">
   <jsp:param name="title" value="ログイン | マチリク" />
+  <jsp:param name="isOnboarding" value="false" />
   <jsp:param name="activeNav" value="login" />
 </jsp:include>
 
@@ -14,7 +15,7 @@
     <%-- Actionが再表示時に設定した案内文がある場合に、フォームの上部へ表示する。 --%>
     <% if (request.getAttribute("errorMessage") != null) { %>
       <div style="background:#fee2e2; border:1px solid #f87171; color:#991b1b; padding:0.75rem 1rem; border-radius:var(--radius-md); font-size:0.875rem; margin-bottom:1.25rem;">
-        <%= request.getAttribute("errorMessage") %>
+        <%= Html.escape(request.getAttribute("errorMessage")) %>
       </div>
     <% } %>
 

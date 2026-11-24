@@ -56,7 +56,7 @@
       </div>
     </div>
 
-    <form id="owner-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/OwnerSetup.action" method="POST" onsubmit="return validateOwnerForm();">
+    <form id="owner-setup-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/OwnerSetup.action" method="POST" enctype="multipart/form-data" onsubmit="return validateOwnerForm();">
       <input type="hidden" name="csrfToken" value="<%= Html.escape(request.getAttribute("csrfToken")) %>">
       <!-- オーナー氏名 / 代表者名 -->
       <div class="form-group" style="margin-bottom:1.25rem;">
@@ -77,21 +77,23 @@
       </div>
 
       <%-- 画像の参照先は任意入力とし、エラー時も入力値を保持する。 --%>
-      <div class="form-group" style="margin-bottom:1.25rem;">
-        <label for="s18-owner-icon" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
-          アイコン画像のURL・パス <span style="font-size:0.78rem; color:var(--text-sub);">(任意)</span>
-        </label>
-        <input id="s18-owner-icon" name="iconImageUrl" type="text" class="form-control" value="<%= Html.escape(formValues.get("iconImageUrl")) %>" maxlength="2048" placeholder="例: https://example.com/icon.png、/assets/icon.png">
-      </div>
+      <jsp:include page="/WEB-INF/views/common/profile_icon.jsp" />
 
       <!-- 連絡先電話番号 -->
       <div class="form-group" style="margin-bottom:1.25rem;">
         <label for="s18-owner-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
-          連絡先電話番号 <span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
+          主な連絡先電話番号<span style="color:var(--danger-text); font-size:0.8rem;">*必須</span>
         </label>
-        <input id="s18-owner-phone" name="phone" type="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("phone", "")) %>" required placeholder="例: 09012345678 (ハイフンなし)">
-        <div id="s18-owner-phone-error" style="display:none; color:var(--danger-text); font-size:0.8rem; margin-top:0.35rem; font-weight:600;"></div>
+        <input id="s18-owner-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("phone", "")) %>" required maxlength="50" placeholder="例：028-633-9988、090-1234-5678">
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.25rem;">※出店希望者との連絡、物件問い合わせや運営確認用に使用されます。</span>
+      </div>
+
+      <%-- 任意の追加連絡先。空欄で保存すると登録済みの追加番号を削除する。 --%>
+      <div class="form-group" style="margin-bottom:1.25rem;">
+        <label for="s18-owner-secondary-phone" style="font-weight:700; font-size:0.9rem; color:var(--text-main); display:block; margin-bottom:0.35rem;">
+          追加の電話番号 <span style="font-size:0.78rem; color:var(--text-sub);">（任意）</span>
+        </label>
+        <input id="s18-owner-secondary-phone" name="secondaryPhone" type="tel" inputmode="tel" class="form-control" value="<%= Html.escape(formValues.getOrDefault("secondaryPhone", "")) %>" maxlength="50" placeholder="例：090-1234-5678">
       </div>
 
       <!-- メールアドレス -->
@@ -135,9 +137,12 @@
       </div>
     </form>
     <div style="margin-top:1.5rem; text-align:center;">
-      <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('登録を中断してログアウトしますか？');" style="color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer;">
-        登録を中断してログアウト
-      </a>
+      <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('登録を中断してログアウトしますか？');">
+        <input type="hidden" name="csrfToken" value="<%= Html.escape(request.getAttribute("csrfToken")) %>">
+        <button type="submit" style="background:none; border:none; padding:0; color:var(--text-sub); font-size:0.875rem; text-decoration:underline; cursor:pointer; font-family:inherit;">
+          登録を中断してログアウト
+        </button>
+      </form>
     </div>
     <%-- 本登録前は、利用者区分の選択画面へ戻って登録を続けられる。 --%>
     <% User registrationUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
@@ -151,30 +156,6 @@
 </section>
 
 <script>
-  function showOwnerPhoneError(msg) {
-    const errorEl = document.getElementById('s18-owner-phone-error');
-    const phoneInput = document.getElementById('s18-owner-phone');
-    if (errorEl) {
-      errorEl.textContent = msg;
-      errorEl.style.display = 'block';
-    }
-    if (phoneInput) {
-      phoneInput.style.borderColor = 'var(--danger-border, #ef4444)';
-    }
-  }
-
-  function clearOwnerPhoneError() {
-    const errorEl = document.getElementById('s18-owner-phone-error');
-    const phoneInput = document.getElementById('s18-owner-phone');
-    if (errorEl) {
-      errorEl.textContent = '';
-      errorEl.style.display = 'none';
-    }
-    if (phoneInput) {
-      phoneInput.style.borderColor = '';
-    }
-  }
-
   function validateOwnerForm() {
     const repName = document.getElementById('s18-owner-name');
     const phone = document.getElementById('s18-owner-phone');
@@ -184,27 +165,12 @@
       if (repName) repName.focus();
       return false;
     }
+    // 番号の形式はサーバーの共通処理で検証し、ここでは必須入力を確認する。
     if (!phone || !phone.value.trim()) {
-      showOwnerPhoneError('連絡先電話番号を入力してください');
       alert('連絡先電話番号を入力してください');
       if (phone) phone.focus();
       return false;
     }
-    const rawOwnerPhone = phone.value.trim();
-    const ownerDigitsOnly = rawOwnerPhone.replace(/[\s()（）ー−‐-]/g, '');
-    if (!/^\d+$/.test(ownerDigitsOnly)) {
-      showOwnerPhoneError('電話番号は半角数字で入力してください（英字や記号は使用できません）');
-      alert('電話番号は半角数字で入力してください（英字や記号は使用できません）');
-      if (phone) phone.focus();
-      return false;
-    }
-    if (ownerDigitsOnly.length < 9 || ownerDigitsOnly.length > 11) {
-      showOwnerPhoneError('電話番号の桁数を確認してください（例: 09012345678）');
-      alert('電話番号の桁数を確認してください（例: 09012345678）');
-      if (phone) phone.focus();
-      return false;
-    }
-    clearOwnerPhoneError();
 
     const industries = document.querySelectorAll('input[name="preferredIndustry"]:checked');
     if (industries.length === 0) {
@@ -215,21 +181,6 @@
     return true;
   }
 
-  window.addEventListener('DOMContentLoaded', () => {
-    const ownerPhoneInput = document.getElementById('s18-owner-phone');
-    if (ownerPhoneInput) {
-      ownerPhoneInput.addEventListener('input', function() {
-        const val = this.value.trim();
-        if (!val) { clearOwnerPhoneError(); return; }
-        const digits = val.replace(/[\s()（）ー−‐-]/g, '');
-        if (!/^\d*$/.test(digits)) {
-          showOwnerPhoneError('※電話番号は半角数字で入力してください（英字や記号は使用できません）');
-        } else {
-          clearOwnerPhoneError();
-        }
-      });
-    }
-  });
 </script>
 
 <jsp:include page="/WEB-INF/views/common/footer.jsp" />

@@ -3,13 +3,17 @@ package jp.machiriku.tool;
 import java.io.IOException;
 
 import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jp.machiriku.servlet.ProfileIconSupport;
 
 // *.actionへのリクエストを受け取り、URLから対応するActionクラスを呼び出す。
 @WebServlet(urlPatterns = {"*.action"})
+@MultipartConfig(fileSizeThreshold = 64 * 1024, maxFileSize = ProfileIconSupport.MAX_REQUEST_BYTES,
+        maxRequestSize = ProfileIconSupport.MAX_REQUEST_BYTES)
 public class FrontController extends HttpServlet {
 
     // 画面表示とフォーム送信の共通振り分け処理。
@@ -49,9 +53,20 @@ public class FrontController extends HttpServlet {
         }
     }
 
-    // POSTも同じ振り分けを通し、GET/POSTの違いは各Action側で判断する。
+    /**
+     * multipartの容量を確認したうえで、POSTもActionクラスへ振り分ける。
+     * @param req 画面から送信されたリクエスト
+     * @param resp Actionが使用するレスポンス
+     * @throws ServletException Servletで処理を続行できなかった場合
+     * @throws IOException レスポンスを送信できなかった場合
+     */
     @Override
     public void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        // サイズが分かる場合は、トークンの取得で本文を読み始める前に上限超過を通知する。
+        if (ProfileIconSupport.isMultipart(req) && req.getContentLengthLong() > ProfileIconSupport.MAX_REQUEST_BYTES) {
+            resp.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE, "画像を含む送信内容の容量が上限を超えています。");
+            return;
+        }
         doGet(req, resp);
     }
 }

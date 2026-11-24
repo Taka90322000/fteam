@@ -1,7 +1,12 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="jp.machiriku.bean.User,jp.machiriku.tool.Html,com.fasterxml.jackson.databind.ObjectMapper" %>
+<%@ page import="jp.machiriku.bean.User,jp.machiriku.servlet.auth.LogoutAction,jp.machiriku.tool.Html,com.fasterxml.jackson.databind.ObjectMapper" %>
 <%
   User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
+  String rawSessionRole = session.getAttribute("userRole") instanceof String ? (String) session.getAttribute("userRole") : null;
+  boolean isDemoSession = currentUser == null && rawSessionRole != null
+      && java.util.Set.of("resident", "business", "owner", "admin").contains(rawSessionRole);
+  String logoutCsrfToken = LogoutAction.csrfToken(session);
+
   String displayName = (String) session.getAttribute("userName");
   if (displayName == null && currentUser != null) {
     displayName = currentUser.getDisplayName();
@@ -9,7 +14,7 @@
   if (displayName == null || displayName.trim().isEmpty()) {
     displayName = "LINEユーザー";
   }
-  String userRole = (String) session.getAttribute("userRole");
+  String userRole = rawSessionRole;
   if (userRole == null && currentUser != null && currentUser.getUserRole() != null) {
     userRole = currentUser.getUserRole().toLowerCase(java.util.Locale.ROOT);
   }
@@ -38,7 +43,7 @@
   }
   String assetVersion = request.getParameter("assetVersion");
   if (assetVersion == null || assetVersion.trim().isEmpty()) {
-    assetVersion = "20261118_prop_v5";
+    assetVersion = "20261124_merge_v1";
   }
   boolean enableHashRedirect = "true".equalsIgnoreCase(request.getParameter("enableHashRedirect"));
 
@@ -70,11 +75,29 @@
       <nav class="footer-links" aria-label="関連メニュー">
         <a href="${pageContext.request.contextPath}/index.jsp#s01">空き店舗を探す</a>
         <a href="${pageContext.request.contextPath}/index.jsp#s21">開店の相談</a>
-        <% if (currentUser == null) { %>
+        <% if (currentUser == null && !isDemoSession) { %>
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action">ログイン</a>
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action">新規会員登録</a>
+        <% } else if (isDemoSession) { %>
+        <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;">
+          <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+          <input type="hidden" name="next" value="login">
+          <button type="submit" style="background:none; border:none; padding:0; color:inherit; font:inherit; text-decoration:underline; cursor:pointer;">ログイン</button>
+        </form>
+        <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;">
+          <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+          <input type="hidden" name="next" value="register">
+          <button type="submit" style="background:none; border:none; padding:0; color:inherit; font:inherit; text-decoration:underline; cursor:pointer;">新規会員登録</button>
+        </form>
+        <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('デモ表示を終了してログアウトしますか？');">
+          <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+          <button type="submit" style="background:none; border:none; padding:0; color:inherit; font:inherit; text-decoration:underline; cursor:pointer;">デモ終了（ログアウト）</button>
+        </form>
         <% } else { %>
-        <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" onclick="return confirm('ログアウトしますか？');">ログアウト</a>
+        <form action="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Logout.action" method="POST" style="display:inline; margin:0;" onsubmit="return confirm('ログアウトしますか？');">
+          <input type="hidden" name="csrfToken" value="<%= Html.escape(logoutCsrfToken) %>">
+          <button type="submit" style="background:none; border:none; padding:0; color:inherit; font:inherit; text-decoration:underline; cursor:pointer;">ログアウト</button>
+        </form>
         <% } %>
       </nav>
     </div>
@@ -110,13 +133,14 @@
     window.__MACHIRIKU_FIXED_SCREEN__ = <%= jsonScreenId %>;
     window.__MACHIRIKU_FIXED_PARAMS__ = { id: <%= jsonId %>, propId: <%= jsonPropId %>, appId: <%= jsonAppId %> };
     document.addEventListener('DOMContentLoaded', function () {
-      <% if (isLoggedOut) { %>
-        // 明示的なログアウト時のみブラウザ側に残存するキャッシュを破棄し初期状態にリセット
+      <% if (currentUser == null) { %>
+        // セッション失効時や未ログイン時は、常にブラウザー内の実会員情報とログイン済みフラグを消去する。
         try {
           if (window.sessionStorage) {
             window.sessionStorage.removeItem('machiriku_user_display_name');
             window.sessionStorage.removeItem('machiriku_onboarding');
           }
+          <% if (isLoggedOut) { %>
           if (window.localStorage) {
             var keysToRemove = [];
             for (var i = 0; i < window.localStorage.length; i++) {
@@ -130,21 +154,31 @@
           if (window.MachirikuStore && typeof window.MachirikuStore.resetState === 'function') {
             window.MachirikuStore.resetState();
           }
+          <% } %>
+          if (window.MachirikuStore && typeof window.MachirikuStore.setSessionUser === 'function') {
+            window.MachirikuStore.setSessionUser(null);
+          }
+          <% if (isDemoSession) { %>
+          if (window.MachirikuStore && typeof window.MachirikuStore.setRole === 'function') {
+            window.MachirikuStore.setRole(<%= jsonUserRole %>);
+          }
+          <% } %>
         } catch (_) {}
-      <% } else if (currentUser != null) { %>
+      <% } else { %>
         if (window.MachirikuStore && typeof MachirikuStore.setRole === 'function') {
           MachirikuStore.setRole(<%= jsonUserRole %>);
         }
-        if (window.MachirikuStore && typeof MachirikuStore.updateUserProfile === 'function') {
-          var profilePatch = {
+        if (window.MachirikuStore && typeof MachirikuStore.setSessionUser === 'function') {
+          var sessionProfile = {
             name: <%= jsonDisplayName %>,
+            displayName: <%= jsonDisplayName %>,
             role: <%= jsonUserRole %>,
             email: <%= jsonUserEmail %>,
             isLoggedIn: true
           };
           var sessBizName = <%= jsonBusinessName %>;
-          if (sessBizName) profilePatch.businessName = sessBizName;
-          MachirikuStore.updateUserProfile(profilePatch);
+          if (sessBizName) sessionProfile.businessName = sessBizName;
+          MachirikuStore.setSessionUser(sessionProfile);
         }
         try {
           if (window.sessionStorage) {

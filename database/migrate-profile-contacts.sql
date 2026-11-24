@@ -42,6 +42,14 @@ BEGIN
         ) THEN
             RAISE EXCEPTION '電話番号を持つ事業主に未作成のプロフィールがあります。移行前に登録を完了してください。';
         END IF;
+        -- 移行前から存在するオーナー会員には、usersの表示名と電話番号から初期プロフィールを補完する。
+        INSERT INTO public.owner_profiles (user_id, representative_name, phone_e164)
+        SELECT u.user_id, u.display_name, u.phone_e164
+        FROM public.users u
+        WHERE u.phone_e164 IS NOT NULL AND u.user_role = 'OWNER'
+          AND u.display_name IS NOT NULL AND btrim(u.display_name) <> ''
+          AND NOT EXISTS (SELECT 1 FROM public.owner_profiles o WHERE o.user_id = u.user_id);
+
         IF EXISTS (
             SELECT 1 FROM public.users u
             WHERE u.phone_e164 IS NOT NULL AND u.user_role = 'OWNER'
@@ -90,18 +98,12 @@ $migration$;
 ALTER TABLE public.business_profiles ALTER COLUMN phone_e164 SET NOT NULL;
 ALTER TABLE public.owner_profiles ALTER COLUMN phone_e164 SET NOT NULL;
 
--- 電話番号の形式と、プロフィール内での重複禁止をDBでも保証する。
+-- 電話番号の形式をDBでも保証する。
 DO $constraints$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.business_profiles'::regclass AND conname = 'uq_business_profiles_phone_e164') THEN
-        ALTER TABLE public.business_profiles ADD CONSTRAINT uq_business_profiles_phone_e164 UNIQUE (phone_e164);
-    END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.business_profiles'::regclass AND conname = 'ck_business_profiles_phone_e164') THEN
         ALTER TABLE public.business_profiles ADD CONSTRAINT ck_business_profiles_phone_e164
             CHECK (phone_e164 ~ '^\+[1-9][0-9]{7,14}$');
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.owner_profiles'::regclass AND conname = 'uq_owner_profiles_phone_e164') THEN
-        ALTER TABLE public.owner_profiles ADD CONSTRAINT uq_owner_profiles_phone_e164 UNIQUE (phone_e164);
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.owner_profiles'::regclass AND conname = 'ck_owner_profiles_phone_e164') THEN
         ALTER TABLE public.owner_profiles ADD CONSTRAINT ck_owner_profiles_phone_e164
@@ -114,6 +116,6 @@ $constraints$;
 -- CASCADEを付けず、外部のビュー等が依存している場合はDB全体を変更せず中止する。
 ALTER TABLE public.users DROP COLUMN IF EXISTS phone_e164;
 
-GRANT SELECT, INSERT, UPDATE ON public.owner_profiles, public.business_profiles TO :"app_user";
+GRANT SELECT, INSERT, UPDATE ON public.owner_profiles, public.business_profiles TO machiriku_app;
 
 COMMIT;

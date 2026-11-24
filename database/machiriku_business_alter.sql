@@ -3,6 +3,7 @@
 -- DB所有者または管理者のpostgresでmachirikuに接続してから、このファイルを実行する。
 -- ADD COLUMNは列を末尾へ追加する。末尾のSELECTではareaをupdated_atの前に表示する。
 
+\set ON_ERROR_STOP on
 BEGIN;
 
 -- ポリゴン型と空間関数を利用するため、PostGIS拡張を有効にする。
@@ -10,15 +11,25 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 
 ALTER TABLE public.business_profiles
     -- 緯度・経度の座標系（SRID 4326）で、希望する事業エリアをポリゴンとして保持する。
-    ADD COLUMN area geometry(Polygon, 4326);
+    ADD COLUMN IF NOT EXISTS area geometry(Polygon, 4326);
 
 -- 既存のプロフィールとエリア名のみの入力に対応するため、NULLを許可する。
-ALTER TABLE public.business_profiles
-    ADD CONSTRAINT ck_business_profiles_area_valid
-    CHECK (area IS NULL OR (NOT ST_IsEmpty(area) AND ST_IsValid(area)));
+DO $area_constraint$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.business_profiles'::regclass
+          AND conname = 'ck_business_profiles_area_valid'
+    ) THEN
+        ALTER TABLE public.business_profiles
+            ADD CONSTRAINT ck_business_profiles_area_valid
+            CHECK (area IS NULL OR (NOT ST_IsEmpty(area) AND ST_IsValid(area)));
+    END IF;
+END;
+$area_constraint$;
 
 -- 空間検索でポリゴンを効率よく絞り込むため、GiSTインデックスを作成する。
-CREATE INDEX idx_business_profiles_area
+CREATE INDEX IF NOT EXISTS idx_business_profiles_area
     ON public.business_profiles USING GIST (area);
 
 -- アプリ用ロールにプロフィールの参照・登録・更新権限を付与する。

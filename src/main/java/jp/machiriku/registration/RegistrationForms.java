@@ -24,6 +24,7 @@ import jp.machiriku.bean.BusinessProfileInput;
 import jp.machiriku.bean.LocationInput;
 import jp.machiriku.bean.OwnerProfileInput;
 import jp.machiriku.bean.ResidentProfileInput;
+import jp.machiriku.tool.PhoneNumbers;
 
 /** フォームの文字列を検証し、DBへ保存できるデータへ変換する。会員ID・利用区分は入力から受け取らない。 */
 public final class RegistrationForms {
@@ -32,7 +33,17 @@ public final class RegistrationForms {
     private static final Set<String> GENDERS = Set.of("男性", "女性", "その他");
     private static final Set<String> EXPERIENCE = Set.of("未経験", "1〜3年未満", "3〜5年未満", "5年以上");
     private static final Pattern ADDRESS = Pattern.compile("^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)(.+)$");
-    private static final Pattern MUNICIPALITY = Pattern.compile("^(.+?市(?:.+?区)?|.+?区|.+?[町村])(.+)?$");
+    // 郡＋町村（例：芳賀郡市貝町）や「市・郡・町・村」を含む市名、政令指定都市の行政区を町名内の「市・区」と誤認せず分割する。
+    private static final Pattern MUNICIPALITY = Pattern.compile(
+            "^("
+            + "(?:札幌|仙台|さいたま|千葉|横浜|川崎|相模原|新潟|静岡|浜松|名古屋|京都|大阪|堺|神戸|岡山|広島|北九州|福岡|熊本)市[^区0-9０-９]{1,6}?区"
+            + "|(?:大和郡山|郡山|蒲郡|小郡|郡上)市"
+            + "|(?:(?:余市|高市|(?:東|西|北)?村山|田村|[^市区町村郡])+?郡)(?:大町町|田原本町|[^町村]+?[町村])"
+            + "|(?:市川|市原|四日市|廿日市|野々市|八日市|十日市|今市|町田|大町|十日町|原町|村上|村山|東村山|武蔵村山|羽村|大村|田村)市"
+            + "|[^市区町村]+?市"
+            + "|[^市区町村]+?区"
+            + "|(?:大島町|八丈町|[^市区町村]+?[町村])"
+            + ")(.+)?$");
     private static final Pattern PARENT_PATH_SEGMENT = Pattern.compile("(^|/)\\.\\.(/|$)");
 
     private RegistrationForms() { }
@@ -60,10 +71,11 @@ public final class RegistrationForms {
         String company = optional(fields.get("company"), 150, "屋号・法人名");
         String email = email(fields.get("email"));
         String phone = normalizePhone(fields.get("phone"));
+        String secondaryPhone = secondaryPhone(fields.get("secondaryPhone"), phone); // 任意の追加番号。空欄はnull。
         List<Integer> industries = ids(industryIds, "誘致希望業種");
         if (industries.isEmpty()) { throw invalid("誘致希望業種を少なくとも1つ選択してください。"); }
         return new OwnerProfileInput(name, company, email, phone, industries, checked(fields.get("emailNotify")),
-                iconImageUrl(fields.get("iconImageUrl")));
+                iconImageUrl(fields.get("iconImageUrl")), secondaryPhone);
     }
 
     /** タブ選択画面のJSONを業種コードへ変換する。表示名の連結文字列は保存に使わない。 */
@@ -87,6 +99,7 @@ public final class RegistrationForms {
         String representative = required(fields.get("representativeName"), 100, "代表者名");
         String email = email(fields.get("email"));
         String phone = normalizePhone(fields.get("phone"));
+        String secondaryPhone = secondaryPhone(fields.get("secondaryPhone"), phone); // 任意の追加番号。空欄はnull。
         String areaName = required(fields.get("preferredArea"), 150, "出店希望エリア名");
         int employeeCount;
         try {
@@ -104,14 +117,21 @@ public final class RegistrationForms {
         String area = areaGeoJson(fields.get("preferredAreaPoints"));
         return new BusinessProfileInput(name, representative, email, phone, areaName, employeeCount,
                 management, experience, industries, qualifications, area, checked(fields.get("emailNotify")),
-                iconImageUrl(fields.get("iconImageUrl")));
+                iconImageUrl(fields.get("iconImageUrl")), secondaryPhone);
     }
 
-    /** アイコンの参照先として、HTTP(S)のURLとWeb用の相対パスを受け付ける。 */
-    private static String iconImageUrl(String value) {
+    /**
+     * 保存済みのアイコン参照先を、HTTP(S)のURLまたはWeb用の相対パスとして検証する。
+     * @param value 検証する参照先。空欄の場合は未設定として扱う
+     * @return 空白を取り除いた参照先。未設定ならnull
+     * @throws IllegalArgumentException URLの形式やパスの範囲が不正な場合
+     */
+    public static String iconImageUrl(String value) {
+        // 既存データと新しい画像URLのどちらも表示に使えることを確認する。
         String image = optional(value, 2048, "アイコン画像のURL・パス");
         if (image == null) { return null; }
         try {
+            // 絶対URLとアプリ内のパスを、URIの構造に従って区別する。
             URI uri = new URI(image);
             if (value.codePoints().anyMatch(Character::isISOControl) || image.indexOf('\\') >= 0) {
                 throw new URISyntaxException(image, "Invalid image reference");
@@ -122,6 +142,7 @@ public final class RegistrationForms {
                     throw new URISyntaxException(image, "Invalid image URL");
                 }
             } else {
+                // エンコードで隠された親ディレクトリの指定も除外する。
                 String path = uri.getPath();
                 if (uri.getRawAuthority() != null || path == null || path.isEmpty() || path.startsWith("//")
                         || path.indexOf('\\') >= 0 || path.codePoints().anyMatch(Character::isISOControl)
@@ -137,10 +158,16 @@ public final class RegistrationForms {
 
     /** 国内形式の電話番号を、プロフィールのphone_e164が使う国際形式へ統一する。 */
     public static String normalizePhone(String value) {
-        String phone = required(value, 50, "連絡先電話番号").replaceAll("[\\s()（）ー−‐-]", "");
-        if (phone.startsWith("0")) { phone = "+81" + phone.substring(1); }
-        if (!phone.matches("\\+[1-9][0-9]{7,14}")) { throw invalid("電話番号を正しく入力してください（例：090-1234-5678）。"); }
-        return phone;
+        return PhoneNumbers.toE164(required(value, 50, "主な連絡先電話番号"), "主な連絡先電話番号");
+    }
+
+    /** 追加番号を同じ形式で検証し、主番号と同じ番号の二重登録を防ぐ。 */
+    private static String secondaryPhone(String value, String primaryPhone) {
+        String secondary = PhoneNumbers.toE164(value, "追加の電話番号"); // 国際形式に統一した追加番号。
+        if (primaryPhone.equals(secondary)) {
+            throw invalid("追加の電話番号には、主な連絡先電話番号と異なる番号を入力してください。");
+        }
+        return secondary;
     }
 
     /** 日本の住所を都道府県・市区町村・番地へ分ける。座標は入力がある場合のみ対で保存する。 */

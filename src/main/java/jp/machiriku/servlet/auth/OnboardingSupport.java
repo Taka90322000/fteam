@@ -3,18 +3,22 @@ package jp.machiriku.servlet.auth;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jp.machiriku.bean.User;
+import jp.machiriku.dao.ProfileDao;
+import jp.machiriku.servlet.MemberSession;
+import jp.machiriku.servlet.ProfileIconSupport;
 
 /** 初期設定の本人確認・CSRF対策と、フォーム表示に必要な共通処理をまとめる。 */
 final class OnboardingSupport {
@@ -23,16 +27,21 @@ final class OnboardingSupport {
 
     private OnboardingSupport() { }
 
-    static User requireUser(HttpServletRequest req, HttpServletResponse res, String role) throws Exception {
-        res.setHeader("Cache-Control", "no-store");
-        HttpSession session = req.getSession(false);
-        if (session == null || !(session.getAttribute("user") instanceof User user)) {
-            res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/Login.action");
+    static User requireUser(HttpServletRequest req, HttpServletResponse res, HttpSession session,
+            String role, Supplier<ProfileDao> profiles) throws Exception {
+        User user = MemberSession.requireCurrentUser(req, res, session, profiles);
+        if (user == null) { return null; }
+        if (!role.equals(user.getUserRole())) {
+            res.sendError(HttpServletResponse.SC_FORBIDDEN);
             return null;
         }
-        if (!role.equals(user.getUserRole()) || user.getWithdrawnAt() != null
-                || (!"PENDING".equals(user.getAccountStatus()) && !"ACTIVE".equals(user.getAccountStatus()))) {
-            res.sendError(HttpServletResponse.SC_FORBIDDEN);
+        // 本登録後の初期設定は表示・保存せず、GETでは現在のプロフィール編集へ案内する。
+        if ("ACTIVE".equals(user.getAccountStatus())) {
+            if ("GET".equalsIgnoreCase(req.getMethod())) {
+                res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/user/Profile.action");
+            } else {
+                res.sendError(HttpServletResponse.SC_FORBIDDEN);
+            }
             return null;
         }
         return user;
@@ -49,11 +58,14 @@ final class OnboardingSupport {
         }
     }
 
-    static boolean validCsrf(HttpServletRequest req) {
-        HttpSession session = req.getSession(false);
-        if (session == null || !(session.getAttribute(CSRF_KEY) instanceof String expected)) { return false; }
-        String actual = req.getParameter("csrfToken");
-        return actual != null && MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
+    static boolean validCsrf(HttpServletRequest req, HttpSession session) {
+        try {
+            if (!(session.getAttribute(CSRF_KEY) instanceof String expected)) { return false; }
+            String actual = req.getParameter("csrfToken");
+            return actual != null && MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
+        } catch (IllegalStateException expired) {
+            return false;
+        }
     }
 
     static Map<String, String> fields(HttpServletRequest req, String... names) {
@@ -66,28 +78,46 @@ final class OnboardingSupport {
         return fields;
     }
 
-    static List<String> values(HttpServletRequest req, String name) {
-        String[] values = req.getParameterValues(name);
-        return values == null ? List.of() : Arrays.asList(values);
-    }
+    /**
+     * 業種・資格の選択値を保存処理へ渡す。
+     * @param req フォームのリクエスト
+     * @param name 選択欄の名前
+     * @return 選択されたIDの文字列
+     */
+    static List<String> values(HttpServletRequest req, String name) { return ProfileIconSupport.selectionValues(req, name); }
 
     static Set<String> selection(HttpServletRequest req, String name) { return new LinkedHashSet<>(values(req, name)); }
 
     static String lineValue(HttpSession session, String key, String fallback) {
-        Object value = session.getAttribute(key);
-        return value instanceof String text ? text : (fallback == null ? "" : fallback);
+        try {
+            if (session != null && session.getAttribute(key) instanceof String text) { return text; }
+        } catch (IllegalStateException expired) {
+            // 読み込み中に失効した場合は画面を転送する前にログインへ戻す。
+        }
+        return fallback == null ? "" : fallback;
     }
 
-    static void completed(HttpServletRequest req, User saved, String displayName) {
-        HttpSession session = req.getSession();
-        session.setAttribute("user", saved);
-        session.setAttribute("userId", saved.getUserId());
-        session.setAttribute("userRole", saved.getUserRole().toLowerCase(java.util.Locale.ROOT));
-        session.setAttribute("userName", displayName);
-        session.setAttribute("userEmail", saved.getEmail() == null ? "" : saved.getEmail());
-        session.setAttribute("isOnboarded", true);
-        session.removeAttribute(CSRF_KEY);
-        session.removeAttribute(LineLoginSupport.REGISTRATION_CSRF_KEY);
+    static void completed(HttpServletRequest req, HttpServletResponse res, HttpSession session,
+            User saved, String displayName, Consumer<HttpSession> attributes) throws Exception {
+        if (MemberSession.update(session, saved, displayName, current -> {
+            current.removeAttribute(CSRF_KEY);
+            current.removeAttribute(LineLoginSupport.REGISTRATION_CSRF_KEY);
+            attributes.accept(current);
+        })) {
+            res.sendRedirect(req.getContextPath() + "/index.jsp?onboarded=1");
+        } else {
+            MemberSession.redirectToLogin(req, res);
+        }
+    }
+
+    static boolean prepareView(HttpServletRequest req, HttpServletResponse res, HttpSession session) throws Exception {
+        try {
+            req.setAttribute("csrfToken", csrfToken(session));
+        } catch (IllegalStateException expired) {
+            MemberSession.redirectToLogin(req, res);
+            return false;
+        }
+        return true;
     }
 
     static void logDatabaseError(HttpServletRequest req, java.sql.SQLException error) {

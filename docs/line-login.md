@@ -25,7 +25,9 @@ Copy-Item .env.example .env
 http://localhost:8080/machiriku/jp/machiriku/servlet/auth/LineCallback.action
 ```
 
-公開環境ではHTTPSを使います。`.env` を変更したらTomcatを再起動し、VS Codeで `Ctrl+Shift+B` を実行してください。VS Codeの再起動は不要です。
+公開環境ではHTTPSを使います。`.env` を変更したらTomcatを再起動し、VS Codeで `Ctrl+Shift+B`（`scripts/deploy.ps1`）を実行してください。VS Codeの再起動は不要です。
+
+`scripts/deploy.ps1` は毎回新しいディレクトリへビルドし、Tomcatの参照先を切り替えます。手動配備では、Tomcatを停止してから `mvn clean compile war:exploded` または `mvn clean package` を実行し、旧展開先を差し替えてください。`mvn clean` は `target` 内の配備済みファイルも削除します。
 
 `.env` にある項目はOSの環境変数より優先します。項目がなければ従来のOS環境変数を使用します。`KEY=` のような空欄は空の設定として扱うため、古いOSの値では補いません。
 
@@ -51,13 +53,13 @@ LINE Developers Consoleで以下を設定します。
 
 ## DBの利用権限
 
-確認時点の `MACHIRIKU_DB_USER` には `public.users` の `SELECT`・`INSERT` 権限がありませんでした。この状態では実際のログイン・登録はDBで拒否されます。DB所有者または管理者が、アプリ用ロールを指定して同梱のSQLを実行してください。
+確認時点の `MACHIRIKU_DB_USER` には `public.users` の `SELECT`・`INSERT` 権限がありませんでした。この状態では実際のログイン・登録はDBで拒否されます。DB所有者または管理者が、`machiriku_app` に権限を付与する同梱のSQLを実行してください。
 
 ```powershell
-psql <管理者用の接続オプション> -v app_user=<MACHIRIKU_DB_USERの値> -f database/grant-user-access.sql
+psql <管理者用の接続オプション> -f database/grant-user-access.sql
 ```
 
-SQLは `public` スキーマの利用権限、`users` の読取・登録・更新、自動採番シーケンスの利用を付与します。本登録前の利用区分を選び直す処理でも `users` の更新権限を使用します。
+SQLは `public` スキーマの利用権限、`users` の読取・登録・更新に加え、本登録およびプロフィール設定（`ProfileDao`）が使用する各プロフィール（`resident_profiles`・`business_profiles`・`owner_profiles`）、住所（`user_locations`）、希望業種（`user_industry_preferences`）、保有資格（`business_qualifications`）、通知設定（`notification_settings`）、各種マスター（`industry_categories`・`industry_types`・`qualifications`）、および自動採番シーケンスの利用権限をまとめて付与します。事業主の出店希望範囲（`business_profiles.area`）を含むDB移行の適用順は [docs/registration.md](registration.md) を参照してください。
 
 ## 登録とログイン
 

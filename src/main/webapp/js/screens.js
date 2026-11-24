@@ -6433,7 +6433,15 @@ window.MachirikuScreens = (function() {
       : (window.location.pathname.startsWith('/machiriku') ? '/machiriku' : '');
 
     if (ctx || window.location.pathname.includes('/machiriku')) {
-      window.location.href = (ctx || '/machiriku') + '/jp/machiriku/servlet/auth/Logout.action';
+      const logoutForm = typeof document !== 'undefined'
+        ? document.querySelector('form[action*="/jp/machiriku/servlet/auth/Logout.action"]')
+        : null;
+      if (logoutForm) {
+        logoutForm.onsubmit = null;
+        logoutForm.submit();
+        return;
+      }
+      window.location.href = (ctx || '/machiriku') + '/index.jsp?logged_out=1';
     } else {
       if (typeof MachirikuStore !== 'undefined' && typeof MachirikuStore.setRole === 'function') {
         MachirikuStore.setRole('resident');
