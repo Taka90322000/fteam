@@ -28,5 +28,5 @@ SET is_active = true, granted_by_user_id = NULL, granted_at = CURRENT_TIMESTAMP;
 
 - フォームの項目や順序、ボタン、見出しは `src/main/webapp/WEB-INF/views/management/` 以下の機能別JSPで変更します。たとえばユーザー詳細のプロフィールは `admin/users/profile.jsp` にあります。
 - Actionは認可・入力検証・DB操作を行い、`jp.machiriku.bean.management` の表示用モデルをJSPに渡します。表示に使うデータを増やす場合は、対応するActionのデータ取得処理と表示用モデルを更新します。
-- ページ枠やサイドバーは `views/management/common` と `views/management/admin/common` にあります。入力・表などの共通部品は `WEB-INF/tags/management` にあります。
-- JSPはEL式で値を参照します。入力や表の共通タグには元の値を渡し、HTMLに出力する箇所で本文には `c:out`、引用符付き属性には `fn:escapeXml` を使います。JSTLのAPIと実装はMavenでWARに含めます。
+- ページ枠やサイドバーは `views/management/common` と `views/management/admin/common` にあります。入力欄やページ送りなどの共通部品は `WEB-INF/tags/management` にあり、一覧表や詳細欄は各画面のJSPに通常のHTMLで記述します。
+- JSPはEL式で値を参照します。入力欄やページ送りの共通タグにはモデルや属性値を渡し、HTMLに出力する箇所で本文には `c:out`、引用符付き属性には `fn:escapeXml` を使います。JSTLのAPIと実装はMavenでWARに含めます。

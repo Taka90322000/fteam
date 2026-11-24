@@ -28,11 +28,12 @@ TO machiriku_app;
 GRANT UPDATE ON TABLE public.users, public.resident_profiles, public.business_profiles, public.owner_profiles,
     public.properties, public.opening_plans, public.coupons, public.coupon_recipients
 TO machiriku_app;
-GRANT INSERT, UPDATE ON TABLE public.user_locations, public.business_qualifications,
+GRANT INSERT, UPDATE ON TABLE public.business_qualifications,
     public.industry_categories, public.industry_types, public.qualifications, public.surveys
 TO machiriku_app;
 GRANT INSERT, DELETE ON TABLE public.user_industry_preferences TO machiriku_app;
-GRANT INSERT, UPDATE, DELETE ON TABLE public.industry_qualification_requirements, public.survey_questions, public.survey_options
+GRANT INSERT, UPDATE, DELETE ON TABLE public.user_locations, public.industry_qualification_requirements,
+    public.survey_questions, public.survey_options
 TO machiriku_app;
 GRANT USAGE ON SEQUENCE public.industry_categories_category_id_seq, public.industry_types_industry_type_id_seq,
     public.qualifications_qualification_id_seq, public.user_locations_location_id_seq, public.surveys_survey_id_seq,

@@ -10,38 +10,41 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.HttpServletRequest;
-import jp.machiriku.dao.management.ManagementDao;
+import jp.machiriku.bean.User;
+import jp.machiriku.dao.management.AdminAuditDao;
 import jp.machiriku.servlet.MemberSession;
 
-/** 通常画面に管理画面へのリンクを表示できるか確認する。 */
+/** 通常画面（トップ画面・プロフィール画面）に管理画面へのリンクを表示できるか確認するフィルター。 */
 @WebFilter(urlPatterns = {"/index.jsp", "/jp/machiriku/servlet/user/Profile.action"})
 public final class AdminNavigationFilter implements Filter {
-    /** トップ画面とプロフィールに管理画面のリンクを表示するための属性。 */
+    /** 通常画面に管理画面リンクを表示するためのリクエスト属性名。 */
     private static final String SHOW_ADMIN_LINK = "showAdminLink";
 
-    /** Servletコンテナが通常画面のリンク表示に使用するフィルター。 */
+    /** Servletコンテナが使用する引数なしコンストラクター。 */
     public AdminNavigationFilter() { }
 
     /**
-     * 権限のあるLINE会員に管理リンクを表示し、既存の画面処理に進む。
-     * @param request トップ画面またはプロフィールへのHTTPリクエスト。
+     * 権限のあるLINE会員にのみ管理リンク表示フラグを設定し、後続処理へ進む。
+     * @param request トップ画面またはプロフィール画面へのHTTPリクエスト。
      * @param response 後続処理が使用するHTTPレスポンス。
      * @param chain 通常の画面処理を行うフィルターチェーン。
      * @throws IOException レスポンスの書き出しに失敗した場合。
      * @throws ServletException 後続処理でエラーが発生した場合。
      */
     @Override
-    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
-        // LINE会員のセッションにだけ、管理リンクを追加できるか調べる。
-        var req = (HttpServletRequest) request;
-        var member = MemberSession.signedInUser(req.getSession(false));
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        HttpServletRequest req = (HttpServletRequest) request;
+        User member = MemberSession.signedInUser(req.getSession(false));
         if (member != null) {
-            try (var db = ManagementDao.open()) {
-                if (db.isAdmin(member.getUserId(), false)) {
+            try {
+                // 管理権限の有無をDBで確認し、権限がある場合だけリンク表示を許可する。
+                AdminAuditDao auditDao = new AdminAuditDao();
+                if (auditDao.isAdmin(member.getUserId())) {
                     req.setAttribute(SHOW_ADMIN_LINK, true);
                 }
             } catch (SQLException error) {
-                // 管理機能が未設定でも既存のトップ画面やプロフィールを利用できるようにする。
+                // 管理用テーブルが未適用でも既存画面を表示できるよう握りつぶす。
             }
         }
         chain.doFilter(request, response);

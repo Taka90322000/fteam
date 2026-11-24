@@ -1,6 +1,9 @@
-<%@ page pageEncoding="UTF-8" %>
-<%@ include file="/WEB-INF/views/management/common/view.jspf" %>
-<%-- Actionの表示モードに合わせて、見出しとメニューを出し分ける。 --%>
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" session="false" %>
+<%@ page import="jp.machiriku.servlet.management.ManagementPaths" %>
+<%@ taglib prefix="c" uri="jakarta.tags.core" %>
+<%@ taglib prefix="fn" uri="jakarta.tags.functions" %>
+<%-- Actionの表示モードに合わせて、見出しとメニューを出し分ける共通ヘッダー。 --%>
+<c:set var="root" value="${pageContext.request.contextPath}" />
 <c:set var="title" value="${requestScope.managementTitle}" />
 <c:set var="route" value="${requestScope.managementRoute}" />
 <c:set var="admin" value="${requestScope.managementAdmin}" />

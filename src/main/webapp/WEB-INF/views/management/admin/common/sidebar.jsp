@@ -1,14 +1,19 @@
-<%@ page pageEncoding="UTF-8" %>
-<%@ include file="/WEB-INF/views/management/common/view.jspf" %>
-<%-- メニューの表示順を定め、現在のActionに対応する項目を選択中にする。 --%>
-<c:set var="menu" value="${ManagementDisplay.options(
-    ManagementPaths.ADMIN, 'ダッシュボード', ManagementPaths.ADMIN_USERS, 'ユーザー管理',
-    ManagementPaths.ADMIN_INDUSTRIES, '業種管理', ManagementPaths.ADMIN_QUALIFICATIONS, '必要資格・書類管理',
-    ManagementPaths.ADMIN_PROPERTIES, '物件管理', ManagementPaths.ADMIN_SURVEYS, 'アンケート管理',
-    ManagementPaths.ADMIN_COUPONS, 'クーポン管理', ManagementPaths.ADMIN_REPORTS, '通報管理',
-    ManagementPaths.ADMIN_INQUIRIES, '問い合わせ管理', ManagementPaths.ADMIN_AUDIT, '操作履歴')}" />
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" session="false" %>
+<%@ page import="jp.machiriku.servlet.management.ManagementPaths" %>
+<%@ taglib prefix="c" uri="jakarta.tags.core" %>
+<%@ taglib prefix="fn" uri="jakarta.tags.functions" %>
+<%-- 管理画面の左メニュー。現在のAction URLと一致する項目を選択中として表示する。 --%>
+<c:set var="root" value="${pageContext.request.contextPath}" />
+<c:set var="route" value="${requestScope.managementRoute}" />
 <nav class="sidebar" aria-label="管理メニュー">
-    <c:forEach var="item" items="${menu}">
-        <a href="${fn:escapeXml(root += item.key)}"<c:if test="${item.key eq requestScope.managementRoute}"> aria-current="page"</c:if>><c:out value="${item.value}" /></a>
-    </c:forEach>
+    <a href="${fn:escapeXml(root += ManagementPaths.ADMIN)}"<c:if test="${route eq ManagementPaths.ADMIN}"> aria-current="page"</c:if>>ダッシュボード</a>
+    <a href="${fn:escapeXml(root += ManagementPaths.ADMIN_USERS)}"<c:if test="${route eq ManagementPaths.ADMIN_USERS}"> aria-current="page"</c:if>>ユーザー管理</a>
+    <a href="${fn:escapeXml(root += ManagementPaths.ADMIN_INDUSTRIES)}"<c:if test="${route eq ManagementPaths.ADMIN_INDUSTRIES}"> aria-current="page"</c:if>>業種管理</a>
+    <a href="${fn:escapeXml(root += ManagementPaths.ADMIN_QUALIFICATIONS)}"<c:if test="${route eq ManagementPaths.ADMIN_QUALIFICATIONS}"> aria-current="page"</c:if>>必要資格・書類管理</a>
+    <a href="${fn:escapeXml(root += ManagementPaths.ADMIN_PROPERTIES)}"<c:if test="${route eq ManagementPaths.ADMIN_PROPERTIES}"> aria-current="page"</c:if>>物件管理</a>
+    <a href="${fn:escapeXml(root += ManagementPaths.ADMIN_SURVEYS)}"<c:if test="${route eq ManagementPaths.ADMIN_SURVEYS}"> aria-current="page"</c:if>>アンケート管理</a>
+    <a href="${fn:escapeXml(root += ManagementPaths.ADMIN_COUPONS)}"<c:if test="${route eq ManagementPaths.ADMIN_COUPONS}"> aria-current="page"</c:if>>クーポン管理</a>
+    <a href="${fn:escapeXml(root += ManagementPaths.ADMIN_REPORTS)}"<c:if test="${route eq ManagementPaths.ADMIN_REPORTS}"> aria-current="page"</c:if>>通報管理</a>
+    <a href="${fn:escapeXml(root += ManagementPaths.ADMIN_INQUIRIES)}"<c:if test="${route eq ManagementPaths.ADMIN_INQUIRIES}"> aria-current="page"</c:if>>問い合わせ管理</a>
+    <a href="${fn:escapeXml(root += ManagementPaths.ADMIN_AUDIT)}"<c:if test="${route eq ManagementPaths.ADMIN_AUDIT}"> aria-current="page"</c:if>>操作履歴</a>
 </nav>

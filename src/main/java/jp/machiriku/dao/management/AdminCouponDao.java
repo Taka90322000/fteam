@@ -1,171 +1,479 @@
 package jp.machiriku.dao.management;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/** クーポンの配布設定、発行履歴、個別の無効化を管理する。 */
-public final class AdminCouponDao {
-    /** 共通のDAO接続で各データ操作を行うため、このクラスを直接生成しない。 */
-    private AdminCouponDao() { }
+import jp.machiriku.bean.management.AdminCouponItem;
+import jp.machiriku.bean.management.ManagementProblem;
+
+/**
+ * クーポンの検索・詳細・発行履歴取得および下書き編集・配布停止/再開・個別無効化を行うDAO。
+ */
+public class AdminCouponDao extends ManagementBaseDao {
+    /** 管理者権限チェックと監査ログ記録に使うDAO。 */
+    private final AdminAuditDao auditDao;
+
+    /** 本番接続を使用するDAOを生成する。 */
+    public AdminCouponDao() {
+        super();
+        this.auditDao = new AdminAuditDao();
+    }
 
     /**
-     * クーポンの配布情報、関連する店舗と発行・使用件数を取得する。
-     * @param db 管理操作で共用するDAO接続。
-     * @param couponId クーポンのID。
-     * @return 対象の一件。
-     * @throws SQLException 対象が存在しないか、DB処理に失敗した場合。
+     * テスト用の共有接続を使用するDAOを生成する。
+     * @param sharedConnection テスト用接続。
      */
-    public static Map<String, Object> coupon(ManagementDao db, int couponId) throws SQLException {
-        return db.one("""
-                SELECT c.coupon_id AS "クーポン番号",c.coupon_title AS "名前",t.store_name AS "店舗",c.tenancy_id AS "契約ID",
-                       a.business_user_id AS "事業主ID",c.coupon_status AS "配布状態",c.benefit_kind AS "特典",
-                       c.discount_percent AS "割引率（%）",c.discount_yen AS "割引額（円）",c.service_text AS "サービス内容",
-                       c.target_kind AS "配布対象",i.industry_name AS "対象業種",c.target_survey_id AS "アンケートID",
-                       c.distribution_starts_at AS "配布開始",c.distribution_ends_at AS "配布終了",c.valid_until AS "利用期限",
-                       c.usage_limit AS "発行上限",c.terms_text AS "利用条件",count(r.resident_user_id) AS "発行数",
-                       count(r.used_at) AS "利用数",count(r.revoked_at) AS "無効化数"
-                FROM coupons c JOIN tenancies t USING (tenancy_id) JOIN applications a USING (application_id)
-                LEFT JOIN industry_types i ON i.industry_type_id=c.target_industry_type_id
+    public AdminCouponDao(Connection sharedConnection) {
+        super(sharedConnection);
+        this.auditDao = new AdminAuditDao(sharedConnection);
+    }
+
+    /**
+     * 配布状態とキーワードでクーポン一覧を検索する。
+     * @param status 配布状態コード（DRAFT / ACTIVE / STOPPED）。空文字で全件。
+     * @param keyword 検索語。
+     * @param limit 取得上限件数。
+     * @param offset 読み飛ばす件数。
+     * @return クーポン一覧。
+     * @throws SQLException DB照会に失敗した場合。
+     */
+    public List<AdminCouponItem> findCoupons(String status, String keyword, int limit, int offset)
+            throws SQLException {
+        String sql = """
+                SELECT c.coupon_id, c.coupon_title, t.store_name, c.coupon_status,
+                       count(r.resident_user_id) AS issued_count,
+                       count(r.used_at) AS used_count,
+                       count(r.revoked_at) AS revoked_count,
+                       c.valid_until
+                FROM coupons c
+                JOIN tenancies t USING (tenancy_id)
                 LEFT JOIN coupon_recipients r USING (coupon_id)
-                WHERE c.coupon_id=? GROUP BY c.coupon_id,t.store_name,a.business_user_id,i.industry_name
-                """, couponId);
+                WHERE c.coupon_status = COALESCE(NULLIF(?, ''), c.coupon_status)
+                  AND strpos(lower(concat_ws(' ', c.coupon_id, c.coupon_title, t.store_name)), lower(?)) > 0
+                GROUP BY c.coupon_id, t.store_name
+                ORDER BY c.updated_at DESC, c.coupon_id DESC
+                LIMIT ? OFFSET ?
+                """;
+        List<AdminCouponItem> list = new ArrayList<>();
+        try (Connection con = openConnection();
+             PreparedStatement stmt = con.prepareStatement(sql)) {
+            stmt.setString(1, status);
+            stmt.setString(2, keyword);
+            stmt.setInt(3, limit);
+            stmt.setInt(4, offset);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    AdminCouponItem item = new AdminCouponItem();
+                    item.setCouponId(rs.getInt("coupon_id"));
+                    item.setCouponTitle(rs.getString("coupon_title"));
+                    item.setStoreName(rs.getString("store_name"));
+                    item.setCouponStatus(rs.getString("coupon_status"));
+                    item.setIssuedCount(rs.getLong("issued_count"));
+                    item.setUsedCount(rs.getLong("used_count"));
+                    item.setRevokedCount(rs.getLong("revoked_count"));
+                    item.setValidUntil(getOffsetDateTime(rs, "valid_until"));
+                    list.add(item);
+                }
+            }
+        }
+        return list;
     }
 
     /**
-     * クーポンを配布状態と検索語で絞り込む。
-     * @param db 管理操作で共用するDAO接続。
-     * @param status 保存または絞り込みに指定する状態コード。絞り込みでは空文字で全件。
-     * @param keyword 絞り込みに用いる検索語。空文字は指定なし。
-     * @param limit 取得する最大件数。
-     * @param offset 取得開始位置までに読み飛ばす件数。
-     * @return 条件に合うレコードの一覧。
-     * @throws SQLException DB処理に失敗した場合。
+     * 指定IDのクーポン詳細と発行・利用・無効化件数を取得する。
+     * @param couponId クーポンID。
+     * @return クーポン詳細。存在しない場合はnull。
+     * @throws SQLException DB照会に失敗した場合。
      */
-    public static List<Map<String, Object>> coupons(ManagementDao db,
-            String status, String keyword, int limit, int offset) throws SQLException {
-        return db.rows("""
-                SELECT c.coupon_id AS "ID",c.coupon_title AS "名前",t.store_name AS "店舗",c.coupon_status AS "配布状態",
-                       count(r.resident_user_id) AS "発行数",count(r.used_at) AS "利用数",count(r.revoked_at) AS "無効化数",
-                       c.valid_until AS "利用期限"
-                FROM coupons c JOIN tenancies t USING (tenancy_id) LEFT JOIN coupon_recipients r USING (coupon_id)
-                WHERE c.coupon_status=COALESCE(NULLIF(?,''),c.coupon_status)
-                  AND strpos(lower(concat_ws(' ',c.coupon_id,c.coupon_title,t.store_name)),lower(?))>0
-                GROUP BY c.coupon_id,t.store_name ORDER BY c.updated_at DESC,c.coupon_id DESC LIMIT ? OFFSET ?
-                """, status, keyword, limit, offset);
+    public AdminCouponItem findCouponById(int couponId) throws SQLException {
+        String sql = """
+                SELECT c.coupon_id, c.coupon_title, t.store_name, c.tenancy_id, a.business_user_id,
+                       c.coupon_status, c.benefit_kind, c.discount_percent, c.discount_yen, c.service_text,
+                       c.target_kind, i.industry_name, c.target_survey_id,
+                       c.distribution_starts_at, c.distribution_ends_at, c.valid_until,
+                       c.usage_limit, c.terms_text,
+                       count(r.resident_user_id) AS issued_count,
+                       count(r.used_at) AS used_count,
+                       count(r.revoked_at) AS revoked_count
+                FROM coupons c
+                JOIN tenancies t USING (tenancy_id)
+                JOIN applications a USING (application_id)
+                LEFT JOIN industry_types i ON i.industry_type_id = c.target_industry_type_id
+                LEFT JOIN coupon_recipients r USING (coupon_id)
+                WHERE c.coupon_id = ?
+                GROUP BY c.coupon_id, t.store_name, a.business_user_id, i.industry_name
+                """;
+        try (Connection con = openConnection();
+             PreparedStatement stmt = con.prepareStatement(sql)) {
+            stmt.setInt(1, couponId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                AdminCouponItem item = new AdminCouponItem();
+                item.setCouponId(rs.getInt("coupon_id"));
+                item.setCouponTitle(rs.getString("coupon_title"));
+                item.setStoreName(rs.getString("store_name"));
+                item.setTenancyId(rs.getInt("tenancy_id"));
+                item.setBusinessUserId(rs.getInt("business_user_id"));
+                item.setCouponStatus(rs.getString("coupon_status"));
+                item.setBenefitKind(rs.getString("benefit_kind"));
+                item.setDiscountPercent(rs.getBigDecimal("discount_percent"));
+                item.setDiscountYen(getNullableInt(rs, "discount_yen"));
+                item.setServiceText(rs.getString("service_text"));
+                item.setTargetKind(rs.getString("target_kind"));
+                item.setTargetIndustryName(rs.getString("industry_name"));
+                item.setTargetSurveyId(getNullableInt(rs, "target_survey_id"));
+                item.setDistributionStartsAt(getOffsetDateTime(rs, "distribution_starts_at"));
+                item.setDistributionEndsAt(getOffsetDateTime(rs, "distribution_ends_at"));
+                item.setValidUntil(getOffsetDateTime(rs, "valid_until"));
+                item.setUsageLimit(rs.getInt("usage_limit"));
+                item.setTermsText(rs.getString("terms_text"));
+                item.setIssuedCount(rs.getLong("issued_count"));
+                item.setUsedCount(rs.getLong("used_count"));
+                item.setRevokedCount(rs.getLong("revoked_count"));
+                return item;
+            }
+        }
     }
 
     /**
-     * クーポンの発行記録を発行日時の新しい順に取得する。
-     * @param db 管理操作で共用するDAO接続。
-     * @param couponId クーポンのID。
-     * @param limit 取得する最大件数。
-     * @param offset 取得開始位置までに読み飛ばす件数。
-     * @return 条件に合うレコードの一覧。
-     * @throws SQLException DB処理に失敗した場合。
+     * クーポンの個別発行履歴を発行日時の新しい順に取得する。
+     * @param couponId クーポンID。
+     * @param limit 取得上限件数。
+     * @param offset 読み飛ばす件数。
+     * @return 発行履歴一覧。
+     * @throws SQLException DB照会に失敗した場合。
      */
-    public static List<Map<String, Object>> recipients(ManagementDao db, int couponId, int limit, int offset) throws SQLException {
-        return db.rows("""
-                SELECT r.resident_user_id AS "会員ID",u.display_name AS "受取人",r.issued_at AS "発行日時",r.used_at AS "利用日時",
-                       r.revoked_at AS "無効化日時",r.redeemed_by_user_id AS "利用処理者ID",
-                       CASE WHEN r.used_at IS NOT NULL THEN '利用済み' WHEN r.revoked_at IS NOT NULL THEN '無効化済み'
-                            WHEN c.valid_until<=CURRENT_TIMESTAMP THEN '期限切れ' ELSE '未使用' END AS "利用状態"
-                FROM coupon_recipients r JOIN users u ON u.user_id=r.resident_user_id JOIN coupons c USING (coupon_id)
-                WHERE r.coupon_id=? ORDER BY r.issued_at DESC,r.resident_user_id DESC LIMIT ? OFFSET ?
-                """, couponId, limit, offset);
+    public List<AdminCouponItem.Recipient> findRecipients(int couponId, int limit, int offset) throws SQLException {
+        String sql = """
+                SELECT r.resident_user_id, u.display_name, r.issued_at, r.used_at,
+                       r.revoked_at, r.redeemed_by_user_id,
+                       CASE
+                           WHEN r.used_at IS NOT NULL THEN '利用済み'
+                           WHEN r.revoked_at IS NOT NULL THEN '無効化済み'
+                           WHEN c.valid_until <= CURRENT_TIMESTAMP THEN '期限切れ'
+                           ELSE '未使用'
+                       END AS usage_state
+                FROM coupon_recipients r
+                JOIN users u ON u.user_id = r.resident_user_id
+                JOIN coupons c USING (coupon_id)
+                WHERE r.coupon_id = ?
+                ORDER BY r.issued_at DESC, r.resident_user_id DESC
+                LIMIT ? OFFSET ?
+                """;
+        List<AdminCouponItem.Recipient> list = new ArrayList<>();
+        try (Connection con = openConnection();
+             PreparedStatement stmt = con.prepareStatement(sql)) {
+            stmt.setInt(1, couponId);
+            stmt.setInt(2, limit);
+            stmt.setInt(3, offset);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    AdminCouponItem.Recipient item = new AdminCouponItem.Recipient();
+                    item.setResidentUserId(rs.getInt("resident_user_id"));
+                    item.setResidentName(rs.getString("display_name"));
+                    item.setIssuedAt(getOffsetDateTime(rs, "issued_at"));
+                    item.setUsedAt(getOffsetDateTime(rs, "used_at"));
+                    item.setRevokedAt(getOffsetDateTime(rs, "revoked_at"));
+                    item.setRedeemedByUserId(getNullableInt(rs, "redeemed_by_user_id"));
+                    item.setUsageStateLabel(rs.getString("usage_state"));
+                    list.add(item);
+                }
+            }
+        }
+        return list;
     }
 
     /**
-     * 一件の発行記録と現在の利用・有効期限を取得する。
-     * @param db 管理操作で共用するDAO接続。
-     * @param couponId クーポンのID。
-     * @param recipientId クーポンを受け取った会員のID。
-     * @return 対象の一件。
-     * @throws SQLException 対象が存在しないか、DB処理に失敗した場合。
+     * 特定の受取会員に対する発行記録1件と有効期限内フラグを取得する。
+     * @param couponId クーポンID。
+     * @param recipientUserId 受取人の会員ID。
+     * @return 発行記録。存在しない場合はnull。
+     * @throws SQLException DB照会に失敗した場合。
      */
-    public static Map<String, Object> recipient(ManagementDao db, int couponId, int recipientId) throws SQLException {
-        return db.one("""
-                SELECT r.resident_user_id AS "会員ID",u.display_name AS "受取人",r.issued_at AS "発行日時",r.used_at AS "利用日時",
-                       r.revoked_at AS "無効化日時",c.valid_until>CURRENT_TIMESTAMP AS "有効期間内"
-                FROM coupon_recipients r JOIN users u ON u.user_id=r.resident_user_id JOIN coupons c USING (coupon_id)
-                WHERE r.coupon_id=? AND r.resident_user_id=?
-                """, couponId, recipientId);
+    public AdminCouponItem.Recipient findRecipient(int couponId, int recipientUserId) throws SQLException {
+        String sql = """
+                SELECT r.resident_user_id, u.display_name, r.issued_at, r.used_at,
+                       r.revoked_at, c.valid_until > CURRENT_TIMESTAMP AS within_validity
+                FROM coupon_recipients r
+                JOIN users u ON u.user_id = r.resident_user_id
+                JOIN coupons c USING (coupon_id)
+                WHERE r.coupon_id = ? AND r.resident_user_id = ?
+                """;
+        try (Connection con = openConnection();
+             PreparedStatement stmt = con.prepareStatement(sql)) {
+            stmt.setInt(1, couponId);
+            stmt.setInt(2, recipientUserId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                AdminCouponItem.Recipient item = new AdminCouponItem.Recipient();
+                item.setResidentUserId(rs.getInt("resident_user_id"));
+                item.setResidentName(rs.getString("display_name"));
+                item.setIssuedAt(getOffsetDateTime(rs, "issued_at"));
+                item.setUsedAt(getOffsetDateTime(rs, "used_at"));
+                item.setRevokedAt(getOffsetDateTime(rs, "revoked_at"));
+                item.setWithinValidity(rs.getBoolean("within_validity"));
+                return item;
+            }
+        }
     }
 
     /**
-     * 配布設定を変更する前にクーポン行をロックする。
-     * @param db 管理操作で共用するDAO接続。
-     * @param couponId クーポンのID。
-     * @return 対象の一件。
-     * @throws SQLException 対象が存在しないか、DB処理に失敗した場合。
+     * 発行前の下書きクーポンの特典・期間・発行上限・利用条件を更新し、監査ログを記録する。
+     * @param actorId 操作した管理者の会員ID。
+     * @param couponId クーポンID。
+     * @param title クーポン名。
+     * @param benefitKind 特典種別（PERCENT / AMOUNT / SERVICE）。
+     * @param discountPercent 割合割引時の割引率。
+     * @param discountYen 定額割引時の割引額（円）。
+     * @param serviceText サービス特典時の説明文。
+     * @param startsAt 配布開始日時。
+     * @param endsAt 配布終了日時。
+     * @param validUntil 利用期限日時。
+     * @param usageLimit 発行枚数上限。
+     * @param termsText 利用条件。任意。
+     * @throws SQLException DB更新に失敗した場合。
      */
-    public static Map<String, Object> lockCoupon(ManagementDao db, int couponId) throws SQLException {
-        return db.one("SELECT coupon_status,distribution_ends_at>CURRENT_TIMESTAMP AS in_period FROM coupons WHERE coupon_id=? FOR UPDATE", couponId);
+    public void updateDraft(int actorId, int couponId, String title, String benefitKind,
+            BigDecimal discountPercent, Integer discountYen, String serviceText,
+            OffsetDateTime startsAt, OffsetDateTime endsAt, OffsetDateTime validUntil,
+            int usageLimit, String termsText) throws SQLException {
+        try (Connection con = openConnection()) {
+            con.setAutoCommit(false);
+            try {
+                requireAdminInTx(con, actorId);
+                CouponLock locked = lockCouponRow(con, couponId);
+                if (!"DRAFT".equals(locked.status) || hasAnyRecipient(con, couponId)) {
+                    throw new ManagementProblem(409, "内容を編集できるのは、発行前の下書きです。");
+                }
+
+                String updateSql = """
+                        UPDATE coupons
+                        SET coupon_title = ?, benefit_kind = ?, discount_percent = ?, discount_yen = ?,
+                            service_text = ?, distribution_starts_at = ?, distribution_ends_at = ?,
+                            valid_until = ?, usage_limit = ?, terms_text = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE coupon_id = ?
+                        """;
+                try (PreparedStatement stmt = con.prepareStatement(updateSql)) {
+                    stmt.setString(1, title);
+                    stmt.setString(2, benefitKind);
+                    stmt.setBigDecimal(3, discountPercent);
+                    stmt.setObject(4, discountYen, Types.INTEGER);
+                    stmt.setString(5, serviceText);
+                    stmt.setObject(6, startsAt);
+                    stmt.setObject(7, endsAt);
+                    stmt.setObject(8, validUntil);
+                    stmt.setInt(9, usageLimit);
+                    stmt.setString(10, termsText);
+                    stmt.setInt(11, couponId);
+                    stmt.executeUpdate();
+                }
+
+                auditDao.insertLog(con, actorId, "EDIT_COUPON", "coupon",
+                        Map.of("coupon_id", couponId), null, Map.of());
+
+                con.commit();
+                con.setAutoCommit(true);
+            } catch (Throwable error) {
+                rollbackQuietly(con, error);
+                if (error instanceof SQLException sqlError) {
+                    throw sqlError;
+                }
+                if (error instanceof RuntimeException runtimeError) {
+                    throw runtimeError;
+                }
+                throw new RuntimeException(error);
+            }
+        }
     }
 
     /**
-     * 配布設定の変更可否を判断するために、すでに発行されているか確認する。
-     * @param db 管理操作で共用するDAO接続。
-     * @param couponId クーポンのID。
-     * @return 条件に合うレコードの一覧。
-     * @throws SQLException DB処理に失敗した場合。
+     * クーポンの配布停止（ACTIVE -> STOPPED）または再開（STOPPED -> ACTIVE）を実行し、監査ログを記録する。
+     * @param actorId 操作した管理者の会員ID。
+     * @param couponId クーポンID。
+     * @param stop 停止する場合はtrue、再開する場合はfalse。
+     * @param reason 操作理由。
+     * @throws SQLException DB更新に失敗した場合。
      */
-    public static List<Map<String, Object>> issuedCouponKeys(ManagementDao db, int couponId) throws SQLException {
-        return db.rows("SELECT 1 FROM coupon_recipients WHERE coupon_id=? LIMIT 1", couponId);
+    public void changeDistributionStatus(int actorId, int couponId, boolean stop, String reason) throws SQLException {
+        try (Connection con = openConnection()) {
+            con.setAutoCommit(false);
+            try {
+                requireAdminInTx(con, actorId);
+                CouponLock locked = lockCouponRow(con, couponId);
+                boolean allowed = stop
+                        ? "ACTIVE".equals(locked.status)
+                        : "STOPPED".equals(locked.status) && locked.inDistributionPeriod;
+                if (!allowed) {
+                    throw new ManagementProblem(409, "配布状態または配布期限を確認してください。");
+                }
+
+                String nextStatus = stop ? "STOPPED" : "ACTIVE";
+                String sql = "UPDATE coupons SET coupon_status = ?, updated_at = CURRENT_TIMESTAMP WHERE coupon_id = ?";
+                try (PreparedStatement stmt = con.prepareStatement(sql)) {
+                    stmt.setString(1, nextStatus);
+                    stmt.setInt(2, couponId);
+                    stmt.executeUpdate();
+                }
+
+                auditDao.insertLog(con, actorId, stop ? "STOP_COUPON" : "RESUME_COUPON", "coupon",
+                        Map.of("coupon_id", couponId), reason,
+                        Map.of("coupon_status", Map.of("before", locked.status, "after", nextStatus)));
+
+                con.commit();
+                con.setAutoCommit(true);
+            } catch (Throwable error) {
+                rollbackQuietly(con, error);
+                if (error instanceof SQLException sqlError) {
+                    throw sqlError;
+                }
+                if (error instanceof RuntimeException runtimeError) {
+                    throw runtimeError;
+                }
+                throw new RuntimeException(error);
+            }
+        }
     }
 
     /**
-     * 有効期間内で未使用のクーポン発行分を無効化する。
-     * @param db 管理操作で共用するDAO接続。
-     * @param couponId クーポンのID。
-     * @param recipientId クーポンを受け取った会員のID。
-     * @return 更新した件数。
-     * @throws SQLException DB処理に失敗した場合。
+     * 有効期間内で未使用の個別発行クーポンを無効化し、監査ログを記録する。
+     * @param actorId 操作した管理者の会員ID。
+     * @param couponId クーポンID。
+     * @param recipientUserId 受取人の会員ID。
+     * @param reason 無効化理由。
+     * @throws SQLException DB更新に失敗した場合。
      */
-    public static int revokeRecipient(ManagementDao db, int couponId, int recipientId) throws SQLException {
-        return db.update("""
-                    UPDATE coupon_recipients r SET revoked_at=CURRENT_TIMESTAMP FROM coupons c
-                    WHERE r.coupon_id=c.coupon_id AND r.coupon_id=? AND r.resident_user_id=?
-                      AND r.used_at IS NULL AND r.revoked_at IS NULL AND c.valid_until>CURRENT_TIMESTAMP
-                      AND r.issued_at<=CURRENT_TIMESTAMP
-                    """, couponId, recipientId);
+    public void revokeRecipient(int actorId, int couponId, int recipientUserId, String reason) throws SQLException {
+        try (Connection con = openConnection()) {
+            con.setAutoCommit(false);
+            try {
+                requireAdminInTx(con, actorId);
+                lockCouponRow(con, couponId);
+
+                // 利用処理と競合しても利用済み券を無効化しないようWHERE句で状態を厳密に確認する。
+                String sql = """
+                        UPDATE coupon_recipients r
+                        SET revoked_at = CURRENT_TIMESTAMP
+                        FROM coupons c
+                        WHERE r.coupon_id = c.coupon_id
+                          AND r.coupon_id = ?
+                          AND r.resident_user_id = ?
+                          AND r.used_at IS NULL
+                          AND r.revoked_at IS NULL
+                          AND c.valid_until > CURRENT_TIMESTAMP
+                          AND r.issued_at <= CURRENT_TIMESTAMP
+                        """;
+                int changed;
+                try (PreparedStatement stmt = con.prepareStatement(sql)) {
+                    stmt.setInt(1, couponId);
+                    stmt.setInt(2, recipientUserId);
+                    changed = stmt.executeUpdate();
+                }
+                if (changed == 0) {
+                    throw new ManagementProblem(409, "この発行分は無効化できません。利用状況を確認してください。");
+                }
+
+                auditDao.insertLog(con, actorId, "REVOKE_COUPON_RECIPIENT", "coupon_recipient",
+                        Map.of("coupon_id", couponId, "resident_user_id", recipientUserId),
+                        reason, Map.of("revoked", Map.of("before", false, "after", true)));
+
+                con.commit();
+                con.setAutoCommit(true);
+            } catch (Throwable error) {
+                rollbackQuietly(con, error);
+                if (error instanceof SQLException sqlError) {
+                    throw sqlError;
+                }
+                if (error instanceof RuntimeException runtimeError) {
+                    throw runtimeError;
+                }
+                throw new RuntimeException(error);
+            }
+        }
     }
 
     /**
-     * クーポンの配布停止または再開を保存する。
-     * @param db 管理操作で共用するDAO接続。
-     * @param status 保存または絞り込みに指定する状態コード。絞り込みでは空文字で全件。
-     * @param couponId クーポンのID。
-     * @throws SQLException DB処理に失敗した場合。
+     * トランザクション内で操作者が有効な管理者であることを確認し行ロックする。
+     * @param con トランザクション中の接続。
+     * @param actorId 管理者会員ID。
+     * @throws SQLException DB照会に失敗した場合。
      */
-    public static void updateState(ManagementDao db, String status, int couponId) throws SQLException {
-        db.update("UPDATE coupons SET coupon_status=?,updated_at=CURRENT_TIMESTAMP WHERE coupon_id=?", status, couponId);
+    private void requireAdminInTx(Connection con, int actorId) throws SQLException {
+        if (!auditDao.isAdmin(con, actorId, true)) {
+            throw new ManagementProblem(403, "このアカウントには管理権限がありません。");
+        }
     }
 
     /**
-     * 配布開始前のクーポンの特典、期間、上限を保存する。
-     * @param db 管理操作で共用するDAO接続。
-     * @param title クーポンやアンケートの名称。
-     * @param kind 対象や保存する項目を区別する種別コード。
-     * @param percent 割合割引の場合の割引率。
-     * @param amount 定額割引の場合の割引金額。
-     * @param service サービス特典の案内。
-     * @param starts 受付・配布を開始する日時。
-     * @param ends 受付・配布を終了する日時。
-     * @param validUntil クーポンを使用できる期限。
-     * @param usageLimit 発行枚数の上限。
-     * @param terms クーポンの使用条件。省略時はnull。
-     * @param couponId クーポンのID。
-     * @throws SQLException DB処理に失敗した場合。
+     * クーポン行を排他ロックし、現在の配布状態と配布期間内フラグを返す。
+     * @param con トランザクション中の接続。
+     * @param couponId クーポンID。
+     * @return ロック結果。
+     * @throws SQLException DB照会に失敗した場合。
      */
-    public static void updateDraft(ManagementDao db,
-            String title, String kind, BigDecimal percent, Integer amount, String service, OffsetDateTime starts, OffsetDateTime ends, OffsetDateTime validUntil, int usageLimit, String terms, int couponId) throws SQLException {
-        db.update("""
-                UPDATE coupons SET coupon_title=?,benefit_kind=?,discount_percent=?,discount_yen=?,service_text=?,
-                       distribution_starts_at=?,distribution_ends_at=?,valid_until=?,usage_limit=?,terms_text=?,updated_at=CURRENT_TIMESTAMP
-                WHERE coupon_id=?
-                """, title, kind, percent, amount, service, starts, ends, validUntil, usageLimit, terms, couponId);
+    private static CouponLock lockCouponRow(Connection con, int couponId) throws SQLException {
+        String sql = """
+                SELECT coupon_status, distribution_ends_at > CURRENT_TIMESTAMP AS in_period
+                FROM coupons
+                WHERE coupon_id = ?
+                FOR UPDATE
+                """;
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
+            stmt.setInt(1, couponId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    throw new ManagementProblem(404, "指定されたクーポンが見つかりません。");
+                }
+                return new CouponLock(rs.getString("coupon_status"), rs.getBoolean("in_period"));
+            }
+        }
+    }
+
+    /**
+     * 指定クーポンに1件でも発行履歴が存在するか確認する。
+     * @param con トランザクション中の接続。
+     * @param couponId クーポンID。
+     * @return 発行済みであればtrue。
+     * @throws SQLException DB照会に失敗した場合。
+     */
+    private static boolean hasAnyRecipient(Connection con, int couponId) throws SQLException {
+        String sql = "SELECT 1 FROM coupon_recipients WHERE coupon_id = ? LIMIT 1";
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
+            stmt.setInt(1, couponId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    /**
+     * ロックしたクーポン行の更新判定用スナップショット。
+     */
+    private static final class CouponLock {
+        /** 現在の配布状態。 */
+        private final String status;
+        /** 現在時刻が配布終了日時より前かどうか。 */
+        private final boolean inDistributionPeriod;
+
+        /**
+         * ロック結果を保持するインスタンスを生成する。
+         * @param status 配布状態。
+         * @param inDistributionPeriod 配布期間内ならtrue。
+         */
+        private CouponLock(String status, boolean inDistributionPeriod) {
+            this.status = status;
+            this.inDistributionPeriod = inDistributionPeriod;
+        }
     }
 }
