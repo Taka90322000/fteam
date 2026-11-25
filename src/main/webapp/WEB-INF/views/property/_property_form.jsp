@@ -58,7 +58,7 @@
 
     <div class="form-group">
       <label for="prop-access">交通・最寄駅アクセス <span class="req-mark">*必須</span></label>
-      <input id="prop-access" type="text" name="access" class="form-control" required aria-invalid="false" data-error="prop-access-error" placeholder="例: 東武宇都宮駅 徒歩3分">
+      <input id="prop-access" type="text" name="access" class="form-control" maxlength="150" required aria-invalid="false" data-error="prop-access-error" placeholder="例: 東武宇都宮駅 徒歩3分">
       <div id="prop-access-error" class="form-error-msg">
         <span role="img" aria-label="エラー">⚠</span> 交通・最寄駅アクセスを入力してください。
       </div>
@@ -161,21 +161,21 @@
         <div class="form-grid-3">
           <div class="form-group">
             <label for="prop-popup-min-days">最低利用日数 (日) <span class="req-mark">*必須</span></label>
-            <input id="prop-popup-min-days" type="number" min="1" class="form-control" inputmode="numeric" disabled aria-invalid="false" data-error="prop-popup-min-error" placeholder="例: 3">
+            <input id="prop-popup-min-days" type="number" name="popupMinDays" min="1" class="form-control" inputmode="numeric" disabled aria-invalid="false" data-error="prop-popup-min-error" placeholder="例: 3">
             <div id="prop-popup-min-error" class="form-error-msg">
               <span role="img" aria-label="エラー">⚠</span> 1日以上を入力してください。
             </div>
           </div>
           <div class="form-group">
             <label for="prop-popup-max-days">最大利用日数 (日) <span class="req-mark">*必須</span></label>
-            <input id="prop-popup-max-days" type="number" min="1" class="form-control" inputmode="numeric" disabled aria-invalid="false" data-error="prop-popup-max-error" placeholder="例: 30">
+            <input id="prop-popup-max-days" type="number" name="popupMaxDays" min="1" class="form-control" inputmode="numeric" disabled aria-invalid="false" data-error="prop-popup-max-error" placeholder="例: 30">
             <div id="prop-popup-max-error" class="form-error-msg">
               <span role="img" aria-label="エラー">⚠</span> 最低利用日数以上を入力してください。
             </div>
           </div>
           <div class="form-group">
             <label for="prop-popup-daily-rent">日額賃料目安 (円) <span class="opt-mark">（任意）</span></label>
-            <input id="prop-popup-daily-rent" type="number" min="0" class="form-control" inputmode="numeric" disabled placeholder="例: 8000">
+            <input id="prop-popup-daily-rent" type="number" name="popupDailyRent" min="0" class="form-control" inputmode="numeric" disabled placeholder="例: 8000">
           </div>
         </div>
       </div>
@@ -220,7 +220,7 @@
 
     <div class="form-group">
       <label for="prop-condition">居抜き・設備・業種条件メモ <span class="opt-mark">（任意）</span></label>
-      <input id="prop-condition" type="text" name="condition" class="form-control" placeholder="例: カフェ・物販相談可（重飲食は排気設備要確認）">
+      <input id="prop-condition" type="text" name="condition" class="form-control" maxlength="300" placeholder="例: カフェ・物販相談可（重飲食は排気設備要確認）">
     </div>
   </fieldset>
 
@@ -241,7 +241,7 @@
 
     <div class="form-group">
       <label for="prop-listing-url">既存の不動産掲載ページURL <span class="opt-mark">（任意）</span></label>
-      <input id="prop-listing-url" type="url" name="listingUrl" class="form-control" autocomplete="url" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="https://...">
+      <input id="prop-listing-url" type="url" name="listingUrl" class="form-control" maxlength="1000" autocomplete="url" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="https://...">
     </div>
   </fieldset>
 

@@ -3,7 +3,7 @@
   <jsp:param name="title" value="登録物件管理 | マチリク" />
   <jsp:param name="description" value="所有する空き店舗の掲載状態・需要スコア・出店応募状況を一元管理します。" />
   <jsp:param name="pageScreenId" value="o01" />
-  <jsp:param name="assetVersion" value="20261119_o01_v26" />
+  <jsp:param name="assetVersion" value="20261125_prop_db_v1" />
 </jsp:include>
 
     <section id="o01-section" class="screen-view s11-view" data-screen="O01">
@@ -72,5 +72,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o01" />
-  <jsp:param name="assetVersion" value="20261119_o01_v26" />
+  <jsp:param name="assetVersion" value="20261125_prop_db_v1" />
 </jsp:include>

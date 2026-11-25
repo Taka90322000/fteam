@@ -975,6 +975,20 @@ window.MachirikuPropertyPages = (function () {
     const sectionEl = document.getElementById("o01-section");
     if (!sectionEl) return;
 
+    // サーバー登録（PropertyAdd.action）からの完了リダイレクト時は下書きを掃除し通知を表示する。
+    try {
+      const urlParams = new URLSearchParams(window.location.search || "");
+      if (urlParams.get("property_added") === "1") {
+        window.sessionStorage.removeItem(DRAFT_ADD_KEY);
+        window.MachirikuApp?.showToast?.("新規空き店舗を登録しました！");
+        urlParams.delete("property_added");
+        urlParams.delete("property_id");
+        const nextSearch = urlParams.toString();
+        const cleanUrl = window.location.pathname + (nextSearch ? `?${nextSearch}` : "") + (window.location.hash || "");
+        window.history.replaceState(null, "", cleanUrl);
+      }
+    } catch (_) {}
+
     showRoleNotice("o01-role-notice", ["owner", "admin"], "物件オーナー");
     const state = store.getState();
     const ownerIds = new Set(state.users?.owner?.ownedPropIds || []);
@@ -1860,11 +1874,12 @@ window.MachirikuPropertyPages = (function () {
       if (emptyEl) emptyEl.hidden = true;
     }
 
-    // 確認画面から「修正して戻る」場合は sessionStorage のドラフトを復元
+    // 確認画面から「修正して戻る」またはサーバー検証エラー再表示時は sessionStorage のドラフトを復元
+    const shouldRestoreDraft = params?.restore === "1" || sectionEl.dataset.restoreDraft === "1";
     let draft = null;
     try {
       const raw = window.sessionStorage.getItem(isEdit ? DRAFT_EDIT_KEY : DRAFT_ADD_KEY);
-      if (raw && params?.restore === "1") {
+      if (raw && shouldRestoreDraft) {
         const parsed = JSON.parse(raw);
         if (isEdit && parsed.propId === baseProp.id) draft = parsed.after;
         else if (!isEdit) draft = parsed;
@@ -2123,7 +2138,7 @@ window.MachirikuPropertyPages = (function () {
               <option value="facility" ${item.kind === "facility" ? "selected" : ""}>設備</option>
               <option value="surrounding" ${item.kind === "surrounding" ? "selected" : ""}>周辺環境</option>
             </select>
-            <input type="text" class="form-control form-control-sm" aria-label="写真の説明" data-g-label="${idx}" value="${escapeHtml(item.label)}" placeholder="写真の説明（例: 店舗入口）">
+            <input type="text" class="form-control form-control-sm" maxlength="200" aria-label="写真の説明" data-g-label="${idx}" value="${escapeHtml(item.label)}" placeholder="写真の説明（例: 店舗入口）">
           </div>
           <div class="gallery-builder-btns">
             <button type="button" class="btn-secondary btn-xs btn-danger-outline" data-g-del="${idx}">削除</button>
@@ -2490,6 +2505,7 @@ window.MachirikuPropertyPages = (function () {
         ? rawTsubo
         : (rawSqm > 0 ? Math.round((rawSqm / 3.30578) * 100) / 100 : 0);
 
+      const popupOn = Boolean(popupCb && popupCb.checked);
       const payload = {
         title: val("prop-title"),
         prefecture,
@@ -2499,31 +2515,33 @@ window.MachirikuPropertyPages = (function () {
         access: val("prop-access"),
         rent: Number(val("prop-rent")) || 0,
         managementFee: val("prop-mgmt") === "" ? null : Number(val("prop-mgmt")),
-        deposit: val("prop-deposit") || "掲載なし（要確認）",
-        keyMoney: val("prop-key-money") || "掲載なし（要確認）",
-        securityDeposit: val("prop-security-deposit") || "掲載なし（要確認）",
+        deposit: val("prop-deposit") || "なし",
+        keyMoney: val("prop-key-money") || "なし",
+        securityDeposit: val("prop-security-deposit") || "なし",
         areaSqm: rawSqm,
         areaTsubo,
         floorNumber: val("prop-floor-num"),
         totalFloors: val("prop-total-floors"),
         structure: val("prop-structure"),
+        builtYearNum: bYear,
+        builtMonthNum: bMonth,
         builtYear,
         handover: val("prop-handover"),
         permitStatus: val("prop-permit-status") || "UNKNOWN",
         listingStatus: val("prop-listing-status") || "OPEN",
-        condition: val("prop-condition") || "業種相談可",
+        condition: val("prop-condition"),
         description: val("prop-description"),
         listingUrl: val("prop-listing-url"),
-        lat: !isNaN(rawLat) ? rawLat : 36.5610,
-        lng: !isNaN(rawLng) ? rawLng : 139.8830,
+        lat: !isNaN(rawLat) ? rawLat : null,
+        lng: !isNaN(rawLng) ? rawLng : null,
         infrastructure: infra,
         allowedIndustries,
         contractTerms: {
           longEnabled: Boolean(longCb && longCb.checked),
-          popupEnabled: Boolean(popupCb && popupCb.checked),
-          minDays: Number(val("prop-popup-min-days")) || 3,
-          maxDays: Number(val("prop-popup-max-days")) || 30,
-          dailyRentYen: val("prop-popup-daily-rent") ? Number(val("prop-popup-daily-rent")) : null
+          popupEnabled: popupOn,
+          minDays: popupOn && val("prop-popup-min-days") !== "" ? Number(val("prop-popup-min-days")) : null,
+          maxDays: popupOn && val("prop-popup-max-days") !== "" ? Number(val("prop-popup-max-days")) : null,
+          dailyRentYen: popupOn && val("prop-popup-daily-rent") !== "" ? Number(val("prop-popup-daily-rent")) : null
         },
         gallery: galleryState
       };
@@ -2781,8 +2799,88 @@ window.MachirikuPropertyPages = (function () {
     if (backBtn) backBtn.setAttribute("href", propUrl("add.jsp", { restore: "1" }));
 
     const commitBtn = document.getElementById("o05-commit-btn");
+    const commitForm = document.getElementById("o05-commit-form");
+    const commitFields = document.getElementById("o05-commit-fields");
+    const useServerSubmit = sectionEl.dataset.serverSubmit === "true" && Boolean(commitForm && commitFields);
+
     if (commitBtn) {
       commitBtn.onclick = () => {
+        if (useServerSubmit) {
+          // サーバー登録時はドラフト内容をhidden項目へ展開してPropertyAdd.actionへPOST送信する。
+          commitBtn.disabled = true;
+          commitFields.innerHTML = "";
+          const appendHidden = (name, value) => {
+            if (value === undefined || value === null) return;
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = name;
+            input.value = String(value);
+            commitFields.appendChild(input);
+          };
+
+          appendHidden("title", draft.title || "");
+          appendHidden("prefecture", draft.prefecture || "");
+          appendHidden("municipality", draft.municipality || "");
+          appendHidden("addressLine", draft.addressLine || "");
+          appendHidden("access", draft.access || "");
+          if (draft.lat != null && draft.lng != null) {
+            appendHidden("lat", draft.lat);
+            appendHidden("lng", draft.lng);
+          }
+          appendHidden("rent", draft.rent != null ? draft.rent : "");
+          if (draft.managementFee != null) {
+            appendHidden("managementFee", draft.managementFee);
+          }
+          appendHidden("deposit", draft.deposit || "なし");
+          appendHidden("keyMoney", draft.keyMoney || "なし");
+          appendHidden("securityDeposit", draft.securityDeposit || "なし");
+          appendHidden("areaSqm", draft.areaSqm != null ? draft.areaSqm : "");
+          appendHidden("floorNumber", draft.floorNumber || "");
+          appendHidden("totalFloors", draft.totalFloors || "");
+          appendHidden("structure", draft.structure || "");
+          appendHidden("builtYearNum", draft.builtYearNum || "");
+          appendHidden("builtMonthNum", draft.builtMonthNum || "");
+          appendHidden("builtYear", draft.builtYear || "");
+          appendHidden("handover", draft.handover || "");
+
+          const ct = draft.contractTerms || {};
+          if (ct.longEnabled) appendHidden("longEnabled", "on");
+          if (ct.popupEnabled) {
+            appendHidden("popupEnabled", "on");
+            if (ct.minDays != null) appendHidden("popupMinDays", ct.minDays);
+            if (ct.maxDays != null) appendHidden("popupMaxDays", ct.maxDays);
+            if (ct.dailyRentYen != null) appendHidden("popupDailyRent", ct.dailyRentYen);
+          }
+
+          appendHidden("permitStatus", draft.permitStatus || "UNKNOWN");
+          appendHidden("listingStatus", draft.listingStatus || "OPEN");
+          appendHidden("condition", draft.condition || "");
+          appendHidden("description", draft.description || "");
+          appendHidden("listingUrl", draft.listingUrl || "");
+
+          // 希望・許可業種コードと基本インフラ設備キーを複数パラメーターとして展開する。
+          (Array.isArray(draft.allowedIndustries) ? draft.allowedIndustries : []).forEach((code) => {
+            appendHidden("allowedIndustries", code);
+          });
+          const infraObj = draft.infrastructure || {};
+          (data.INFRASTRUCTURE_FACILITIES || []).forEach((item) => {
+            if (infraObj[item.key]) {
+              appendHidden("facilityCodes", item.key);
+            }
+          });
+
+          // 添付写真（Data URL・種別・説明・並び順）をJSON文字列で送信する。
+          const validPhotos = (Array.isArray(draft.gallery) ? draft.gallery : [])
+            .filter(g => g && g.url && g.url !== PLACEHOLDER_IMG)
+            .map(g => ({ kind: g.kind || "other", label: g.label || "", url: g.url }));
+          if (validPhotos.length > 0) {
+            appendHidden("galleryJson", JSON.stringify(validPhotos));
+          }
+
+          commitForm.submit();
+          return;
+        }
+
         store.registerProperty(draft);
         try { window.sessionStorage.removeItem(DRAFT_ADD_KEY); } catch (_) {}
         window.MachirikuApp?.showToast?.("新規空き店舗を登録しました！");

@@ -1,9 +1,17 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="jp.machiriku.bean.User,jp.machiriku.servlet.property.PropertyAddAction,jp.machiriku.tool.Html" %>
+<%
+  User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
+  boolean useServerSubmit = currentUser != null;
+  String propertyAddCsrfToken = useServerSubmit ? PropertyAddAction.csrfToken(session) : "";
+  String errorMessage = request.getAttribute("errorMessage") instanceof String
+      ? (String) request.getAttribute("errorMessage") : null;
+%>
 <jsp:include page="/WEB-INF/views/common/portal_header.jsp">
   <jsp:param name="title" value="物件登録確認 | マチリク" />
   <jsp:param name="description" value="新規登録する空き店舗の入力内容を確認し、登録を確定します。" />
   <jsp:param name="pageScreenId" value="o05" />
-  <jsp:param name="assetVersion" value="20261119_o05_v9" />
+  <jsp:param name="assetVersion" value="20261125_prop_db_v1" />
 </jsp:include>
 
     <section id="o05-empty-state" class="screen-view empty-state" data-screen="O05" hidden>
@@ -12,7 +20,7 @@
       <a class="btn-primary" href="${pageContext.request.contextPath}/property/add.jsp">物件登録へ戻る</a>
     </section>
 
-    <section id="o05-section" class="screen-view o05-view" data-screen="O05">
+    <section id="o05-section" class="screen-view o05-view" data-screen="O05" data-server-submit="<%= useServerSubmit ? "true" : "false" %>">
       <div class="page-header-banner" data-screen="O05">
         <nav class="breadcrumb-trail" aria-label="現在の位置">
           <a href="${pageContext.request.contextPath}/index.jsp#s01">ホーム</a>
@@ -30,6 +38,12 @@
         <p class="page-description">以下の内容で空き店舗を登録します。修正が必要な場合は「内容を修正する」で入力画面に戻れます。</p>
       </div>
 
+      <% if (errorMessage != null && !errorMessage.isBlank()) { %>
+      <div role="alert" style="background:#fee2e2; color:#991b1b; padding:0.85rem 1rem; border-radius:var(--radius-md); margin-bottom:1.25rem; border:1px solid #fecaca;">
+        <%= Html.escape(errorMessage) %>
+      </div>
+      <% } %>
+
       <div class="form-stepper-box form-stepper-wide">
         <h2 class="detail-card-title">入力内容の確認</h2>
         <table class="specs-table" aria-label="登録物件の入力内容確認">
@@ -38,6 +52,13 @@
 
         <h3 class="detail-sub-heading" style="margin-top:1.5rem;">登録写真プレビュー</h3>
         <div id="o05-gallery-preview" class="confirm-photo-grid"></div>
+
+        <% if (useServerSubmit) { %>
+        <form id="o05-commit-form" action="${pageContext.request.contextPath}/jp/machiriku/servlet/property/PropertyAdd.action" method="POST" hidden>
+          <input type="hidden" name="csrfToken" value="<%= Html.escape(propertyAddCsrfToken) %>">
+          <div id="o05-commit-fields"></div>
+        </form>
+        <% } %>
 
         <div class="form-actions-bar" style="margin-top:1.75rem;">
           <a id="o05-back-btn" class="btn-secondary" href="${pageContext.request.contextPath}/property/add.jsp?restore=1">← 内容を修正する</a>
@@ -48,5 +69,5 @@
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="o05" />
-  <jsp:param name="assetVersion" value="20261119_o05_v9" />
+  <jsp:param name="assetVersion" value="20261125_prop_db_v1" />
 </jsp:include>
