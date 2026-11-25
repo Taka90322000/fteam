@@ -77,6 +77,53 @@ window.MachirikuMatchingPages = (function () {
     return base.toISOString().slice(0, 10);
   }
 
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function parseDateParts(raw) {
+    const str = String(raw || "").trim();
+    if (!str) return null;
+    const m = str.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:[T\s](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (m) {
+      return {
+        y: m[1],
+        m: pad2(m[2]),
+        d: pad2(m[3]),
+        hh: m[4] != null ? pad2(m[4]) : null,
+        mm: m[5] != null ? pad2(m[5]) : null
+      };
+    }
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return null;
+    const hasTime = /\d{1,2}:\d{2}/.test(str);
+    return {
+      y: String(d.getFullYear()),
+      m: pad2(d.getMonth() + 1),
+      d: pad2(d.getDate()),
+      hh: hasTime ? pad2(d.getHours()) : null,
+      mm: hasTime ? pad2(d.getMinutes()) : null
+    };
+  }
+
+  function formatDateYMD(raw) {
+    const p = parseDateParts(raw);
+    if (!p) return String(raw || "");
+    return `${p.y}/${p.m}/${p.d}`;
+  }
+
+  function formatDateTimeNoSec(raw) {
+    const p = parseDateParts(raw);
+    if (!p) return String(raw || "");
+    return p.hh != null ? `${p.y}/${p.m}/${p.d} ${p.hh}:${p.mm}` : `${p.y}/${p.m}/${p.d}`;
+  }
+
+  function formatShortDateTimeNoSec(raw) {
+    const p = parseDateParts(raw);
+    if (!p) return String(raw || "");
+    return p.hh != null ? `${p.m}/${p.d} ${p.hh}:${p.mm}` : `${p.m}/${p.d}`;
+  }
+
   function showRoleNotice(noticeElId, requiredRoles, roleLabel) {
     const el = document.getElementById(noticeElId);
     if (!el) return;
@@ -131,9 +178,12 @@ window.MachirikuMatchingPages = (function () {
 
   function formatApplicationPeriod(app, includeOpenPrefix = true) {
     if (app.requestedEndOn) {
-      return `${app.requestedStartOn || "未定"} 〜 ${app.requestedEndOn}`;
+      const startText = app.requestedStartOn ? formatDateYMD(app.requestedStartOn) : "未定";
+      const endText = formatDateYMD(app.requestedEndOn);
+      return `${startText} 〜 ${endText}`;
     }
-    const openDate = app.targetOpenDate || app.requestedStartOn || "相談";
+    const rawOpen = app.targetOpenDate || app.requestedStartOn || "";
+    const openDate = rawOpen ? formatDateYMD(rawOpen) : "相談";
     return includeOpenPrefix ? `オープン予定: ${openDate}` : openDate;
   }
 
@@ -1836,7 +1886,27 @@ window.MachirikuMatchingPages = (function () {
   let b02StatusFilter = "ALL";
   let b02ContractFilter = "ALL";
   let b02Keyword = "";
+  let b02FiltersOpen = false;
   const b02ExpandedIds = new Set();
+  let b02PendingFocusInputId = null;
+  const B02_READ_STORAGE_KEY = "machiriku_b02_read_counts";
+
+  function loadB02ReadMap() {
+    try {
+      const raw = window.sessionStorage?.getItem(B02_READ_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function markB02AppRead(appId, count) {
+    try {
+      const map = loadB02ReadMap();
+      map[appId] = Number(count) || 0;
+      window.sessionStorage?.setItem(B02_READ_STORAGE_KEY, JSON.stringify(map));
+    } catch (_) {}
+  }
 
   function getAppChatMessages(app) {
     if (Array.isArray(app?.chatMessages) && app.chatMessages.length) {
@@ -1852,6 +1922,38 @@ window.MachirikuMatchingPages = (function () {
       }];
     }
     return [];
+  }
+
+  function getB02ChatPlaceholder(app, isHandedOver) {
+    if (isHandedOver) {
+      return "引渡し・開店準備に関する連絡や確認事項を入力...";
+    }
+    if (app?.status === "approved") {
+      return "契約手続きや引渡し日程に関する確認事項を入力...";
+    }
+    if (app?.status === "rejected" || app?.status === "withdrawn") {
+      return "オーナーへの確認事項を入力...";
+    }
+    return "内覧日程の調整やオーナーへの確認事項を入力...";
+  }
+
+  function getB02ChatEmptyHint(app, isHandedOver) {
+    if (isHandedOver) {
+      return "引渡し後の確認事項や開店準備の連絡を送信できます。";
+    }
+    if (app?.status === "approved") {
+      return "契約手続きや引渡し日程に関する連絡事項を送信できます。";
+    }
+    return "オーナーからの返信が届くとここに表示されます。内覧希望の補足や質問も送信できます。";
+  }
+
+  function scrollB02ThreadToBottom(container) {
+    if (!container) return;
+    const thread = container.classList?.contains("o10-chat-thread")
+      ? container
+      : container.querySelector(".o10-chat-thread");
+    if (!thread) return;
+    thread.scrollTop = thread.scrollHeight;
   }
 
   function hydrateB02(params = {}) {
@@ -1875,20 +1977,62 @@ window.MachirikuMatchingPages = (function () {
       ? receivedOffers
       : store.getOffers().filter((o) => o.offerStatus !== "DRAFT");
 
-    // KPI
+    // KPI（応募タブ内の3枚）
     const consultingCount = myApps.filter((a) => a.status === "consulting" || a.status === "interviewing").length;
     const agreedCount = myApps.filter((a) => a.status === "approved" || a.status === "contracted").length;
     setText("b02-kpi-total", String(myApps.length));
     setText("b02-kpi-consulting", String(consultingCount));
     setText("b02-kpi-agreed", String(agreedCount));
-    setText("b02-kpi-offers", String(allVisibleOffers.length));
     setText("b02-tab-apps-count", String(myApps.length));
     setText("b02-tab-offers-count", String(allVisibleOffers.length));
 
-    // タブ切替
+    // タブ・KPIクイック絞り込み同期
     const tabsWrap = document.getElementById("b02-view-tabs");
     const panelApps = document.getElementById("b02-panel-apps");
     const panelOffers = document.getElementById("b02-panel-offers");
+    const statusSel = document.getElementById("b02-status-filter");
+    const contractSel = document.getElementById("b02-contract-filter");
+    const kwInput = document.getElementById("b02-keyword-filter");
+    const filterToggleBtn = document.getElementById("b02-filter-toggle");
+    const filtersCollapse = document.getElementById("b02-filters-collapse");
+    const filterActiveBadge = document.getElementById("b02-filter-active-count");
+    const kpiBtns = sectionEl.querySelectorAll("[data-b02-kpi]");
+
+    const syncFilterToggleUi = () => {
+      const activeCount = (b02StatusFilter !== "ALL" ? 1 : 0)
+        + (b02ContractFilter !== "ALL" ? 1 : 0)
+        + (b02Keyword.trim() ? 1 : 0);
+      if (filterToggleBtn) {
+        filterToggleBtn.setAttribute("aria-expanded", String(b02FiltersOpen));
+        filterToggleBtn.classList.toggle("is-open", b02FiltersOpen);
+        filterToggleBtn.classList.toggle("has-active", activeCount > 0);
+      }
+      if (filtersCollapse) {
+        filtersCollapse.classList.toggle("is-open", b02FiltersOpen);
+      }
+      if (filterActiveBadge) {
+        filterActiveBadge.hidden = activeCount === 0;
+        filterActiveBadge.textContent = String(activeCount);
+      }
+    };
+
+    if (filterToggleBtn) {
+      filterToggleBtn.onclick = () => {
+        b02FiltersOpen = !b02FiltersOpen;
+        syncFilterToggleUi();
+      };
+    }
+
+    const syncKpiPressed = () => {
+      let activeKpi = "";
+      if (b02StatusFilter === "ALL") activeKpi = "all";
+      else if (b02StatusFilter === "consulting") activeKpi = "consulting";
+      else if (b02StatusFilter === "agreed" || b02StatusFilter === "approved" || b02StatusFilter === "contracted") activeKpi = "agreed";
+
+      kpiBtns.forEach((btn) => {
+        btn.setAttribute("aria-pressed", String(btn.getAttribute("data-b02-kpi") === activeKpi));
+      });
+    };
 
     const activateB02Tab = (tabName) => {
       b02ActiveTab = tabName === "offers" ? "offers" : "apps";
@@ -1898,6 +2042,7 @@ window.MachirikuMatchingPages = (function () {
       });
       if (panelApps) panelApps.hidden = b02ActiveTab !== "apps";
       if (panelOffers) panelOffers.hidden = b02ActiveTab !== "offers";
+      syncKpiPressed();
     };
 
     if (tabsWrap) {
@@ -1906,31 +2051,58 @@ window.MachirikuMatchingPages = (function () {
       });
       wireTablistKeyboard(tabsWrap, (t) => activateB02Tab(t.getAttribute("data-b02-tab")));
     }
-    activateB02Tab(b02ActiveTab);
 
     // 応募フィルタ
-    const statusSel = document.getElementById("b02-status-filter");
-    const contractSel = document.getElementById("b02-contract-filter");
-    const kwInput = document.getElementById("b02-keyword-filter");
     if (statusSel) {
       statusSel.value = b02StatusFilter;
-      statusSel.onchange = () => { b02StatusFilter = statusSel.value; renderB02Apps(); };
+      statusSel.onchange = () => {
+        b02StatusFilter = statusSel.value;
+        syncKpiPressed();
+        syncFilterToggleUi();
+        renderB02Apps();
+      };
     }
     if (contractSel) {
       contractSel.value = b02ContractFilter;
-      contractSel.onchange = () => { b02ContractFilter = contractSel.value; renderB02Apps(); };
+      contractSel.onchange = () => {
+        b02ContractFilter = contractSel.value;
+        syncFilterToggleUi();
+        renderB02Apps();
+      };
     }
     if (kwInput) {
       if (document.activeElement !== kwInput) kwInput.value = b02Keyword;
-      kwInput.oninput = () => { b02Keyword = kwInput.value; renderB02Apps(); };
+      kwInput.oninput = () => {
+        b02Keyword = kwInput.value;
+        syncFilterToggleUi();
+        renderB02Apps();
+      };
     }
+
+    kpiBtns.forEach((btn) => {
+      btn.onclick = () => {
+        const target = btn.getAttribute("data-b02-kpi");
+        b02StatusFilter = target === "consulting" ? "consulting" : (target === "agreed" ? "agreed" : "ALL");
+        if (statusSel) statusSel.value = b02StatusFilter;
+        syncKpiPressed();
+        syncFilterToggleUi();
+        renderB02Apps();
+      };
+    });
+
+    syncFilterToggleUi();
+    activateB02Tab(b02ActiveTab);
 
     const renderB02Apps = () => {
       const kw = b02Keyword.trim().toLowerCase();
       const filtered = myApps.filter((a) => {
         if (b02StatusFilter !== "ALL") {
           const st = a.status === "applying" ? "submitted" : (a.status === "interviewing" ? "consulting" : a.status);
-          if (st !== b02StatusFilter) return false;
+          if (b02StatusFilter === "agreed") {
+            if (st !== "approved" && st !== "contracted") return false;
+          } else if (st !== b02StatusFilter) {
+            return false;
+          }
         }
         if (b02ContractFilter !== "ALL") {
           const ck = a.contractKind === "POPUP" ? "POPUP" : "LONG";
@@ -1955,6 +2127,8 @@ window.MachirikuMatchingPages = (function () {
       }
       if (emptyEl) emptyEl.hidden = true;
 
+      const readMap = loadB02ReadMap();
+
       listEl.innerHTML = filtered.map((a) => {
         const checks = Array.isArray(a.checks) ? a.checks : [];
         const confirmedCount = checks.filter((c) => c.ownerCheckStatus === "CONFIRMED").length;
@@ -1963,83 +2137,135 @@ window.MachirikuMatchingPages = (function () {
         const messages = getAppChatMessages(a);
         const latestMsg = messages[messages.length - 1] || null;
         const tenancy = store.getTenancyByApplicationId(a.id);
-        const canContract = a.status === "approved" || a.status === "contracted" || Boolean(tenancy);
-        const canPlan = a.status === "contracted" || tenancy?.tenancyStatus === "HANDED_OVER" || tenancy?.tenancyStatus === "OPEN";
+        const isHandedOver = a.status === "contracted" || tenancy?.tenancyStatus === "HANDED_OVER" || tenancy?.tenancyStatus === "OPEN";
+        const canContract = a.status === "approved" || isHandedOver || Boolean(tenancy);
+        const canPlan = isHandedOver;
         const canWithdraw = a.status === "submitted" || a.status === "applying" || a.status === "consulting" || a.status === "interviewing";
         const isOpen = b02ExpandedIds.has(a.id);
+        const contractBtnLabel = isHandedOver ? "契約・引渡し内容を確認" : "契約・引渡し手続き";
+        const displayStatusLabel = a.status === "contracted"
+          ? "契約成立・引渡し完了"
+          : (a.statusLabel || a.status);
+
+        let hasUnreadOwnerReply = false;
+        let messagePillHtml = `<span class="apply-summary-pill">オーナー返信待ち</span>`;
+        if (latestMsg) {
+          const isLatestOwner = latestMsg.senderRole !== "business";
+          const senderTag = isLatestOwner ? "オーナー" : "自分";
+          const shortTime = formatShortDateTimeNoSec(latestMsg.sentAt);
+          const timeSuffix = shortTime ? `（${escapeHtml(shortTime)}）` : "";
+          const seenCount = Number(readMap[a.id] || 0);
+          hasUnreadOwnerReply = isLatestOwner && !isOpen && messages.length > seenCount;
+          if (isLatestOwner) {
+            const stateHint = hasUnreadOwnerReply ? "未読・返信可" : "確認済";
+            const pillCls = hasUnreadOwnerReply ? "is-owner-unread" : "is-replied";
+            messagePillHtml = `<button type="button" class="apply-summary-pill b02-msg-jump-btn ${pillCls}" data-b02-open-chat="${escapeHtml(a.id)}">最新: ${senderTag}${timeSuffix}・${stateHint}（全${messages.length}件）</button>`;
+          } else {
+            messagePillHtml = `<button type="button" class="apply-summary-pill b02-msg-jump-btn is-self-sent" data-b02-open-chat="${escapeHtml(a.id)}">最新: ${senderTag}${timeSuffix}・相手返信待ち（全${messages.length}件）</button>`;
+          }
+        }
+
+        const submittedYmd = formatDateYMD(a.submittedAt);
+        const viewingText = a.viewingRequestedAt ? formatDateTimeNoSec(a.viewingRequestedAt) : "";
+        const chatPlaceholder = getB02ChatPlaceholder(a, isHandedOver);
+        const chatEmptyHint = getB02ChatEmptyHint(a, isHandedOver);
+        const primaryActionHtml = canPlan
+          ? `<a class="btn-primary btn-sm b02-primary-cta" href="${escapeHtml(matchingUrl("opening-plan.jsp", { propId: a.propId, appId: a.id }))}">出店計画を作成・公開</a>`
+          : (canContract
+            ? `<a class="btn-primary btn-sm b02-primary-cta" href="${escapeHtml(matchingUrl("contract.jsp", { id: a.id }))}">${contractBtnLabel}</a>`
+            : "");
+        const showSecondaryContract = canPlan && canContract;
+        const detailToggleLabel = isOpen ? "詳細・やり取りを閉じる" : "詳細・やり取りを見る";
+        const unreadDotHtml = hasUnreadOwnerReply
+          ? `<span class="b02-btn-unread-badge"><span class="b02-unread-dot" aria-hidden="true"></span>未読</span>`
+          : "";
 
         return `
           <article class="detail-card apply-item-card b02-app-card" data-b02-app-id="${escapeHtml(a.id)}">
             <div class="apply-item-head">
               <div class="apply-item-main">
                 <div class="apply-item-meta">
-                  <span class="badge-status ${escapeHtml(getAppStatusBadgeClass(a.status))}">${escapeHtml(a.statusLabel || a.status)}</span>
+                  <span class="badge-status ${escapeHtml(getAppStatusBadgeClass(a.status))}">${escapeHtml(displayStatusLabel)}</span>
                   <span class="qual-badge">${escapeHtml(a.genreName || "")}</span>
                   <span class="apply-summary-pill">${escapeHtml(contractLabel)}</span>
-                  <span class="apply-item-date">応募日: ${escapeHtml(a.submittedAt || "")}</span>
+                  <span class="apply-item-date">応募日: ${escapeHtml(submittedYmd)}</span>
                 </div>
                 <h3 class="apply-item-title">
                   <a href="${escapeHtml(propUrl("detail.jsp", { id: a.propId }))}">${escapeHtml(a.propTitle || "対象物件")}</a>
                   <small>（出店予定: ${escapeHtml(a.storeName || "")}）</small>
                 </h3>
                 <div class="apply-item-prop">
-                  希望時期・期間: ${escapeHtml(formatApplicationPeriod(a, false))}
-                  ${a.viewingRequestedAt ? ` ／ 内覧希望: ${escapeHtml(a.viewingRequestedAt.replace("T", " "))}` : ""}
+                  ${escapeHtml(formatApplicationPeriod(a, true))}
+                  ${viewingText ? ` ／ 内覧希望: ${escapeHtml(viewingText)}` : ""}
                 </div>
                 <div class="apply-card-summary-row">
                   <span class="apply-summary-pill">${checks.length ? `要件確認: ${confirmedCount}/${checks.length} オーナー確認済` : "資格要件なし"}</span>
                   ${rejectedCount > 0 ? `<span class="apply-summary-pill is-alert">確認不備あり ${rejectedCount}件</span>` : ""}
-                  ${latestMsg ? `<span class="apply-summary-pill is-replied">メッセージ ${messages.length}件（最新: ${escapeHtml(latestMsg.sentAt || "")}）</span>` : `<span class="apply-summary-pill">オーナー回答待ち</span>`}
-                  ${tenancy ? `<span class="apply-summary-pill is-replied">契約状況: ${escapeHtml(tenancy.statusLabel)}</span>` : ""}
+                  ${messagePillHtml}
+                  ${tenancy && !isHandedOver ? `<span class="apply-summary-pill is-replied">契約状況: ${escapeHtml(tenancy.statusLabel)}</span>` : ""}
                 </div>
               </div>
 
-              <div class="matching-card-actions">
-                ${canPlan ? `<a class="btn-primary btn-sm" href="${escapeHtml(matchingUrl("opening-plan.jsp", { propId: a.propId, appId: a.id }))}">出店計画を作成・公開</a>` : ""}
-                ${canContract ? `<a class="${canPlan ? "btn-secondary" : "btn-primary"} btn-sm" href="${escapeHtml(matchingUrl("contract.jsp", { id: a.id }))}">契約・引渡し手続き</a>` : ""}
-                <button type="button" class="btn-secondary btn-sm" data-b02-toggle="${escapeHtml(a.id)}" aria-expanded="${String(isOpen)}">
-                  ${isOpen ? "詳細・やり取りを閉じる" : "詳細・やり取りを見る"}
-                </button>
-                ${canWithdraw ? `<button type="button" class="btn-secondary btn-sm btn-danger-outline" data-b02-withdraw="${escapeHtml(a.id)}">応募を取り下げる</button>` : ""}
+              <div class="b02-card-action-col">
+                ${primaryActionHtml ? `<div class="b02-primary-row">${primaryActionHtml}</div>` : ""}
+                <div class="b02-secondary-row${showSecondaryContract ? " has-two" : ""}">
+                  ${showSecondaryContract ? `<a class="btn-secondary btn-sm" href="${escapeHtml(matchingUrl("contract.jsp", { id: a.id }))}">${contractBtnLabel}</a>` : ""}
+                  <button type="button" class="btn-secondary btn-sm b02-detail-toggle-btn${hasUnreadOwnerReply ? " has-unread" : ""}" data-b02-toggle="${escapeHtml(a.id)}" aria-expanded="${String(isOpen)}">
+                    <span data-b02-toggle-label>${detailToggleLabel}</span>${unreadDotHtml}
+                  </button>
+                </div>
+                ${canWithdraw ? `
+                  <div class="b02-withdraw-wrap">
+                    <button type="button" class="b02-withdraw-link" data-b02-withdraw="${escapeHtml(a.id)}">この応募を取り下げる</button>
+                  </div>
+                ` : ""}
               </div>
             </div>
 
-            <div class="b02-app-drawer" data-b02-drawer="${escapeHtml(a.id)}"${isOpen ? "" : " hidden"}>
-              <div class="b02-drawer-grid">
-                <div>
-                  <h4 class="matching-sub-label">応募時に送信した想い・コンセプト</h4>
-                  <p class="story-content-body">${escapeHtml(a.message || a.concept || "記載なし")}</p>
-                  ${checks.length ? `
-                    <h4 class="matching-sub-label" style="margin-top:0.85rem;">資格・要件の確認状況</h4>
-                    <ul class="b02-check-mini-list">
-                      ${checks.map((c) => {
-                        const cls = c.ownerCheckStatus === "CONFIRMED" ? "ok" : (c.ownerCheckStatus === "REJECTED" ? "missing" : "info");
-                        const lbl = c.ownerCheckStatus === "CONFIRMED" ? "オーナー確認済" : (c.ownerCheckStatus === "REJECTED" ? "不備あり" : "オーナー確認待ち");
-                        return `<li><span>${escapeHtml(c.requirementName || c.qualificationId)}</span><span class="req-badge-${cls}">${lbl}</span>${c.checkNote ? `<small class="b02-check-note">メモ: ${escapeHtml(c.checkNote)}</small>` : ""}</li>`;
-                      }).join("")}
-                    </ul>
-                  ` : ""}
-                </div>
-                <div class="b02-chat-col">
-                  <h4 class="matching-sub-label">オーナーとのやり取り</h4>
-                  <div class="o10-chat-thread" aria-live="polite">
-                    ${messages.length ? messages.map((m) => {
-                      const isOwner = m.senderRole !== "business";
-                      return `
-                        <div class="o10-chat-msg ${isOwner ? "is-owner" : "is-business"}">
-                          <div class="o10-chat-msg-meta">
-                            <strong>${escapeHtml(m.senderName || (isOwner ? "物件オーナー" : "あなた（事業主）"))}</strong>
-                            ${m.sentAt ? `<span>${escapeHtml(m.sentAt)}</span>` : ""}
-                          </div>
-                          <div class="o10-chat-msg-body">${escapeHtml(m.text)}</div>
-                        </div>
-                      `;
-                    }).join("") : `<p class="o10-chat-empty">オーナーからの返信が届くとここに表示されます。内覧希望の補足や質問も送信できます。</p>`}
+            <div class="b02-app-drawer${isOpen ? " is-open" : ""}" data-b02-drawer="${escapeHtml(a.id)}"${isOpen ? "" : ' inert aria-hidden="true"'}>
+              <div class="b02-drawer-inner">
+                <div class="b02-drawer-grid">
+                  <div>
+                    <h4 class="matching-sub-label">応募時に送信した想い・コンセプト</h4>
+                    <p class="story-content-body">${escapeHtml(a.message || a.concept || "記載なし")}</p>
+                    ${checks.length ? `
+                      <h4 class="matching-sub-label" style="margin-top:0.85rem;">資格・要件の確認状況</h4>
+                      <ul class="b02-check-mini-list">
+                        ${checks.map((c) => {
+                          const cls = c.ownerCheckStatus === "CONFIRMED" ? "ok" : (c.ownerCheckStatus === "REJECTED" ? "missing" : "info");
+                          const lbl = c.ownerCheckStatus === "CONFIRMED" ? "オーナー確認済" : (c.ownerCheckStatus === "REJECTED" ? "不備あり" : "オーナー確認待ち");
+                          return `<li><span>${escapeHtml(c.requirementName || c.qualificationId)}</span><span class="req-badge-${cls}">${lbl}</span>${c.checkNote ? `<small class="b02-check-note">メモ: ${escapeHtml(c.checkNote)}</small>` : ""}</li>`;
+                        }).join("")}
+                      </ul>
+                    ` : ""}
                   </div>
-                  <label class="o10-field-label" for="b02-chat-input-${escapeHtml(a.id)}">オーナーへメッセージ送信</label>
-                  <textarea id="b02-chat-input-${escapeHtml(a.id)}" class="form-control b02-chat-input" rows="2" data-b02-chat-input="${escapeHtml(a.id)}" placeholder="内覧日程の調整や補足事項を入力..."></textarea>
-                  <div class="o10-chat-send-row">
-                    <button type="button" class="btn-primary btn-sm" data-b02-chat-send="${escapeHtml(a.id)}">返信を送信</button>
+                  <div class="b02-chat-col">
+                    <h4 class="matching-sub-label">オーナーとのやり取り</h4>
+                    <div class="o10-chat-thread" aria-live="polite">
+                      ${messages.length ? messages.map((m) => {
+                        const isOwner = m.senderRole !== "business";
+                        const roleLabel = isOwner ? "オーナー" : "自分";
+                        const displayName = m.senderName || (isOwner ? "物件オーナー" : "あなた");
+                        const sentText = m.sentAt ? formatDateTimeNoSec(m.sentAt) : "";
+                        return `
+                          <div class="o10-chat-msg ${isOwner ? "is-owner" : "is-business"}">
+                            <div class="o10-chat-msg-meta">
+                              <span class="b02-chat-sender">
+                                <strong>${escapeHtml(displayName)}</strong>
+                                <span class="b02-chat-role-badge ${isOwner ? "is-owner" : "is-self"}">${roleLabel}</span>
+                              </span>
+                              ${sentText ? `<span>${escapeHtml(sentText)}</span>` : ""}
+                            </div>
+                            <div class="o10-chat-msg-body">${escapeHtml(m.text)}</div>
+                          </div>
+                        `;
+                      }).join("") : `<p class="o10-chat-empty">${escapeHtml(chatEmptyHint)}</p>`}
+                    </div>
+                    <label class="o10-field-label" for="b02-chat-input-${escapeHtml(a.id)}">オーナーへメッセージ送信</label>
+                    <textarea id="b02-chat-input-${escapeHtml(a.id)}" class="form-control b02-chat-input" rows="2" data-b02-chat-input="${escapeHtml(a.id)}" placeholder="${escapeHtml(chatPlaceholder)}"></textarea>
+                    <div class="o10-chat-send-row">
+                      <button type="button" class="btn-primary btn-sm" data-b02-chat-send="${escapeHtml(a.id)}">返信を送信</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2048,13 +2274,110 @@ window.MachirikuMatchingPages = (function () {
         `;
       }).join("");
 
+      const syncOpenThreadsScroll = () => {
+        listEl.querySelectorAll(".b02-app-drawer.is-open").forEach((drawer) => {
+          scrollB02ThreadToBottom(drawer);
+        });
+      };
+      syncOpenThreadsScroll();
+      requestAnimationFrame(syncOpenThreadsScroll);
+
+      if (b02PendingFocusInputId) {
+        const focusId = b02PendingFocusInputId;
+        b02PendingFocusInputId = null;
+        const focusInput = listEl.querySelector(`[data-b02-chat-input="${CSS.escape(focusId)}"]`);
+        if (focusInput) {
+          focusInput.focus({ preventScroll: true });
+          focusInput.closest(".b02-chat-col")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }
+
+      const setB02DrawerOpen = (cardEl, id, shouldOpen, { focusChat = false } = {}) => {
+        const drawer = cardEl?.querySelector(`[data-b02-drawer="${CSS.escape(id)}"]`);
+        if (!drawer) return;
+
+        const toggleBtn = cardEl.querySelector(`[data-b02-toggle="${CSS.escape(id)}"]`);
+        const toggleLabel = toggleBtn?.querySelector("[data-b02-toggle-label]");
+        const chatCol = drawer.querySelector(".b02-chat-col");
+        const input = drawer.querySelector(`[data-b02-chat-input="${CSS.escape(id)}"]`);
+
+        if (shouldOpen) {
+          b02ExpandedIds.add(id);
+          const targetApp = store.getApplicationById(id);
+          if (targetApp) markB02AppRead(id, getAppChatMessages(targetApp).length);
+
+          drawer.removeAttribute("inert");
+          drawer.removeAttribute("aria-hidden");
+          void drawer.offsetHeight;
+          drawer.classList.add("is-open");
+
+          if (toggleBtn) {
+            toggleBtn.setAttribute("aria-expanded", "true");
+            toggleBtn.classList.remove("has-unread");
+            toggleBtn.querySelector(".b02-btn-unread-badge")?.remove();
+          }
+          if (toggleLabel) toggleLabel.textContent = "詳細・やり取りを閉じる";
+
+          const openChatBtn = cardEl.querySelector(`[data-b02-open-chat="${CSS.escape(id)}"]`);
+          if (openChatBtn && openChatBtn.classList.contains("is-owner-unread")) {
+            openChatBtn.classList.remove("is-owner-unread");
+            openChatBtn.classList.add("is-replied");
+            openChatBtn.textContent = openChatBtn.textContent.replace("未読・返信可", "確認済");
+          }
+
+          const alignChatView = () => {
+            scrollB02ThreadToBottom(drawer);
+            if (focusChat && chatCol) {
+              chatCol.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+          };
+
+          scrollB02ThreadToBottom(drawer);
+          requestAnimationFrame(() => {
+            scrollB02ThreadToBottom(drawer);
+            if (focusChat && input) input.focus({ preventScroll: true });
+          });
+
+          let settled = false;
+          const finishExpand = () => {
+            if (settled) return;
+            settled = true;
+            alignChatView();
+            if (focusChat && input) input.focus({ preventScroll: true });
+          };
+
+          const onEnd = (ev) => {
+            if (ev.target !== drawer || ev.propertyName !== "grid-template-rows") return;
+            drawer.removeEventListener("transitionend", onEnd);
+            finishExpand();
+          };
+          drawer.addEventListener("transitionend", onEnd);
+          window.setTimeout(() => {
+            drawer.removeEventListener("transitionend", onEnd);
+            finishExpand();
+          }, 320);
+        } else {
+          b02ExpandedIds.delete(id);
+          drawer.classList.remove("is-open");
+          drawer.setAttribute("inert", "");
+          drawer.setAttribute("aria-hidden", "true");
+          if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "false");
+          if (toggleLabel) toggleLabel.textContent = "詳細・やり取りを見る";
+        }
+      };
+
       listEl.onclick = (e) => {
+        const openChatBtn = e.target.closest("[data-b02-open-chat]");
+        if (openChatBtn) {
+          const id = openChatBtn.getAttribute("data-b02-open-chat");
+          setB02DrawerOpen(openChatBtn.closest("[data-b02-app-id]"), id, true, { focusChat: true });
+          return;
+        }
         const toggleBtn = e.target.closest("[data-b02-toggle]");
         if (toggleBtn) {
           const id = toggleBtn.getAttribute("data-b02-toggle");
-          if (b02ExpandedIds.has(id)) b02ExpandedIds.delete(id);
-          else b02ExpandedIds.add(id);
-          renderB02Apps();
+          const willOpen = !b02ExpandedIds.has(id);
+          setB02DrawerOpen(toggleBtn.closest("[data-b02-app-id]"), id, willOpen, { focusChat: false });
           return;
         }
         const sendBtn = e.target.closest("[data-b02-chat-send]");
@@ -2068,7 +2391,10 @@ window.MachirikuMatchingPages = (function () {
             return;
           }
           b02ExpandedIds.add(id);
-          store.addApplicationMessage(id, text, "business");
+          b02PendingFocusInputId = id;
+          const msg = store.addApplicationMessage(id, text, "business");
+          const targetApp = store.getApplicationById(id);
+          if (msg && targetApp) markB02AppRead(id, getAppChatMessages(targetApp).length);
           window.MachirikuApp?.showToast?.("オーナーへメッセージを送信しました");
           return;
         }
@@ -2119,6 +2445,7 @@ window.MachirikuMatchingPages = (function () {
       listEl.innerHTML = allVisibleOffers.map((o) => {
         const prop = store.getPropertyById(o.propId);
         const isPending = o.offerStatus === "SENT";
+        const receivedDate = formatDateTimeNoSec(o.sentAt || o.createdAt || "");
         return `
           <article class="detail-card apply-item-card">
             <div class="apply-item-head">
@@ -2126,7 +2453,7 @@ window.MachirikuMatchingPages = (function () {
                 <div class="apply-item-meta">
                   <span class="badge-status ${escapeHtml(getOfferBadgeClass(o.offerStatus))}">${escapeHtml(o.statusLabel || o.offerStatus)}</span>
                   <span class="qual-badge">${o.creationKind === "AUTO" ? "条件マッチ打診" : "オーナー個別打診"}</span>
-                  <span class="apply-item-date">受信日時: ${escapeHtml(o.sentAt || o.createdAt || "")}</span>
+                  <span class="apply-item-date">受信日時: ${escapeHtml(receivedDate)}</span>
                 </div>
                 <h3 class="apply-item-title">
                   <a href="${escapeHtml(propUrl("detail.jsp", { id: o.propId }))}">${escapeHtml(o.propTitle || "提案物件")}</a>

@@ -36,7 +36,7 @@
   }
   String assetVersion = request.getParameter("assetVersion");
   if (assetVersion == null || assetVersion.trim().isEmpty()) {
-    assetVersion = "20261124_matching_v1";
+    assetVersion = "20261125_matching_v2";
   }
   String profileActionUrl = request.getContextPath() + "/jp/machiriku/servlet/user/Profile.action";
 %>
