@@ -9,6 +9,8 @@ public class VoteException extends Exception {
     public static final String PROPERTY_NO_LOCATION = "PROPERTY_NO_LOCATION";
     public static final String NO_LOCATION = "NO_LOCATION";
     public static final String BAD_CHOICES = "BAD_CHOICES";
+    /** 画面で選んだ生活拠点が、本人のものとして存在しない。 */
+    public static final String BAD_LOCATION = "BAD_LOCATION";
 
     private final String code;
 

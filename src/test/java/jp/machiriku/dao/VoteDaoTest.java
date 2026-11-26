@@ -92,6 +92,38 @@ public class VoteDaoTest {
     }
 
     @Test
+    public void residentCanChooseTheLocationUsedForDistance() throws Exception {
+        // 住民1の自宅(101)は物件から遠い。自動なら勤務先(102)だが、自宅を指定すればその距離で保存する。
+        PropertyVote home = dao.saveVote(1, 1, 101, List.of("I0101"), null, null);
+        assertEquals(101, home.getLocationId());
+        assertTrue("自宅は約16km", home.getDistanceKm().doubleValue() > 10);
+        PropertyVote auto = dao.saveVote(1, 1, null, List.of("I0101"), null, null);
+        assertEquals("再投票で自動に戻せる", 102, auto.getLocationId());
+        assertTrue(auto.getDistanceKm().doubleValue() < 1);
+        PropertyVote work = dao.saveVote(1, 1, 102, List.of("I0101"), null, null);
+        assertEquals(102, work.getLocationId());
+        assertEquals(1, count("SELECT count(*) FROM property_votes"));
+    }
+
+    @Test
+    public void chosenLocationMustBeMineAndHaveCoordinates() throws Exception {
+        assertFailsWithLocation(VoteException.BAD_LOCATION, 1, 106);   // 他人の拠点
+        assertFailsWithLocation(VoteException.BAD_LOCATION, 1, 9999);  // 存在しない拠点
+        assertFailsWithLocation(VoteException.NO_LOCATION, 1, 103);    // 自分の拠点だが座標なし
+        assertEquals(0, count("SELECT count(*) FROM property_votes"));
+    }
+
+    @Test
+    public void propertyHiddenByAdminCannotBeVotedOn() throws Exception {
+        try (Statement sql = connection.createStatement()) {
+            sql.execute("ALTER TABLE properties ADD COLUMN admin_hidden_at timestamptz");
+            sql.execute("UPDATE properties SET admin_hidden_at=now() WHERE property_id=5");
+        }
+        assertFails(VoteException.PROPERTY_NOT_FOUND, 1, 5, List.of("I0101"));
+        assertEquals("他の物件は影響を受けない", 1, dao.saveVote(1, 1, List.of("I0101"), null, null).getPropertyId());
+    }
+
+    @Test
     public void acceptsIndustryTypeIdAndIgnoresTrailingBlanks() throws Exception {
         PropertyVote vote = dao.saveVote(1, 1, Arrays.asList("11", "I0101", "", null), null, null);
         assertEquals(2, vote.getChoices().size());
@@ -181,6 +213,15 @@ public class VoteDaoTest {
         dao.saveVote(1, 1, List.of("I0101"), null, null);
         dao.saveVote(1, 5, List.of("I0101"), null, null);
         assertEquals(2, count("SELECT count(*) FROM property_votes"));
+    }
+
+    private void assertFailsWithLocation(String code, int userId, int locationId) throws Exception {
+        try {
+            dao.saveVote(userId, 1, locationId, List.of("I0101"), null, null);
+            fail("expected " + code);
+        } catch (VoteException e) {
+            assertEquals(code, e.getCode());
+        }
     }
 
     private void assertFails(String code, int userId, int propertyId, List<String> keys) throws Exception {

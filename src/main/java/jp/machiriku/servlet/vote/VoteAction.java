@@ -18,7 +18,7 @@ import jp.machiriku.tool.Action;
  * 地域住民の物件投票API。結果はすべてJSONで返す(画面のS03から呼ばれる想定)。
  * <ul>
  *   <li>GET  ?propertyId=N                       自分の投票内容を取得(未投票なら vote が null)</li>
- *   <li>POST propertyId, rank1〜rank3, frequency, comment   投票・再投票</li>
+ *   <li>POST propertyId, rank1〜rank3, frequency, comment [, locationId]   投票・再投票(locationId は距離の基準にする生活拠点。省略すると一番近い拠点)</li>
  *   <li>POST propertyId, withdraw=1              投票の取消</li>
  * </ul>
  * POSTは画面のJavaScriptから送り、ヘッダー X-Requested-With: XMLHttpRequest を付ける。
@@ -95,7 +95,17 @@ public class VoteAction extends Action {
         boolean updated = voteDao.findVote(user.getUserId(), propertyId).filter(v -> !v.isWithdrawn()).isPresent();
         String frequency = req.getParameter("frequency");
         if (frequency == null) { frequency = req.getParameter("visitFrequency"); }
-        PropertyVote saved = voteDao.saveVote(user.getUserId(), propertyId,
+        Integer locationId = null;
+        String rawLocation = req.getParameter("locationId");
+        if (rawLocation != null && !rawLocation.isBlank()) {
+            try {
+                locationId = Integer.valueOf(rawLocation.strip());
+                if (locationId < 1) { throw new NumberFormatException(); }
+            } catch (NumberFormatException e) {
+                throw new VoteException(VoteException.INVALID_INPUT, "生活拠点が正しくありません。");
+            }
+        }
+        PropertyVote saved = voteDao.saveVote(user.getUserId(), propertyId, locationId,
                 List.of(nullToEmpty(req.getParameter("rank1")), nullToEmpty(req.getParameter("rank2")), nullToEmpty(req.getParameter("rank3"))),
                 frequency, req.getParameter("comment"));
         Map<String, Object> body = new LinkedHashMap<>();
@@ -109,7 +119,7 @@ public class VoteAction extends Action {
 
     private static int statusOf(String code) {
         return switch (code) {
-            case VoteException.INVALID_INPUT, VoteException.BAD_CHOICES -> 400;
+            case VoteException.INVALID_INPUT, VoteException.BAD_CHOICES, VoteException.BAD_LOCATION -> 400;
             case VoteException.NOT_RESIDENT -> 403;
             case VoteException.PROPERTY_NOT_FOUND -> 404;
             case VoteException.PROPERTY_CLOSED, VoteException.PROPERTY_NO_LOCATION, VoteException.NO_LOCATION -> 409;

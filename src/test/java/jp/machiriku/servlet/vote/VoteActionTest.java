@@ -179,11 +179,52 @@ public class VoteActionTest {
     }
 
     @Test
+    public void locationIdIsPassedToTheDaoAndOptional() throws Exception {
+        FakeDao dao = new FakeDao();
+        Harness h = Harness.as("POST", "RESIDENT", "ACTIVE");
+        h.headers.put("X-Requested-With", "XMLHttpRequest");
+        h.parameters.put("propertyId", "7");
+        h.parameters.put("rank1", "I0101");
+        h.parameters.put("locationId", " 103 ");
+        new VoteAction(dao).execute(h.request, h.response);
+        assertEquals(200, h.status);
+        assertEquals(Integer.valueOf(103), dao.locationId);
+
+        FakeDao without = new FakeDao();
+        for (String blank : new String[] {null, "", "  "}) {
+            Harness none = Harness.as("POST", "RESIDENT", "ACTIVE");
+            none.headers.put("X-Requested-With", "XMLHttpRequest");
+            none.parameters.put("propertyId", "7");
+            none.parameters.put("rank1", "I0101");
+            if (blank != null) none.parameters.put("locationId", blank);
+            new VoteAction(without).execute(none.request, none.response);
+            assertEquals(200, none.status);
+            assertNull("未指定なら一番近い拠点", without.locationId);
+        }
+    }
+
+    @Test
+    public void invalidLocationIdIs400WithoutSaving() throws Exception {
+        for (String value : new String[] {"abc", "0", "-1", "1.5"}) {
+            FakeDao dao = new FakeDao();
+            Harness h = Harness.as("POST", "RESIDENT", "ACTIVE");
+            h.headers.put("X-Requested-With", "XMLHttpRequest");
+            h.parameters.put("propertyId", "7");
+            h.parameters.put("rank1", "I0101");
+            h.parameters.put("locationId", value);
+            new VoteAction(dao).execute(h.request, h.response);
+            assertEquals("locationId=" + value, 400, h.status);
+            assertEquals("INVALID_INPUT", h.json().get("code").asText());
+            assertEquals(0, dao.saves);
+        }
+    }
+
+    @Test
     public void voteExceptionsMapToStatusCodes() throws Exception {
         Map<String, Integer> expected = Map.of(
                 VoteException.BAD_CHOICES, 400, VoteException.INVALID_INPUT, 400, VoteException.PROPERTY_NOT_FOUND, 404,
                 VoteException.PROPERTY_CLOSED, 409, VoteException.PROPERTY_NO_LOCATION, 409, VoteException.NO_LOCATION, 409,
-                VoteException.NOT_RESIDENT, 403);
+                VoteException.NOT_RESIDENT, 403, VoteException.BAD_LOCATION, 400);
         for (Map.Entry<String, Integer> entry : expected.entrySet()) {
             FakeDao dao = new FakeDao();
             dao.failure = new VoteException(entry.getKey(), "メッセージ");
@@ -252,11 +293,13 @@ public class VoteActionTest {
         SQLException sqlFailure;
         int saves, withdraws, userId, propertyId;
         List<String> keys;
+        Integer locationId;
         String frequency, comment;
 
         @Override
-        public PropertyVote saveVote(int userId, int propertyId, List<String> keys, String frequency, String comment)
+        public PropertyVote saveVote(int userId, int propertyId, Integer locationId, List<String> keys, String frequency, String comment)
                 throws SQLException, VoteException {
+            this.locationId = locationId;
             if (sqlFailure != null) throw sqlFailure;
             if (failure != null) throw failure;
             saves++;

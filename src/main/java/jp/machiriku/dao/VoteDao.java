@@ -35,6 +35,17 @@ public class VoteDao extends Dao {
      */
     public PropertyVote saveVote(int userId, int propertyId, List<String> industryKeys,
             String visitFrequency, String requestComment) throws SQLException, VoteException {
+        return saveVote(userId, propertyId, null, industryKeys, visitFrequency, requestComment);
+    }
+
+    /**
+     * 距離の基準にする生活拠点を指定して投票を保存する。
+     *
+     * @param locationId 距離の基準にする生活拠点(user_locations.location_id)。null なら、座標のある拠点のうち物件に最も近いものを使う。
+     *        指定する場合は本人の拠点で、座標が登録されている必要がある。
+     */
+    public PropertyVote saveVote(int userId, int propertyId, Integer locationId, List<String> industryKeys,
+            String visitFrequency, String requestComment) throws SQLException, VoteException {
         String frequency = blankToNull(visitFrequency);
         String comment = blankToNull(requestComment);
         if (frequency != null && frequency.length() > FREQUENCY_MAX_LENGTH) {
@@ -50,7 +61,7 @@ public class VoteDao extends Dao {
                 requireActiveResident(connection, userId);
                 BigDecimal[] property = loadOpenProperty(connection, propertyId); // [緯度, 経度, 距離の基準(km)]
                 int[] nearestLocation = new int[1];
-                BigDecimal distanceKm = nearestDistance(connection, userId, property, nearestLocation);
+                BigDecimal distanceKm = chooseDistance(connection, userId, property, locationId, nearestLocation);
                 List<Integer> typeIds = resolveChoices(connection, industryKeys);
 
                 int voteId = upsertVote(connection, propertyId, userId, nearestLocation[0], distanceKm, property[2], frequency, comment);
@@ -99,7 +110,7 @@ public class VoteDao extends Dao {
     private static BigDecimal[] loadOpenProperty(Connection connection, int propertyId) throws SQLException, VoteException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT listing_status, latitude, longitude, distance_scale_km FROM properties "
-                + "WHERE property_id=? AND deleted_at IS NULL FOR SHARE")) {
+                + "WHERE property_id=? AND deleted_at IS NULL AND to_jsonb(properties)->>'admin_hidden_at' IS NULL FOR SHARE")) {
             statement.setInt(1, propertyId);
             try (ResultSet rows = statement.executeQuery()) {
                 if (!rows.next()) { throw new VoteException(VoteException.PROPERTY_NOT_FOUND, "物件が見つかりません。"); }
@@ -110,6 +121,32 @@ public class VoteDao extends Dao {
                     throw new VoteException(VoteException.PROPERTY_NO_LOCATION, "この物件は位置情報が未登録のため投票できません。");
                 }
                 return new BigDecimal[] {latitude, longitude, rows.getBigDecimal(4)};
+            }
+        }
+    }
+
+    /**
+     * 距離の基準にする拠点を決めて、距離(km、小数第3位)を返す。locationId があればその拠点(本人のもので、座標があること)、
+     * なければ座標のある拠点のうち最も近いもの。採用した拠点IDは outLocationId[0]。
+     */
+    private static BigDecimal chooseDistance(Connection connection, int userId, BigDecimal[] property, Integer locationId, int[] outLocationId)
+            throws SQLException, VoteException {
+        if (locationId == null) { return nearestDistance(connection, userId, property, outLocationId); }
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT latitude, longitude FROM user_locations WHERE location_id=? AND user_id=?")) {
+            statement.setInt(1, locationId);
+            statement.setInt(2, userId);
+            try (ResultSet rows = statement.executeQuery()) {
+                if (!rows.next()) { throw new VoteException(VoteException.BAD_LOCATION, "選択した生活拠点が見つかりません。"); }
+                BigDecimal latitude = rows.getBigDecimal(1);
+                BigDecimal longitude = rows.getBigDecimal(2);
+                if (latitude == null || longitude == null) {
+                    throw new VoteException(VoteException.NO_LOCATION, "選択した生活拠点は位置情報が未登録のため、基準にできません。");
+                }
+                outLocationId[0] = locationId;
+                return DistanceCalculator.toDbScale(DistanceCalculator.distanceKm(
+                        new Point(property[0].doubleValue(), property[1].doubleValue()),
+                        new Point(latitude.doubleValue(), longitude.doubleValue())));
             }
         }
     }

@@ -49,6 +49,17 @@ final class VoteSupport {
     }
 
     /**
+     * ログイン中で、初期設定済み・退会していない会員を返す。条件を満たさなければ null(エラー応答は出さない)。
+     * 集計の閲覧のように、ログインなしでも見られる情報で「ログイン中ならここまで見せる」を分けるときに使う。
+     */
+    static User currentActiveMember(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        if (session == null || !(session.getAttribute("user") instanceof User user)) { return null; }
+        if (user.getWithdrawnAt() != null || !"ACTIVE".equals(user.getAccountStatus())) { return null; }
+        return user;
+    }
+
+    /**
      * 他サイトからのフォーム送信(CSRF)を防ぐため、更新系は画面のJavaScriptからだけ受け付ける。
      * ブラウザは別サイトからカスタムヘッダー付きの送信を許可しないため、このヘッダーの有無で判別できる。
      */
