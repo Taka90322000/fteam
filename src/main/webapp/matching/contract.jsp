@@ -3,7 +3,7 @@
   <jsp:param name="title" value="契約成立・物件引渡し記録 | マチリク" />
   <jsp:param name="description" value="当事者間で成立した賃貸借契約の記録と、オーナー・事業主双方による物件引渡し確認を行います。" />
   <jsp:param name="pageScreenId" value="s14" />
-  <jsp:param name="assetVersion" value="20261124_matching_v1" />
+  <jsp:param name="assetVersion" value="20261126_matching_v10" />
 </jsp:include>
 
     <section id="s14-section" class="screen-view s14-view" data-screen="S14">
@@ -17,9 +17,9 @@
         </nav>
         <div class="page-title-row">
           <h1 class="page-title">契約成立・物件引渡し記録</h1>
-          <span id="s14-status-badge" class="badge-status status-reviewing">オーナー・事業主</span>
+          <span id="s14-status-badge" class="badge-status status-reviewing">契約情報未記録</span>
         </div>
-        <p class="page-description">当事者間で成立した契約条件と物件引渡しの確認を記録します。双方の引渡し確認が完了すると、出店計画の公開へ進めます。</p>
+        <p class="page-description">契約条件を記録したあと、オーナー・事業主それぞれの引渡し／受領確認を完了すると出店計画の公開へ進めます。</p>
       </div>
 
       <div id="s14-role-notice" class="role-switch-notice" hidden>
@@ -41,42 +41,43 @@
       </div>
 
       <div id="s14-content-wrap">
-        <div class="analytics-selector-bar">
-          <div class="analytics-selector-group">
-            <label for="s14-app-select">対象の契約・合意案件:</label>
-            <select id="s14-app-select" class="form-select analytics-select"></select>
+        <div class="detail-card s14-top-overview">
+          <div class="s14-selector-row">
+            <div class="analytics-selector-group">
+              <label for="s14-app-select">対象案件:</label>
+              <select id="s14-app-select" class="form-select analytics-select"></select>
+            </div>
+            <div id="s14-quick-summary" class="s14-summary-strip"></div>
           </div>
-          <div class="analytics-quick-links">
-            <a id="s14-link-prop" class="btn-secondary btn-sm" href="${pageContext.request.contextPath}/property/detail.jsp">物件詳細を見る</a>
-            <a id="s14-link-app" class="btn-secondary btn-sm" href="${pageContext.request.contextPath}/property/apply-detail.jsp">応募詳細に戻る</a>
-          </div>
-        </div>
-
-        <div class="detail-card matching-steps-card">
-          <h2 class="o10-card-heading">契約・引渡しの進行状況</h2>
-          <ol id="s14-steps-list" class="opening-steps" aria-label="契約と引渡しの進み具合"></ol>
-        </div>
-
-        <div class="matching-legal-note" role="note">
-          <strong>ご確認：</strong>本画面は当事者間（または宅建業者を介した手続き）で締結された賃貸借契約・短期利用契約の内容と引渡し完了をシステム上に記録するためのものです。マチリク上で契約締結の仲介自体は行いません。
+          <details id="s14-steps-details" class="s14-steps-details" open>
+            <summary id="s14-steps-summary" class="s14-steps-summary">
+              <span id="s14-steps-compact-label" class="s14-summary-title">ステップ 2/4：契約情報の記録</span>
+              <span class="s14-summary-hint">全工程</span>
+            </summary>
+            <ol id="s14-steps-list" class="opening-steps s14-compact-steps" aria-label="契約と引渡しの進行状況"></ol>
+          </details>
         </div>
 
         <div class="o10-layout matching-two-col">
           <div class="o10-main-col">
-            <section class="detail-card o10-card" aria-labelledby="s14-summary-heading">
-              <h2 id="s14-summary-heading" class="o10-card-heading">対象物件・出店者サマリー</h2>
-              <dl id="s14-summary-grid" class="o10-summary-grid"></dl>
-            </section>
-
             <div class="form-stepper-box matching-form-card">
-              <div class="stepper-header">
-                <h2 id="s14-form-heading" class="prop-target-heading">契約条件・引渡し内容の記録</h2>
-                <div id="s14-form-meta" class="prop-target-sub"></div>
-              </div>
+              <details id="s14-step2-details" class="s14-step2-details" open>
+                <summary id="s14-step2-summary" class="s14-step2-summary">
+                  <span class="s14-step2-summary-text">
+                    <span id="s14-step2-summary-label">ステップ2：契約条件の記録</span>
+                    <span id="s14-step2-summary-badge" class="step-state-badge is-now">現在</span>
+                  </span>
+                  <span id="s14-step2-summary-hint" class="s14-summary-hint">入力する</span>
+                </summary>
+                <div class="s14-step2-body">
+                  <div class="stepper-header">
+                    <h2 id="s14-form-heading" class="prop-target-heading">ステップ2：契約条件の記録</h2>
+                    <div id="s14-form-meta" class="prop-target-sub"></div>
+                  </div>
 
-              <form id="s14-contract-form" action="${pageContext.request.contextPath}/matching/contract.jsp" method="POST" aria-labelledby="s14-form-heading">
+                  <form id="s14-contract-form" action="${pageContext.request.contextPath}/matching/contract.jsp" method="POST" aria-labelledby="s14-form-heading">
                 <fieldset class="form-section-block form-fieldset-reset">
-                  <legend class="form-block-title">1. 契約の基本情報</legend>
+                  <legend class="form-block-title">契約の基本情報・特記事項</legend>
 
                   <div class="form-group">
                     <label for="s14-store-name">出店店舗名（屋号） <span class="req-mark">*必須</span></label>
@@ -124,59 +125,65 @@
                     <label for="s14-contract-term">契約種別・更新条件 <span class="opt-mark">（任意）</span></label>
                     <input id="s14-contract-term" type="text" name="contractTerm" class="form-control" maxlength="150" placeholder="例: 普通借家契約 2年間（更新可） / 短期ポップアップ利用">
                   </div>
-                </fieldset>
-
-                <fieldset class="form-section-block form-fieldset-reset">
-                  <legend class="form-block-title">2. 引渡し時チェックリスト・特記事項</legend>
 
                   <div class="form-group">
-                    <span class="field-label">現地引渡し確認項目 <span class="opt-mark">（確認できたものにチェック）</span></span>
-                    <div class="matching-check-grid">
-                      <div class="check-chip">
-                        <input id="s14-chk-key" type="checkbox" name="handoverCheck" value="keys">
-                        <label for="s14-chk-key">店舗鍵・セキュリティカードの受渡し</label>
-                      </div>
-                      <div class="check-chip">
-                        <input id="s14-chk-equip" type="checkbox" name="handoverCheck" value="equipment">
-                        <label for="s14-chk-equip">居抜き設備・残置物の状態確認</label>
-                      </div>
-                      <div class="check-chip">
-                        <input id="s14-chk-meter" type="checkbox" name="handoverCheck" value="meters">
-                        <label for="s14-chk-meter">電気・ガス・水道メーター確認</label>
-                      </div>
-                      <div class="check-chip">
-                        <input id="s14-chk-sign" type="checkbox" name="handoverCheck" value="signage">
-                        <label for="s14-chk-sign">改装範囲・看板設置条件の合意</label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="form-group">
-                    <label for="s14-notes">合意特記事項・引渡しメモ <span class="opt-mark">（任意）</span></label>
+                    <label for="s14-notes">合意特記事項・契約メモ <span class="opt-mark">（任意）</span></label>
                     <textarea id="s14-notes" name="handoverNotes" class="form-control auto-grow-textarea" maxlength="2000" placeholder="例: フリーレント1ヶ月適用。内装工事期間は○月○日まで。原状回復範囲は別途覚書のとおり。"></textarea>
                   </div>
                 </fieldset>
 
                 <div class="form-actions-bar form-actions-split">
                   <a id="s14-back-btn" class="btn-secondary" href="${pageContext.request.contextPath}/property/apply-list.jsp">一覧へ戻る</a>
-                  <button type="submit" id="s14-save-btn" class="btn-primary">契約情報を保存する</button>
+                  <button type="submit" id="s14-save-btn" class="btn-primary">契約情報を記録する</button>
                 </div>
               </form>
+                </div>
+              </details>
             </div>
           </div>
 
-          <aside class="o10-side-col" aria-label="双方引渡し確認パネル">
+          <aside class="o10-side-col" aria-label="ステップ3：現地チェックと双方引渡し確認パネル">
             <section class="detail-card o10-card" aria-labelledby="s14-handover-heading">
-              <h2 id="s14-handover-heading" class="o10-card-heading">双方の物件引渡し確認</h2>
-              <p class="matching-panel-lead">契約情報を保存したあと、オーナーによる「引渡し確認」と事業主による「受領確認」の両方が完了すると、開店準備フェーズへ移行します。</p>
+              <h2 id="s14-handover-heading" class="o10-card-heading">ステップ3：双方の物件引渡し確認</h2>
+              <p class="matching-panel-lead">契約情報を保存したあと、引渡し当日の現地確認とオーナー・事業主双方の完了記録を行います。</p>
 
-              <div class="matching-dual-confirm">
+              <div id="s14-handover-gate" class="s14-handover-gate" hidden>
+                先に左側の<strong>「ステップ2：契約条件の記録」</strong>を保存すると、現地チェックと引渡し確認を実行できます。
+              </div>
+
+              <div id="s14-checklist-box" class="s14-checklist-box">
+                <div class="s14-checklist-head">
+                  <strong>現地引渡しチェックリスト</strong>
+                  <span class="opt-mark">（引渡し時に随時更新可）</span>
+                </div>
+                <div class="matching-check-grid s14-side-check-grid">
+                  <div class="check-chip">
+                    <input id="s14-chk-key" type="checkbox" name="handoverCheck" value="keys">
+                    <label for="s14-chk-key">店舗鍵・セキュリティカードの受渡し</label>
+                  </div>
+                  <div class="check-chip">
+                    <input id="s14-chk-equip" type="checkbox" name="handoverCheck" value="equipment">
+                    <label for="s14-chk-equip">居抜き設備・残置物の状態確認</label>
+                  </div>
+                  <div class="check-chip">
+                    <input id="s14-chk-meter" type="checkbox" name="handoverCheck" value="meters">
+                    <label for="s14-chk-meter">電気・ガス・水道メーター確認</label>
+                  </div>
+                  <div class="check-chip">
+                    <input id="s14-chk-sign" type="checkbox" name="handoverCheck" value="signage">
+                    <label for="s14-chk-sign">改装範囲・看板設置条件の合意</label>
+                  </div>
+                </div>
+              </div>
+
+              <div id="s14-dual-confirm" class="matching-dual-confirm">
                 <div class="matching-confirm-box" id="s14-owner-confirm-box">
                   <div class="matching-confirm-head">
                     <strong>オーナー側：引渡し確認</strong>
                     <span id="s14-owner-confirm-badge" class="req-badge-info">未確認</span>
                   </div>
                   <p id="s14-owner-confirm-time" class="matching-confirm-time">確認日時: —</p>
+                  <p id="s14-owner-confirm-status" class="matching-confirm-note" hidden></p>
                   <button type="button" id="s14-owner-confirm-btn" class="btn-primary btn-sm">オーナーとして引渡し完了を記録</button>
                 </div>
 
@@ -186,6 +193,7 @@
                     <span id="s14-biz-confirm-badge" class="req-badge-info">未確認</span>
                   </div>
                   <p id="s14-biz-confirm-time" class="matching-confirm-time">確認日時: —</p>
+                  <p id="s14-biz-confirm-status" class="matching-confirm-note" hidden></p>
                   <button type="button" id="s14-biz-confirm-btn" class="btn-primary btn-sm">事業主として受領完了を記録</button>
                 </div>
               </div>
@@ -196,12 +204,21 @@
                 <a id="s14-next-progress-link" class="btn-secondary btn-sm" href="${pageContext.request.contextPath}/matching/progress.jsp">開店のようすページを確認する</a>
               </div>
             </section>
+
+            <section class="detail-card o10-card" aria-labelledby="s14-summary-heading">
+              <h2 id="s14-summary-heading" class="o10-card-heading">対象物件・出店者サマリー</h2>
+              <dl id="s14-summary-grid" class="o10-summary-grid"></dl>
+            </section>
           </aside>
+        </div>
+
+        <div class="matching-legal-note" role="note">
+          <strong>ご確認：</strong>本画面は当事者間（または宅建業者を介した手続き）で締結された賃貸借契約・短期利用契約の内容と引渡し完了をシステム上に記録するためのものです。マチリク上で契約締結の仲介自体は行いません。
         </div>
       </div>
     </section>
 
 <jsp:include page="/WEB-INF/views/common/portal_footer.jsp">
   <jsp:param name="pageScreenId" value="s14" />
-  <jsp:param name="assetVersion" value="20261124_matching_v1" />
+  <jsp:param name="assetVersion" value="20261126_matching_v10" />
 </jsp:include>

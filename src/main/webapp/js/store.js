@@ -938,6 +938,15 @@ window.MachirikuStore = (function() {
     return { success: true, tenancy: record, bothConfirmed };
   }
 
+  function updateTenancyChecklist(tenancyId, checklist = []) {
+    const record = getTenancyById(tenancyId);
+    if (!record) return { success: false, message: "契約記録が見つかりません。" };
+    record.checklist = Array.isArray(checklist) ? [...checklist] : [];
+    record.updatedAt = new Date().toLocaleString("ja-JP");
+    notify();
+    return { success: true, tenancy: record };
+  }
+
   // =========================================================================
   // 出店計画・お知らせ管理 (S15 / S05 / opening_plans テーブル準拠)
   // =========================================================================
@@ -1610,6 +1619,7 @@ window.MachirikuStore = (function() {
     getTenancyByPropertyId,
     saveTenancy,
     confirmTenancyHandover,
+    updateTenancyChecklist,
     getOpeningPlans,
     getOpeningPlanById,
     saveOpeningPlan,

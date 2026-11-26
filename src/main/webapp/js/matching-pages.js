@@ -961,6 +961,82 @@ window.MachirikuMatchingPages = (function () {
   // S14: matching/contract.jsp (契約成立・物件引渡し記録 / オーナー・事業主)
   // =========================================================================
   let s14SelectedAppId = "";
+  let s14PrevAppId = "";
+  let s14MobileStepsToggled = false;
+  let s14MobileStep2Toggled = false;
+  let s14SyncingDetails = false;
+  let s14LastWorkflow = null;
+  let s14MediaListenerBound = false;
+
+  function syncS14Disclosures(workflow) {
+    if (!workflow) return;
+    const stepsDetails = document.getElementById("s14-steps-details");
+    const step2Details = document.getElementById("s14-step2-details");
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    s14SyncingDetails = true;
+    try {
+      if (isMobile) {
+        if (stepsDetails && !s14MobileStepsToggled) stepsDetails.open = false;
+        if (step2Details && !s14MobileStep2Toggled) step2Details.open = !workflow.isContractSaved;
+      } else {
+        if (stepsDetails) stepsDetails.open = true;
+        if (step2Details) step2Details.open = true;
+      }
+    } finally {
+      s14SyncingDetails = false;
+    }
+  }
+
+  function getS14WorkflowState(app, tenancy) {
+    if (!tenancy) {
+      return {
+        label: "契約情報未記録",
+        badgeClass: "status-reviewing",
+        stepIndex: 1,
+        isContractSaved: false,
+        ownerDone: false,
+        bizDone: false,
+        bothDone: false
+      };
+    }
+    const ownerDone = Boolean(tenancy.ownerHandoverAt);
+    const bizDone = Boolean(tenancy.businessHandoverAt);
+    const bothDone = ownerDone && bizDone;
+    if (tenancy.tenancyStatus === "OPEN") {
+      return {
+        label: "営業中・公開済み",
+        badgeClass: "status-app-contracted",
+        stepIndex: 3,
+        isContractSaved: true,
+        ownerDone: true,
+        bizDone: true,
+        bothDone: true
+      };
+    }
+    if (tenancy.tenancyStatus === "HANDED_OVER" || bothDone) {
+      return {
+        label: "契約成立・引渡し完了",
+        badgeClass: "status-app-contracted",
+        stepIndex: 3,
+        isContractSaved: true,
+        ownerDone: true,
+        bizDone: true,
+        bothDone: true
+      };
+    }
+    let waitLabel = "契約記録済み・引渡し確認待ち";
+    if (ownerDone && !bizDone) waitLabel = "引渡し確認中（事業主確認待ち）";
+    else if (!ownerDone && bizDone) waitLabel = "引渡し確認中（オーナー確認待ち）";
+    return {
+      label: waitLabel,
+      badgeClass: "status-app-approved",
+      stepIndex: 2,
+      isContractSaved: true,
+      ownerDone,
+      bizDone,
+      bothDone: false
+    };
+  }
 
   function hydrateS14(params = {}) {
     const sectionEl = document.getElementById("s14-section");
@@ -974,6 +1050,8 @@ window.MachirikuMatchingPages = (function () {
 
     const state = store.getState();
     const isBizView = state.currentRole === "business";
+    const isOwnerActor = state.currentRole === "owner" || state.currentRole === "admin";
+    const isBizActor = state.currentRole === "business" || state.currentRole === "admin";
     const bcList = document.getElementById("s14-bc-list");
     const backBtn = document.getElementById("s14-back-btn");
     if (bcList) {
@@ -1005,18 +1083,27 @@ window.MachirikuMatchingPages = (function () {
 
     const requestedId = params?.id || params?.appId || s14SelectedAppId;
     const activeApp = eligibleApps.find((a) => a.id === requestedId) || eligibleApps[0];
+    if (s14PrevAppId !== activeApp.id) {
+      s14MobileStepsToggled = false;
+      s14MobileStep2Toggled = false;
+      s14PrevAppId = activeApp.id;
+    }
     s14SelectedAppId = activeApp.id;
 
     const prop = store.getPropertyById(activeApp.propId);
     const tenancy = store.getTenancyByApplicationId(activeApp.id);
+    const workflow = getS14WorkflowState(activeApp, tenancy);
+    s14LastWorkflow = workflow;
 
-    // 案件セレクタ
+    // 案件セレクタ（物件名を先頭に置き、モバイルでも建物・部屋番号を識別しやすくする）
     const appSelect = document.getElementById("s14-app-select");
     if (appSelect) {
-      appSelect.innerHTML = eligibleApps.map((a) => {
-        const t = store.getTenancyByApplicationId(a.id);
-        const stLabel = t ? t.statusLabel : (a.statusLabel || a.status);
-        return `<option value="${escapeHtml(a.id)}" ${a.id === activeApp.id ? "selected" : ""}>${escapeHtml(a.storeName)} ／ ${escapeHtml(a.propTitle)}（${escapeHtml(stLabel)}）</option>`;
+      const supportsBaseSelect = Boolean(window.CSS?.supports?.("appearance", "base-select"));
+      const triggerHtml = supportsBaseSelect
+        ? '<button type="button" class="s14-select-trigger"><selectedcontent class="s14-select-value"></selectedcontent></button>'
+        : "";
+      appSelect.innerHTML = triggerHtml + eligibleApps.map((a) => {
+        return `<option value="${escapeHtml(a.id)}" ${a.id === activeApp.id ? "selected" : ""}>${escapeHtml(a.propTitle)} ／ ${escapeHtml(a.storeName)}</option>`;
       }).join("");
       appSelect.onchange = () => {
         s14SelectedAppId = appSelect.value;
@@ -1024,32 +1111,75 @@ window.MachirikuMatchingPages = (function () {
       };
     }
 
-    const linkProp = document.getElementById("s14-link-prop");
-    const linkApp = document.getElementById("s14-link-app");
-    if (linkProp && prop) linkProp.href = propUrl("detail.jsp", { id: prop.id });
-    if (linkApp) {
-      linkApp.href = isBizView
-        ? matchingUrl("applications.jsp")
-        : propUrl("apply-detail.jsp", { id: activeApp.id });
-      linkApp.textContent = isBizView ? "応募状況一覧に戻る" : "応募詳細に戻る";
+    const quickSummaryEl = document.getElementById("s14-quick-summary");
+    if (quickSummaryEl) {
+      const propTitle = prop ? prop.title : (activeApp.propTitle || "-");
+      const propLinkHtml = prop
+        ? `<a href="${escapeHtml(propUrl("detail.jsp", { id: prop.id }))}">${escapeHtml(propTitle)}</a>`
+        : `<span>${escapeHtml(propTitle)}</span>`;
+      quickSummaryEl.innerHTML = `
+        <span class="s14-strip-item">物件: ${propLinkHtml}</span>
+        <span class="s14-strip-sep" aria-hidden="true">/</span>
+        <span class="s14-strip-item">出店者: <strong>${escapeHtml(activeApp.applicantName || "-")}</strong></span>
+      `;
     }
 
     // ヘッダーステータスバッジ＆進行ステップバー
     const statusBadge = document.getElementById("s14-status-badge");
-    const currentStepIdx = tenancy
-      ? (tenancy.tenancyStatus === "OPEN" ? 3 : (tenancy.tenancyStatus === "HANDED_OVER" ? 3 : 2))
-      : 1;
     if (statusBadge) {
-      statusBadge.textContent = tenancy ? tenancy.statusLabel : (activeApp.statusLabel || "出店合意");
-      statusBadge.className = `badge-status ${tenancy?.tenancyStatus === "HANDED_OVER" || tenancy?.tenancyStatus === "OPEN" ? "status-app-contracted" : "status-app-approved"}`;
+      statusBadge.textContent = workflow.label;
+      statusBadge.className = `badge-status ${workflow.badgeClass}`;
     }
+
+    const stages = ["出店合意", "契約情報の記録", "双方の物件引渡し確認", "出店計画の公開"];
+    setText("s14-steps-compact-label", `ステップ ${workflow.stepIndex + 1}/${stages.length}：${stages[workflow.stepIndex]}`);
+
+    const step2SummaryBadge = document.getElementById("s14-step2-summary-badge");
+    const step2SummaryHint = document.getElementById("s14-step2-summary-hint");
+    if (step2SummaryBadge) {
+      step2SummaryBadge.textContent = workflow.isContractSaved ? "完了 ✓" : "現在";
+      step2SummaryBadge.className = `step-state-badge ${workflow.isContractSaved ? "is-done" : "is-now"}`;
+    }
+    if (step2SummaryHint) {
+      step2SummaryHint.textContent = workflow.isContractSaved ? "編集" : "入力";
+    }
+
+    const stepsDetailsEl = document.getElementById("s14-steps-details");
+    const step2DetailsEl = document.getElementById("s14-step2-details");
+    if (stepsDetailsEl) {
+      stepsDetailsEl.ontoggle = () => {
+        if (!s14SyncingDetails && window.matchMedia("(max-width: 768px)").matches) {
+          s14MobileStepsToggled = true;
+        }
+      };
+    }
+    if (step2DetailsEl) {
+      step2DetailsEl.ontoggle = () => {
+        if (!s14SyncingDetails && window.matchMedia("(max-width: 768px)").matches) {
+          s14MobileStep2Toggled = true;
+        }
+      };
+    }
+    if (!s14MediaListenerBound && window.matchMedia) {
+      s14MediaListenerBound = true;
+      window.matchMedia("(max-width: 768px)").addEventListener("change", () => {
+        syncS14Disclosures(s14LastWorkflow);
+      });
+    }
+    syncS14Disclosures(workflow);
 
     const stepsEl = document.getElementById("s14-steps-list");
     if (stepsEl) {
-      const stages = ["出店合意", "契約情報の記録", "双方の物件引渡し確認", "出店計画の公開"];
       stepsEl.innerHTML = stages.map((label, idx) => {
-        const cls = idx < currentStepIdx ? "is-complete" : (idx === currentStepIdx ? "is-current" : "");
-        return `<li class="${cls}"${idx === currentStepIdx ? ' aria-current="step"' : ""}><span class="step-number">${idx + 1}</span><span>${escapeHtml(label)}${idx === currentStepIdx ? "<small>現在</small>" : ""}</span></li>`;
+        const isComplete = idx < workflow.stepIndex;
+        const isCurrent = idx === workflow.stepIndex;
+        const cls = isComplete ? "is-complete" : (isCurrent ? "is-current" : "");
+        const badgeHtml = isComplete
+          ? '<small class="step-state-badge is-done">完了 ✓</small>'
+          : (isCurrent
+            ? '<small class="step-state-badge is-now">現在</small>'
+            : '<small class="step-state-badge is-pending">未着手</small>');
+        return `<li class="${cls}"${isCurrent ? ' aria-current="step"' : ""}><span class="step-number">${idx + 1}</span><span>${escapeHtml(label)}${badgeHtml}</span></li>`;
       }).join("");
     }
 
@@ -1080,7 +1210,7 @@ window.MachirikuMatchingPages = (function () {
         </div>
         <div class="o10-summary-item">
           <dt>現在の出店状態</dt>
-          <dd>${escapeHtml(tenancy ? tenancy.statusLabel : "契約情報未記録")}</dd>
+          <dd>${escapeHtml(workflow.label)}</dd>
         </div>
       `;
     }
@@ -1114,10 +1244,6 @@ window.MachirikuMatchingPages = (function () {
     if (saveBtn) saveBtn.textContent = tenancy ? "契約情報を更新する" : "契約情報を記録する";
 
     const form = document.getElementById("s14-contract-form");
-    form?.querySelectorAll('input[name="handoverCheck"]').forEach((cb) => {
-      cb.checked = Array.isArray(tenancy?.checklist) ? tenancy.checklist.includes(cb.value) : false;
-    });
-
     const validationCtrl = initAccessibleFormValidation(form, { announcerId: "s14-live-announcer" });
 
     const validateContractDates = () => {
@@ -1153,7 +1279,6 @@ window.MachirikuMatchingPages = (function () {
           }
           return;
         }
-        const checklist = Array.from(form.querySelectorAll('input[name="handoverCheck"]:checked')).map((cb) => cb.value);
         const res = store.saveTenancy({
           id: tenancy?.id,
           applicationId: activeApp.id,
@@ -1165,31 +1290,53 @@ window.MachirikuMatchingPages = (function () {
           agreedRent: Number(String(rentEl?.value || "").replace(/[^\d]/g, "")) || 0,
           confirmedDate: confDateEl?.value || todayIso(),
           contractTerm: termEl?.value.trim() || "",
-          checklist,
           handoverNotes: notesEl?.value.trim() || ""
         });
         if (!res.success) {
           window.MachirikuApp?.showToast?.(res.message || "保存に失敗しました");
           return;
         }
-        window.MachirikuApp?.showToast?.(tenancy ? "契約情報を更新しました" : "契約情報を記録しました。双方の引渡し確認を進めてください");
+        window.MachirikuApp?.showToast?.(tenancy ? "契約情報を更新しました" : "契約情報を記録しました。右側の双方引渡し確認へ進めます");
       };
     }
 
-    // 右ペイン：双方引渡し確認
+    // 右ペイン：ステップ3（現地チェックリスト＋双方引渡し確認）
+    const gateEl = document.getElementById("s14-handover-gate");
+    const checklistBox = document.getElementById("s14-checklist-box");
+    const dualConfirmEl = document.getElementById("s14-dual-confirm");
+    if (gateEl) gateEl.hidden = workflow.isContractSaved;
+    checklistBox?.classList.toggle("is-locked", !workflow.isContractSaved);
+    dualConfirmEl?.classList.toggle("is-locked", !workflow.isContractSaved);
+
+    const checklistInputs = Array.from(sectionEl.querySelectorAll('input[name="handoverCheck"]'));
+    checklistInputs.forEach((cb) => {
+      cb.checked = Array.isArray(tenancy?.checklist) ? tenancy.checklist.includes(cb.value) : false;
+      cb.disabled = !tenancy;
+      cb.onchange = () => {
+        if (!tenancy) return;
+        const checkedValues = checklistInputs.filter((el) => el.checked).map((el) => el.value);
+        const res = store.updateTenancyChecklist(tenancy.id, checkedValues);
+        if (res?.success) {
+          window.MachirikuApp?.showToast?.("現地引渡しチェックリストを更新しました");
+        }
+      };
+    });
+
     const ownerBadge = document.getElementById("s14-owner-confirm-badge");
     const ownerTime = document.getElementById("s14-owner-confirm-time");
+    const ownerStatusEl = document.getElementById("s14-owner-confirm-status");
     const ownerBtn = document.getElementById("s14-owner-confirm-btn");
     const bizBadge = document.getElementById("s14-biz-confirm-badge");
     const bizTime = document.getElementById("s14-biz-confirm-time");
+    const bizStatusEl = document.getElementById("s14-biz-confirm-status");
     const bizBtn = document.getElementById("s14-biz-confirm-btn");
     const nextBox = document.getElementById("s14-next-step-box");
     const nextPlanLink = document.getElementById("s14-next-plan-link");
     const nextProgLink = document.getElementById("s14-next-progress-link");
 
-    const ownerDone = Boolean(tenancy?.ownerHandoverAt);
-    const bizDone = Boolean(tenancy?.businessHandoverAt);
-    const bothDone = ownerDone && bizDone;
+    const ownerDone = workflow.ownerDone;
+    const bizDone = workflow.bizDone;
+    const bothDone = workflow.bothDone;
 
     if (ownerBadge) {
       ownerBadge.textContent = ownerDone ? "確認済み ✓" : "未確認";
@@ -1197,14 +1344,13 @@ window.MachirikuMatchingPages = (function () {
     }
     if (ownerTime) ownerTime.textContent = `確認日時: ${tenancy?.ownerHandoverAt || "—"}`;
     if (ownerBtn) {
-      ownerBtn.disabled = ownerDone;
-      ownerBtn.textContent = ownerDone ? "オーナー引渡し確認済み" : "オーナーとして引渡し完了を記録";
+      ownerBtn.hidden = !isOwnerActor;
+      ownerBtn.disabled = !tenancy || ownerDone;
+      ownerBtn.textContent = ownerDone
+        ? "オーナー引渡し確認済み"
+        : (!tenancy ? "契約情報の保存後に実行できます" : "オーナーとして引渡し完了を記録");
       ownerBtn.onclick = () => {
-        if (!tenancy) {
-          window.MachirikuApp?.showToast?.("先に左のフォームから契約情報を保存してください");
-          saveBtn?.focus();
-          return;
-        }
+        if (!tenancy) return;
         openConfirmDialog({
           id: "s14-owner-handover-dialog",
           title: "オーナー側の引渡し完了を記録しますか？",
@@ -1222,6 +1368,14 @@ window.MachirikuMatchingPages = (function () {
         });
       };
     }
+    if (ownerStatusEl) {
+      ownerStatusEl.hidden = isOwnerActor;
+      if (!isOwnerActor) {
+        ownerStatusEl.textContent = ownerDone
+          ? "オーナー側の引渡し完了が確認されました。"
+          : (!tenancy ? "契約情報の保存後、オーナーが引渡し確認を行います。" : "オーナーによる引渡し完了の確認待ちです。");
+      }
+    }
 
     if (bizBadge) {
       bizBadge.textContent = bizDone ? "確認済み ✓" : "未確認";
@@ -1229,14 +1383,13 @@ window.MachirikuMatchingPages = (function () {
     }
     if (bizTime) bizTime.textContent = `確認日時: ${tenancy?.businessHandoverAt || "—"}`;
     if (bizBtn) {
-      bizBtn.disabled = bizDone;
-      bizBtn.textContent = bizDone ? "事業主受領確認済み" : "事業主として受領完了を記録";
+      bizBtn.hidden = !isBizActor;
+      bizBtn.disabled = !tenancy || bizDone;
+      bizBtn.textContent = bizDone
+        ? "事業主受領確認済み"
+        : (!tenancy ? "契約情報の保存後に実行できます" : "事業主として受領完了を記録");
       bizBtn.onclick = () => {
-        if (!tenancy) {
-          window.MachirikuApp?.showToast?.("先に左のフォームから契約情報を保存してください");
-          saveBtn?.focus();
-          return;
-        }
+        if (!tenancy) return;
         openConfirmDialog({
           id: "s14-biz-handover-dialog",
           title: "事業主側の受領完了を記録しますか？",
@@ -1253,6 +1406,14 @@ window.MachirikuMatchingPages = (function () {
           }
         });
       };
+    }
+    if (bizStatusEl) {
+      bizStatusEl.hidden = isBizActor;
+      if (!isBizActor) {
+        bizStatusEl.textContent = bizDone
+          ? "事業主側の受領完了が確認されました。"
+          : (!tenancy ? "契約情報の保存後、事業主が受領確認を行います。" : "事業主による受領完了の確認待ちです。");
+      }
     }
 
     if (nextBox) {
