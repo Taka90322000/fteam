@@ -1,6 +1,6 @@
 <%-- 事業主の初期設定画面。初回はLINEのメールだけを反映し、名称や代表者名は本人に入力してもらう。 --%>
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="java.util.Map,java.util.Set,java.util.List,jp.machiriku.bean.RegistrationChoice,jp.machiriku.bean.User,jp.machiriku.servlet.management.ManagementPaths,jp.machiriku.tool.Html" %>
+<%@ page import="java.util.Map,java.util.Set,java.util.List,jp.machiriku.bean.RegistrationChoice,jp.machiriku.bean.User,jp.machiriku.tool.Html" %>
 <%
   // 入力エラー時はテキスト・選択ID・地図の点列をそのまま再表示する。
   Map<String, String> formValues = request.getAttribute("formValues") instanceof Map
@@ -227,7 +227,6 @@
           <% } %>
         </div>
         <span style="font-size:0.75rem; color:var(--text-sub); display:block; margin-top:0.35rem;">※出店応募時に必要な資格情報を事前に登録しておくことで、スムーズに応募手続きを行えます。</span>
-        <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.REQUIREMENTS) %>" target="_blank" rel="noopener">業種別の必要資格・書類を見る</a>
       </div>
 
       <!-- 新着店舗・オファー情報のメール受信設定 -->

@@ -1,8 +1,8 @@
 package jp.machiriku.servlet.management;
 
-/** JSP、画面モデル、変更後の遷移で共用する管理・サポートのAction URL。 */
+/** JSP、画面モデル、変更後の遷移で共用する管理画面のAction URL。 */
 public final class ManagementPaths {
-    /** 管理・サポートActionの所属パッケージに対応するURLの先頭部分。 */
+    /** 管理Actionの所属パッケージに対応するURLの先頭部分。 */
     private static final String PACKAGE_PATH = "/jp/machiriku/servlet/management/";
 
     /** 管理者用ダッシュボード。 */
@@ -46,21 +46,6 @@ public final class ManagementPaths {
 
     /** 管理者の操作履歴。 */
     public static final String ADMIN_AUDIT = PACKAGE_PATH + "AdminAudit.action";
-
-    /** 利用者向けの公開物件一覧・詳細。 */
-    public static final String PROPERTIES = PACKAGE_PATH + "PropertyDirectory.action";
-
-    /** 業種別の必要資格・書類の公開案内。 */
-    public static final String REQUIREMENTS = PACKAGE_PATH + "RequirementGuide.action";
-
-    /** 会員向けの事業主一覧・詳細。 */
-    public static final String BUSINESSES = PACKAGE_PATH + "BusinessDirectory.action";
-
-    /** 会員が通報を送信する画面。 */
-    public static final String REPORT = PACKAGE_PATH + "Report.action";
-
-    /** 会員本人の問い合わせ一覧・詳細。 */
-    public static final String INQUIRIES = PACKAGE_PATH + "Inquiries.action";
 
     /** 画面のURLを定数として利用する。 */
     private ManagementPaths() { }

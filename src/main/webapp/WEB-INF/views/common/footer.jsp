@@ -16,9 +16,6 @@
       </div>
       <nav class="footer-links" aria-label="関連メニュー">
         <a href="${pageContext.request.contextPath}/index.jsp">ホーム</a>
-        <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.PROPERTIES) %>">掲載物件</a>
-        <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.REQUIREMENTS) %>">必要資格・書類</a>
-        <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.INQUIRIES) %>">お問い合わせ</a>
         <% if (Boolean.TRUE.equals(request.getAttribute("showAdminLink"))) { %>
         <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.ADMIN) %>">管理画面</a>
         <% } %>

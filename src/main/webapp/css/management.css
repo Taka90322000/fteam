@@ -50,9 +50,6 @@ a:hover { color: var(--ink); }
 .brand { display: inline-flex; align-items: center; gap: .9rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
 .brand-mark { padding: .23rem .55rem; border: 1px solid #a2cab2; border-radius: 5px; letter-spacing: .07em; }
 .site-link { white-space: nowrap; }
-.public-nav { display: flex; flex-wrap: wrap; gap: .45rem 1.2rem; }
-.public-nav a { text-decoration: none; }
-.public-nav a:hover, .public-nav a[aria-current] { text-decoration: underline; }
 
 .layout { margin: 0 auto; }
 .layout-admin {
@@ -61,7 +58,6 @@ a:hover { color: var(--ink); }
     max-width: 1680px;
     min-height: calc(100vh - 64px);
 }
-.layout-public { max-width: 1160px; }
 
 .sidebar {
     display: flex;
@@ -376,7 +372,6 @@ button.location-trigger-card:hover { border-color: var(--link); background: var(
     .sidebar { flex-direction: row; flex-wrap: wrap; padding: .5rem .7rem; border-right: 0; border-bottom: 1px solid var(--line); }
     .sidebar a { padding: .38rem .55rem; font-size: .87rem; }
     .masthead { flex-wrap: wrap; }
-    .public-nav { width: 100%; font-size: .9rem; }
     .details dt, .details dd { padding: .55rem .5rem; }
     button.cat-tab-btn, button.ind-pill { height: 36px; padding: 0 .8rem; font-size: .86rem; }
 }

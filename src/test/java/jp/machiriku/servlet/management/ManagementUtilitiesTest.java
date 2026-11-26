@@ -38,7 +38,7 @@ import jp.machiriku.dao.management.AdminAuditDao;
 import jp.machiriku.dao.management.AdminUserDao;
 
 /**
- * DB接続を伴わない管理・サポート共通部品（FormReader・ManagementFormat・ManagementLabels・ManagementAuth・SupportAction）の単体テスト。
+ * DB接続を伴わない管理・サポート共通部品（FormReader・ManagementFormat・ManagementLabels・ManagementAuth）の単体テスト。
  */
 public class ManagementUtilitiesTest {
 
@@ -220,27 +220,6 @@ public class ManagementUtilitiesTest {
         ResponseRecorder badArgRes = new ResponseRecorder();
         ManagementAuth.handleError(reqWithCtx, badArgRes.proxy(), new IllegalArgumentException("入力エラー"));
         assertEquals(400, badArgRes.errorStatus);
-    }
-
-    /**
-     * SupportActionがGETを公開物件一覧へリダイレクトし、POSTを405で拒否することを検証する。
-     * @throws Exception Action実行に失敗した場合。
-     */
-    @Test
-    public void supportActionRedirectsGetAndRejectsPost() throws Exception {
-        SupportAction action = new SupportAction();
-
-        ResponseRecorder getRes = new ResponseRecorder();
-        HttpServletRequest getReq = mockRequest("GET", "/jp/machiriku/servlet/management/Support.action",
-                Map.of(), Map.of(), null, null);
-        action.execute(getReq, getRes.proxy());
-        assertEquals("/machiriku" + ManagementPaths.PROPERTIES, getRes.redirectLocation);
-
-        ResponseRecorder postRes = new ResponseRecorder();
-        HttpServletRequest postReq = mockRequest("POST", "/jp/machiriku/servlet/management/Support.action",
-                Map.of(), Map.of(), null, null);
-        action.execute(postReq, postRes.proxy());
-        assertEquals(405, postRes.errorStatus);
     }
 
     /**

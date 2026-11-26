@@ -1,6 +1,6 @@
 <%-- 出店事業主のプロフィール設定画面。登録済み会員専用。後から項目を追加しやすいセクション構造。 --%>
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="java.util.Map,java.util.Set,java.util.List,jp.machiriku.bean.RegistrationChoice,jp.machiriku.bean.User,jp.machiriku.servlet.management.ManagementPaths,jp.machiriku.tool.Html" %>
+<%@ page import="java.util.Map,java.util.Set,java.util.List,jp.machiriku.bean.RegistrationChoice,jp.machiriku.bean.User,jp.machiriku.tool.Html" %>
 <%
   Map<String, String> formValues = request.getAttribute("formValues") instanceof Map
       ? (Map<String, String>) request.getAttribute("formValues") : java.util.Collections.emptyMap();
@@ -220,7 +220,6 @@
               </label>
             <% } %>
           </div>
-          <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.REQUIREMENTS) %>" target="_blank" rel="noopener">業種別の必要資格・書類を見る</a>
         </div>
       </div>
 

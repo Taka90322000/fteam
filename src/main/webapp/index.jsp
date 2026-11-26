@@ -142,9 +142,6 @@
       <nav class="footer-links" aria-label="関連メニュー">
         <a href="#s01">空き店舗を探す</a>
         <a href="#s21">開店の相談</a>
-        <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.PROPERTIES) %>">掲載物件</a>
-        <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.REQUIREMENTS) %>">必要資格・書類</a>
-        <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.INQUIRIES) %>">お問い合わせ</a>
         <% if (currentUser == null && !isDemoSession) { %>
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action">ログイン</a>
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action">新規会員登録</a>
