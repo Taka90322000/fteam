@@ -44,20 +44,44 @@
 </section>
 
 <c:if test="${editable}">
+    <c:if test="${editingQualification}">
+        <nav class="page-links" aria-label="資格編集の切り替え">
+            <a href="${fn:escapeXml(root += ManagementPaths.ADMIN_USERS += '?id=' += member.userId += '&tab=qualifications')}">新しい資格を追加</a>
+        </nav>
+    </c:if>
     <section class="panel form-panel">
-        <h2>資格情報を保存</h2>
-        <form action="${fn:escapeXml(root += ManagementPaths.ADMIN_USERS)}" method="post" accept-charset="UTF-8">
-            <jsp:include page="/WEB-INF/views/management/common/csrf.jsp" />
-            <input type="hidden" name="operation" value="qualification">
-            <input type="hidden" name="id" value="${fn:escapeXml(member.userId)}">
-            <div class="form-fields">
-                <mg:select id="user-qualification" name="qualificationId" label="資格・許認可" choices="${qualificationChoices}" value="${selectedQualificationId}" required="true" />
-                <mg:input id="user-credential" name="credential" label="資格番号" value="${currentQualification.credentialNumber}" maxLength="100" />
-                <mg:input id="user-obtained" name="obtained" label="取得日" type="date" value="${currentQualification.obtainedOn}" />
-                <mg:input id="user-expires" name="expires" label="有効期限" type="date" value="${currentQualification.expiresOn}" />
-                <mg:select id="user-qualification-active" name="active" label="有効状態" choices="${activeChoices}" value="${currentQualification.active}" required="true" />
-            </div>
-            <button type="submit">資格情報を保存</button>
-        </form>
+        <h2><c:out value="${editingQualification ? '資格情報を更新' : '資格情報を追加'}" /></h2>
+        <c:choose>
+            <c:when test="${not editingQualification and empty qualificationChoices}">
+                <p class="empty">追加できる資格・許認可はありません。登録済みの項目を編集するには一覧のIDを選択してください。</p>
+            </c:when>
+            <c:otherwise>
+                <form action="${fn:escapeXml(root += ManagementPaths.ADMIN_USERS)}" method="post" accept-charset="UTF-8">
+                    <jsp:include page="/WEB-INF/views/management/common/csrf.jsp" />
+                    <input type="hidden" name="operation" value="qualification">
+                    <input type="hidden" name="id" value="${fn:escapeXml(member.userId)}">
+                    <div class="form-fields">
+                        <c:choose>
+                            <c:when test="${editingQualification}">
+                                <%-- 編集対象を固定し、別資格への誤上書きを防ぐ。 --%>
+                                <input type="hidden" name="qualificationId" value="${fn:escapeXml(currentQualification.qualificationId)}">
+                                <div class="field">
+                                    <label for="user-qualification-readonly">資格・許認可</label>
+                                    <input id="user-qualification-readonly" type="text" value="${fn:escapeXml(currentQualification.qualificationName)}" readonly>
+                                </div>
+                            </c:when>
+                            <c:otherwise>
+                                <mg:select id="user-qualification" name="qualificationId" label="資格・許認可" choices="${qualificationChoices}" required="true" />
+                            </c:otherwise>
+                        </c:choose>
+                        <mg:input id="user-credential" name="credential" label="資格番号" value="${currentQualification.credentialNumber}" maxLength="100" />
+                        <mg:input id="user-obtained" name="obtained" label="取得日" type="date" value="${currentQualification.obtainedOn}" />
+                        <mg:input id="user-expires" name="expires" label="有効期限" type="date" value="${currentQualification.expiresOn}" />
+                        <mg:select id="user-qualification-active" name="active" label="有効状態" choices="${activeChoices}" value="${currentQualification.active}" required="true" />
+                    </div>
+                    <button type="submit"><c:out value="${editingQualification ? '資格情報を更新' : '資格情報を追加'}" /></button>
+                </form>
+            </c:otherwise>
+        </c:choose>
     </section>
 </c:if>

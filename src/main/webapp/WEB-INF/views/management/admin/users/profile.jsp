@@ -98,8 +98,8 @@
                                     <mg:input id="profile-business" name="businessName" label="事業者名" value="${profile.businessName}" maxLength="150" required="true" />
                                     <mg:input id="profile-area" name="areaName" label="希望エリア名" value="${profile.preferredArea}" maxLength="150" required="true" />
                                     <mg:input id="profile-employees" name="employees" label="従業員数" type="number" value="${profile.employeeCount}" required="true" />
-                                    <mg:textarea id="profile-industry-experience" name="industryExperience" label="業界経験" value="${profile.industryExperience}" maxLength="4000" />
-                                    <mg:textarea id="profile-management-experience" name="managementExperience" label="経営経験" value="${profile.managementExperience}" maxLength="4000" />
+                                    <mg:select id="profile-industry-experience" name="industryExperience" label="業界経験" choices="${industryExperienceChoices}" value="${profile.industryExperience}" placeholder="未設定" />
+                                    <mg:select id="profile-management-experience" name="managementExperience" label="経営経験" choices="${managementExperienceChoices}" value="${profile.managementExperience}" placeholder="未設定" />
                                 </c:otherwise>
                             </c:choose>
                         </c:otherwise>
@@ -124,37 +124,37 @@
             </form>
         </section>
     </c:if>
-
-    <section class="panel">
-        <h2>操作履歴（最新10件）</h2>
-        <c:choose>
-            <c:when test="${empty accountActions}">
-                <p class="empty">該当するデータはありません。</p>
-            </c:when>
-            <c:otherwise>
-                <div class="table-scroll" role="region" aria-label="操作履歴（最新10件）" tabindex="0">
-                    <table aria-label="操作履歴（最新10件）">
-                        <thead>
-                            <tr>
-                                <th scope="col">管理者</th>
-                                <th scope="col">操作</th>
-                                <th scope="col">理由</th>
-                                <th scope="col">日時</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <c:forEach var="log" items="${accountActions}">
-                                <tr>
-                                    <td><c:out value="${ManagementFormat.text(log.actorName)}" /></td>
-                                    <td><c:out value="${ManagementFormat.text(log.action)}" /></td>
-                                    <td class="multiline"><c:out value="${ManagementFormat.text(log.reason)}" /></td>
-                                    <td><c:out value="${ManagementFormat.text(log.occurredAt)}" /></td>
-                                </tr>
-                            </c:forEach>
-                        </tbody>
-                    </table>
-                </div>
-            </c:otherwise>
-        </c:choose>
-    </section>
 </c:if>
+
+<section class="panel">
+    <h2>操作履歴（最新10件）</h2>
+    <c:choose>
+        <c:when test="${empty accountActions}">
+            <p class="empty">該当するデータはありません。</p>
+        </c:when>
+        <c:otherwise>
+            <div class="table-scroll" role="region" aria-label="操作履歴（最新10件）" tabindex="0">
+                <table aria-label="操作履歴（最新10件）">
+                    <thead>
+                        <tr>
+                            <th scope="col">管理者</th>
+                            <th scope="col">操作</th>
+                            <th scope="col">理由</th>
+                            <th scope="col">日時</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <c:forEach var="log" items="${accountActions}">
+                            <tr>
+                                <td><c:out value="${ManagementFormat.text(log.actorName)}" /></td>
+                                <td><c:out value="${ManagementFormat.text(log.action)}" /></td>
+                                <td class="multiline"><c:out value="${ManagementFormat.text(log.reason)}" /></td>
+                                <td><c:out value="${ManagementFormat.text(log.occurredAt)}" /></td>
+                            </tr>
+                        </c:forEach>
+                    </tbody>
+                </table>
+            </div>
+        </c:otherwise>
+    </c:choose>
+</section>

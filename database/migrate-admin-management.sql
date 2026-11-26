@@ -121,6 +121,40 @@ ALTER TABLE public.application_checks
     ADD COLUMN is_required_snapshot boolean,
     ADD COLUMN condition_text_snapshot varchar(300);
 
+-- 新規申込チェック登録時に2列が未指定であっても、申込時点の必須区分・適用条件を自動補完する。
+CREATE OR REPLACE FUNCTION public.fill_application_check_snapshots()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_is_required boolean;
+    v_condition_text varchar(300);
+BEGIN
+    IF NEW.is_required_snapshot IS NULL THEN
+        SELECT r.is_required, r.condition_text
+        INTO v_is_required, v_condition_text
+        FROM public.applications a
+        JOIN public.industry_qualification_requirements r
+          ON r.industry_type_id = a.industry_type_id
+         AND r.qualification_id = NEW.qualification_id
+        WHERE a.application_id = NEW.application_id;
+
+        IF FOUND THEN
+            NEW.is_required_snapshot := v_is_required;
+            IF NEW.condition_text_snapshot IS NULL THEN
+                NEW.condition_text_snapshot := v_condition_text;
+            END IF;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_application_checks_fill_snapshots
+    BEFORE INSERT ON public.application_checks
+    FOR EACH ROW
+    EXECUTE FUNCTION public.fill_application_check_snapshots();
+
 -- 管理者による掲載停止の日時を持つ。NULLは停止の解除を表し、募集・契約の進捗にはlisting_statusを使う。
 ALTER TABLE public.properties
     ADD COLUMN admin_hidden_at timestamptz;
@@ -210,6 +244,7 @@ COMMENT ON COLUMN public.industry_categories.display_order IS '業種カテゴ�
 COMMENT ON COLUMN public.industry_types.display_order IS 'カテゴリ内での業種の表示順。小さい値から並べる。';
 COMMENT ON COLUMN public.application_checks.is_required_snapshot IS '申込時点の必須区分。trueは必須、falseは任意、NULLは当時の区分が未確認。';
 COMMENT ON COLUMN public.application_checks.condition_text_snapshot IS '申込時点の適用条件。条件の記載がない場合や当時の条件が未確認の場合はNULL。';
+COMMENT ON FUNCTION public.fill_application_check_snapshots() IS '新規申込チェック登録時に未指定の必須区分・適用条件を業種別必要条件からスナップショット保存する。';
 COMMENT ON COLUMN public.properties.admin_hidden_at IS '管理者が掲載を停止した日時。NULLの場合は募集・契約状態に基づく通常の掲載判定を使う。';
 COMMENT ON COLUMN public.surveys.previous_survey_id IS '同じ契約物件で使用した改訂元の来店アンケートID。初版はNULL。';
 COMMENT ON COLUMN public.coupon_recipients.revoked_at IS '発行済みの未使用クーポンを無効化した日時。NULLの場合は使用日時と有効期限で状態を判定する。';
@@ -224,5 +259,6 @@ GRANT USAGE ON SEQUENCE
     public.inquiries_inquiry_id_seq,
     public.inquiry_messages_message_id_seq
 TO machiriku_app;
+GRANT EXECUTE ON FUNCTION public.fill_application_check_snapshots() TO machiriku_app;
 
 COMMIT;

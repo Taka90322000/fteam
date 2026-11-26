@@ -16,7 +16,7 @@ COMMENT ON SEQUENCE public.industry_types_industry_type_id_seq IS '管理画面�
 
 -- 管理者が会員・物件と、その申込・投票・アンケートなどの履歴を照会できるようにする。
 GRANT SELECT ON TABLE public.users, public.resident_profiles, public.business_profiles, public.owner_profiles,
-    public.user_locations, public.user_industry_preferences, public.business_qualifications,
+    public.user_locations, public.user_industry_preferences, public.business_qualifications, public.notification_settings,
     public.industry_categories, public.industry_types, public.qualifications, public.industry_qualification_requirements,
     public.properties, public.property_contract_terms, public.property_industries, public.property_images,
     public.property_votes, public.vote_choices, public.applications, public.application_checks, public.tenancies,
@@ -26,7 +26,7 @@ TO machiriku_app;
 
 -- 各管理操作に必要な更新だけを許可し、管理権限の付与は引き続きDB所有者が行う。
 GRANT UPDATE ON TABLE public.users, public.resident_profiles, public.business_profiles, public.owner_profiles,
-    public.properties, public.opening_plans, public.coupons, public.coupon_recipients
+    public.notification_settings, public.properties, public.opening_plans, public.coupons, public.coupon_recipients
 TO machiriku_app;
 GRANT INSERT, UPDATE ON TABLE public.business_qualifications,
     public.industry_categories, public.industry_types, public.qualifications, public.surveys

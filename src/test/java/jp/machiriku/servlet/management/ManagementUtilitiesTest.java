@@ -24,16 +24,19 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
 
+import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jp.machiriku.bean.LocationInput;
 import jp.machiriku.bean.User;
+import jp.machiriku.bean.management.AdminAuditLogItem;
 import jp.machiriku.bean.management.AdminUserItem;
 import jp.machiriku.bean.management.ManagementLabels;
 import jp.machiriku.bean.management.ManagementProblem;
 import jp.machiriku.bean.management.PageResult;
+import jp.machiriku.dao.ProfileDao;
 import jp.machiriku.dao.management.AdminAuditDao;
 import jp.machiriku.dao.management.AdminUserDao;
 
@@ -242,11 +245,11 @@ public class ManagementUtilitiesTest {
     }
 
     /**
-     * 生活拠点モデルの表示名統合（勤務先・学校）と住所連結、およびAdminUsersActionの生活拠点保存検証を確認する。
+     * 生活拠点モデル（居住地・勤務先・学校）の表示名と住所連結、およびAdminUsersActionの地図入力検証を確認する。
      * @throws Exception Action実行に失敗した場合。
      */
     @Test
-    public void adminUsersLocationConsolidatesWorkAndSchoolAndValidatesMapInput() throws Exception {
+    public void adminUsersLocationHandlesHomeAndWorkMapInput() throws Exception {
         AdminUserItem.Location homeLoc = new AdminUserItem.Location();
         homeLoc.setLocationKind("HOME");
         homeLoc.setPrefecture("栃木県");
@@ -261,10 +264,6 @@ public class ManagementUtilitiesTest {
         workLoc.setMunicipality("宇都宮市");
         assertEquals("勤務先・学校", workLoc.getLocationKindLabel());
         assertEquals("栃木県宇都宮市", workLoc.getFullAddress());
-
-        AdminUserItem.Location legacySchool = new AdminUserItem.Location();
-        legacySchool.setLocationKind("SCHOOL");
-        assertEquals("勤務先・学校（旧：学校）", legacySchool.getLocationKindLabel());
 
         // 管理者セッションと差し替えDAOを準備し、居住地・勤務先/学校の保存と解除および不整合拒否を検証する。
         User admin = new User();
@@ -353,6 +352,186 @@ public class ManagementUtilitiesTest {
     }
 
     /**
+     * 管理者権限ロックSQLがadmin_membersとusersの両方を共有ロックし、ProfileDaoが書類(DOCUMENT)を資格候補から除外することを検証する。
+     * @throws Exception モック実行に失敗した場合。
+     */
+    @Test
+    public void adminAuditLocksBothTablesAndProfileDaoFiltersDocumentQualifications() throws Exception {
+        List<String> auditSqls = new ArrayList<>();
+        Connection auditConn = capturingConnection(auditSqls);
+        AdminAuditDao auditDao = new AdminAuditDao(auditConn);
+        assertFalse(auditDao.isAdmin(auditConn, 101, true));
+        assertEquals(1, auditSqls.size());
+        assertTrue(auditSqls.get(0).contains("FOR SHARE OF a, u"));
+
+        List<String> profileSqls = new ArrayList<>();
+        Connection profileConn = capturingConnection(profileSqls);
+        ProfileDao profileDao = new ProfileDao() {
+            @Override
+            protected Connection openConnection() {
+                return profileConn;
+            }
+        };
+        assertTrue(profileDao.listQualifications().isEmpty());
+        assertEquals(1, profileSqls.size());
+        assertTrue(profileSqls.get(0).contains("requirement_kind IN ('QUALIFICATION','PERMIT')"));
+    }
+
+    /**
+     * 退会済み会員でも過去の管理操作履歴が取得されること、事業主の経験欄が本人画面と同一選択肢で検証されること、
+     * および保有資格の編集対象が未登録IDなら404になることを検証する。
+     * @throws Exception Action実行に失敗した場合。
+     */
+    @Test
+    public void adminUsersKeepsWithdrawnHistoryAndEnforcesBusinessExperienceAndQualificationEdit() throws Exception {
+        User admin = new User();
+        admin.setUserId(101);
+        admin.setDisplayName("管理者");
+        admin.setUserRole("RESIDENT");
+        admin.setAccountStatus("ACTIVE");
+        Map<String, Object> sessionAttrs = new HashMap<>();
+        sessionAttrs.put("user", admin);
+        HttpSession session = mockSession(sessionAttrs);
+        String csrf = ManagementAuth.csrfToken(session);
+
+        AdminAuditDao stubAuditDao = new AdminAuditDao() {
+            @Override
+            public boolean isAdmin(int userId) {
+                return userId == 101;
+            }
+        };
+
+        // 1. 退会済み会員のプロフィール画面でも、editable=falseのまま操作履歴(accountActions)が設定されることを確認する。
+        AdminUserItem withdrawnMember = new AdminUserItem();
+        withdrawnMember.setUserId(200);
+        withdrawnMember.setDisplayName("退会会員");
+        withdrawnMember.setUserRole("RESIDENT");
+        withdrawnMember.setAccountStatus("WITHDRAWN");
+        AdminAuditLogItem pastAction = new AdminAuditLogItem();
+        pastAction.setAction("SUSPEND");
+        pastAction.setReason("過去の停止理由");
+        AdminUserDao withdrawnUserDao = new AdminUserDao() {
+            @Override
+            public AdminUserItem findUserById(int userId) {
+                return withdrawnMember;
+            }
+
+            @Override
+            public AdminUserItem.Profile findRoleProfile(String role, int userId) {
+                return new AdminUserItem.Profile();
+            }
+
+            @Override
+            public List<AdminAuditLogItem> findRecentAccountActions(int userId) {
+                return List.of(pastAction);
+            }
+        };
+        Map<String, Object> withdrawnAttrs = new HashMap<>();
+        ResponseRecorder withdrawnRes = new ResponseRecorder();
+        HttpServletRequest withdrawnReq = mockRequestWithAttrs("GET", ManagementPaths.ADMIN_USERS,
+                Map.of("id", "200", "tab", "profile"), Map.of(), session, null, withdrawnAttrs);
+        new AdminUsersAction(stubAuditDao, withdrawnUserDao).execute(withdrawnReq, withdrawnRes.proxy());
+        assertEquals(Boolean.FALSE, withdrawnAttrs.get("editable"));
+        assertEquals(List.of(pastAction), withdrawnAttrs.get("accountActions"));
+
+        // 2. 事業主の経験欄で本人画面と一致しない自由記述は400で拒否し、許可選択肢は受け付けることを確認する。
+        AdminUserItem businessMember = new AdminUserItem();
+        businessMember.setUserId(105);
+        businessMember.setDisplayName("事業主");
+        businessMember.setUserRole("BUSINESS");
+        businessMember.setAccountStatus("ACTIVE");
+        AdminUserItem.Qualification ownedQual = new AdminUserItem.Qualification();
+        ownedQual.setQualificationId(100);
+        ownedQual.setQualificationName("食品衛生責任者");
+        AtomicReference<AdminUserItem.Profile> savedProfile = new AtomicReference<>();
+        AdminUserDao businessUserDao = new AdminUserDao() {
+            @Override
+            public AdminUserItem findUserById(int userId) {
+                return businessMember;
+            }
+
+            @Override
+            public AdminUserItem.Profile findRoleProfile(String role, int userId) {
+                return new AdminUserItem.Profile();
+            }
+
+            @Override
+            public AdminUserItem.Profile findBusinessProfile(int userId) {
+                return new AdminUserItem.Profile();
+            }
+
+            @Override
+            public List<AdminUserItem.Qualification> findQualifications(int userId) {
+                return List.of(ownedQual);
+            }
+
+            @Override
+            public void updateProfile(int actorId, int targetUserId, String displayName, String email,
+                    AdminUserItem.Profile roleProfile) {
+                savedProfile.set(roleProfile);
+            }
+        };
+        AdminUsersAction businessAction = new AdminUsersAction(stubAuditDao, businessUserDao);
+
+        ResponseRecorder freeTextRes = new ResponseRecorder();
+        HttpServletRequest freeTextReq = mockRequest("POST", ManagementPaths.ADMIN_USERS,
+                Map.ofEntries(
+                        Map.entry("csrfToken", csrf),
+                        Map.entry("id", "105"),
+                        Map.entry("operation", "profile"),
+                        Map.entry("name", "事業主"),
+                        Map.entry("email", "biz@example.invalid"),
+                        Map.entry("representative", "代表者"),
+                        Map.entry("phone", "028-633-9988"),
+                        Map.entry("secondaryPhone", ""),
+                        Map.entry("businessName", "テスト店舗"),
+                        Map.entry("areaName", "宇都宮"),
+                        Map.entry("employees", "2"),
+                        Map.entry("industryExperience", "飲食店を3年経営"),
+                        Map.entry("managementExperience", "あり")),
+                Map.of(), session, null);
+        businessAction.execute(freeTextReq, freeTextRes.proxy());
+        assertEquals(400, freeTextRes.errorStatus);
+
+        ResponseRecorder validExpRes = new ResponseRecorder();
+        HttpServletRequest validExpReq = mockRequest("POST", ManagementPaths.ADMIN_USERS,
+                Map.ofEntries(
+                        Map.entry("csrfToken", csrf),
+                        Map.entry("id", "105"),
+                        Map.entry("operation", "profile"),
+                        Map.entry("name", "事業主"),
+                        Map.entry("email", "biz@example.invalid"),
+                        Map.entry("representative", "代表者"),
+                        Map.entry("phone", "028-633-9988"),
+                        Map.entry("secondaryPhone", ""),
+                        Map.entry("businessName", "テスト店舗"),
+                        Map.entry("areaName", "宇都宮"),
+                        Map.entry("employees", "2"),
+                        Map.entry("industryExperience", "3〜5年未満"),
+                        Map.entry("managementExperience", "あり")),
+                Map.of(), session, null);
+        businessAction.execute(validExpReq, validExpRes.proxy());
+        assertEquals(303, validExpRes.status);
+        assertEquals("3〜5年未満", savedProfile.get().getIndustryExperience());
+        assertEquals("あり", savedProfile.get().getManagementExperience());
+
+        // 3. 保有資格編集で未登録の資格IDを指定すると404となり、登録済みIDなら編集モード(固定対象)となる。
+        ResponseRecorder missingQualRes = new ResponseRecorder();
+        HttpServletRequest missingQualReq = mockRequestWithAttrs("GET", ManagementPaths.ADMIN_USERS,
+                Map.of("id", "105", "tab", "qualifications", "industry", "999"), Map.of(), session, null, new HashMap<>());
+        businessAction.execute(missingQualReq, missingQualRes.proxy());
+        assertEquals(404, missingQualRes.errorStatus);
+
+        Map<String, Object> editQualAttrs = new HashMap<>();
+        ResponseRecorder editQualRes = new ResponseRecorder();
+        HttpServletRequest editQualReq = mockRequestWithAttrs("GET", ManagementPaths.ADMIN_USERS,
+                Map.of("id", "105", "tab", "qualifications", "industry", "100"), Map.of(), session, null, editQualAttrs);
+        businessAction.execute(editQualReq, editQualRes.proxy());
+        assertEquals(Boolean.TRUE, editQualAttrs.get("editingQualification"));
+        assertEquals(ownedQual, editQualAttrs.get("currentQualification"));
+    }
+
+    /**
      * 実行されたSQL文字列を記録し空の結果セットを返すテスト用Connectionプロキシを作成する。
      * @param executedSqls 実行されたSQLを追記するリスト。
      * @return モックConnection。
@@ -391,6 +570,27 @@ public class ManagementUtilitiesTest {
     private static HttpServletRequest mockRequest(String method, String servletPath,
             Map<String, String> params, Map<String, String[]> multiParams,
             HttpSession session, ServletContext context) {
+        return mockRequestWithAttrs(method, servletPath, params, multiParams, session, context, new HashMap<>());
+    }
+
+    /**
+     * リクエスト属性の記録とダミーのforward処理を備えたテスト用HttpServletRequestプロキシを作成する。
+     * @param method HTTPメソッド。
+     * @param servletPath サーブレットパス。
+     * @param params 単一パラメータマップ。
+     * @param multiParams 複数値パラメータマップ。
+     * @param session セッション。
+     * @param context ServletContext。
+     * @param attrs setAttributeで設定された属性を記録するマップ。
+     * @return モックリクエスト。
+     */
+    private static HttpServletRequest mockRequestWithAttrs(String method, String servletPath,
+            Map<String, String> params, Map<String, String[]> multiParams,
+            HttpSession session, ServletContext context, Map<String, Object> attrs) {
+        RequestDispatcher noopDispatcher = (RequestDispatcher) Proxy.newProxyInstance(
+                RequestDispatcher.class.getClassLoader(),
+                new Class<?>[] { RequestDispatcher.class },
+                (proxy, m, args) -> null);
         return (HttpServletRequest) Proxy.newProxyInstance(
                 HttpServletRequest.class.getClassLoader(),
                 new Class<?>[] { HttpServletRequest.class },
@@ -402,6 +602,12 @@ public class ManagementUtilitiesTest {
                     case "getParameterValues" -> multiParams.get(args[0]);
                     case "getSession" -> session;
                     case "getServletContext" -> context;
+                    case "getAttribute" -> attrs.get(args[0]);
+                    case "setAttribute" -> {
+                        attrs.put((String) args[0], args[1]);
+                        yield null;
+                    }
+                    case "getRequestDispatcher" -> noopDispatcher;
                     default -> null;
                 });
     }

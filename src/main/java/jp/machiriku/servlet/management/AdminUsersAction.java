@@ -55,6 +55,15 @@ public final class AdminUsersAction extends Action {
     /** 地域住民プロフィール編集の性別選択肢。 */
     private static final Map<String, String> GENDER_CHOICES = ManagementFormat.options(
             "男性", "男性", "女性", "女性", "その他", "その他");
+    /** 事業主プロフィール編集の業界経験選択肢（本人登録・プロフィール画面と共通）。 */
+    private static final Map<String, String> INDUSTRY_EXPERIENCE_CHOICES = ManagementFormat.options(
+            "未経験", "未経験",
+            "1〜3年未満", "1〜3年未満",
+            "3〜5年未満", "3〜5年未満",
+            "5年以上", "5年以上");
+    /** 事業主プロフィール編集の経営経験選択肢（本人登録・プロフィール画面と共通）。 */
+    private static final Map<String, String> MANAGEMENT_EXPERIENCE_CHOICES = ManagementFormat.options(
+            "あり", "あり", "なし", "なし");
     /** 保有資格の有効状態選択肢。 */
     private static final Map<String, String> ACTIVE_CHOICES = ManagementFormat.options(
             "true", "有効", "false", "無効");
@@ -186,9 +195,10 @@ public final class AdminUsersAction extends Action {
             req.setAttribute("canChangeStatus", canChangeStatus);
             req.setAttribute("ageChoices", AGE_CHOICES);
             req.setAttribute("genderChoices", GENDER_CHOICES);
-            if (editable) {
-                req.setAttribute("accountActions", userDao.findRecentAccountActions(userId));
-            }
+            req.setAttribute("industryExperienceChoices", INDUSTRY_EXPERIENCE_CHOICES);
+            req.setAttribute("managementExperienceChoices", MANAGEMENT_EXPERIENCE_CHOICES);
+            // 退会済み会員でも過去の利用停止理由などの監査履歴を確認できるよう常に取得する。
+            req.setAttribute("accountActions", userDao.findRecentAccountActions(userId));
         } else if ("preferences".equals(tab)) {
             List<AdminUserItem.Preference> preferences = userDao.findPreferences(userId);
             // 選択UI初期表示用とフォールバック送信用の選択済み業種ID一覧を組み立てる。
@@ -198,9 +208,14 @@ public final class AdminUsersAction extends Action {
                 selectedIds.add(item.getIndustryTypeId());
                 selectedIdTexts.add(String.valueOf(item.getIndustryTypeId()));
             }
+            // 本登録済みの事業主・物件オーナーは本人画面の必須条件に合わせて1件以上必須とする。
+            boolean requirePreference = editable
+                    && ("BUSINESS".equals(role) || "OWNER".equals(role))
+                    && userDao.findRoleProfile(role, userId) != null;
             req.setAttribute("preferences", preferences);
             req.setAttribute("selectedPreferenceIds", selectedIds);
             req.setAttribute("editable", editable);
+            req.setAttribute("requirePreference", requirePreference);
             if (editable) {
                 req.setAttribute("preferenceTaxonomyJson",
                         JSON.writeValueAsString(userDao.findPreferenceTaxonomy(userId)));
@@ -211,19 +226,12 @@ public final class AdminUsersAction extends Action {
             // 会員登録画面と同じ「居住地（HOME）」と「勤務先・学校（WORK）」の2枠へ既存データを割り当てる。
             AdminUserItem.Location homeLocation = null;
             AdminUserItem.Location workLocation = null;
-            AdminUserItem.Location legacySchoolLocation = null;
             for (AdminUserItem.Location item : locations) {
                 if ("HOME".equals(item.getLocationKind())) {
                     homeLocation = item;
                 } else if ("WORK".equals(item.getLocationKind())) {
                     workLocation = item;
-                } else if ("SCHOOL".equals(item.getLocationKind())) {
-                    legacySchoolLocation = item;
                 }
-            }
-            // WORKが未登録で旧SCHOOLのみ存在する場合は、勤務先・学校の編集欄へ引き継ぐ。
-            if (workLocation == null && legacySchoolLocation != null) {
-                workLocation = legacySchoolLocation;
             }
             req.setAttribute("locations", locations);
             req.setAttribute("homeLocation", homeLocation);
@@ -237,17 +245,26 @@ public final class AdminUsersAction extends Action {
             if (canEditQualification) {
                 Integer selectedId = input.intId("industry", false);
                 AdminUserItem.Qualification current = new AdminUserItem.Qualification();
+                boolean editingQualification = false;
                 if (selectedId != null) {
+                    // 登録済み資格の編集リンクから指定された資格を検索し、存在しない場合は404を返す。
                     for (AdminUserItem.Qualification item : qualifications) {
                         if (item.getQualificationId() == selectedId) {
                             current = item;
+                            editingQualification = true;
                             break;
                         }
                     }
+                    if (!editingQualification) {
+                        res.sendError(HttpServletResponse.SC_NOT_FOUND, "指定された保有資格が見つかりません。");
+                        return;
+                    }
+                } else {
+                    // 新規追加時は未登録の資格・許認可だけを選択肢に出し、既存資格の誤上書きを防ぐ。
+                    req.setAttribute("qualificationChoices", userDao.findAddableQualificationChoices(userId));
                 }
-                req.setAttribute("selectedQualificationId", selectedId);
+                req.setAttribute("editingQualification", editingQualification);
                 req.setAttribute("currentQualification", current);
-                req.setAttribute("qualificationChoices", userDao.findQualificationChoices(userId));
                 req.setAttribute("activeChoices", ACTIVE_CHOICES);
             }
         } else {
@@ -388,8 +405,13 @@ public final class AdminUsersAction extends Action {
                     updatedProfile.setBusinessName(input.text("businessName", "事業者名", 150, true));
                     updatedProfile.setPreferredArea(input.text("areaName", "希望エリア", 150, true));
                     updatedProfile.setEmployeeCount(input.number("employees", "従業員数", 0, Integer.MAX_VALUE));
-                    updatedProfile.setIndustryExperience(input.text("industryExperience", "業界経験", 4000, false));
-                    updatedProfile.setManagementExperience(input.text("managementExperience", "経営経験", 4000, false));
+                    // 本人プロフィール画面と値をそろえ、次回本人保存で経験欄が消えないよう同一選択肢で検証する。
+                    String industryExperience = input.choice("industryExperience", "業界経験",
+                            "", "未経験", "1〜3年未満", "3〜5年未満", "5年以上");
+                    String managementExperience = input.choice("managementExperience", "経営経験",
+                            "", "あり", "なし");
+                    updatedProfile.setIndustryExperience(industryExperience.isEmpty() ? null : industryExperience);
+                    updatedProfile.setManagementExperience(managementExperience.isEmpty() ? null : managementExperience);
                 }
             }
         }

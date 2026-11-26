@@ -22,6 +22,8 @@
     const inputsEl = document.getElementById('admin-industry-inputs');
     /** 送信するフォームパラメーター名。 */
     const inputName = picker.dataset.inputName || 'industries';
+    /** 本登録済みの事業主・オーナーなど1件以上の選択が必須かどうか。 */
+    const requireSelection = picker.dataset.required === 'true';
 
     /**
      * JSON文字列を安全に配列として解析する。
@@ -234,6 +236,18 @@
         renderTabs();
         renderOptions();
         renderTags();
+    }
+
+    if (requireSelection) {
+        const parentForm = picker.closest('form');
+        if (parentForm) {
+            parentForm.addEventListener('submit', event => {
+                if (selectedIds.size === 0) {
+                    alert('本登録済みの事業主・物件オーナーの希望業種は1件以上選択してください。');
+                    event.preventDefault();
+                }
+            });
+        }
     }
 
     syncSelection();

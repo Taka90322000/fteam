@@ -15,6 +15,7 @@ import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.After;
 import org.junit.Assume;
@@ -22,9 +23,11 @@ import org.junit.Before;
 import org.junit.Test;
 
 import jp.machiriku.bean.LocationInput;
+import jp.machiriku.bean.management.AdminApplicationDetail;
 import jp.machiriku.bean.management.AdminCouponItem;
 import jp.machiriku.bean.management.AdminDashboardSummary;
 import jp.machiriku.bean.management.AdminSurveyItem;
+import jp.machiriku.bean.management.AdminUserItem;
 import jp.machiriku.bean.management.InquiryItem;
 import jp.machiriku.bean.management.ManagementProblem;
 import jp.machiriku.dao.Dao;
@@ -45,7 +48,7 @@ public class ManagementIntegrationTest {
     /** 実テーブルを残したまま隔離する、管理機能が参照する既存テーブル。 */
     private static final List<String> BASE_TABLES = List.of(
             "users", "resident_profiles", "business_profiles", "owner_profiles",
-            "user_locations", "user_industry_preferences", "business_qualifications",
+            "user_locations", "user_industry_preferences", "business_qualifications", "notification_settings",
             "industry_categories", "industry_types", "qualifications",
             "industry_qualification_requirements", "properties", "property_contract_terms",
             "property_industries", "property_images", "property_votes", "vote_choices",
@@ -243,6 +246,21 @@ public class ManagementIntegrationTest {
         userDao.saveLocations(ADMIN, RESIDENT, home, null);
         assertEquals(1, userDao.findLocations(RESIDENT).size());
 
+        // 事業主・オーナーの本登録済み会員から希望業種を0件へ削除しようとすると400エラーとなる。
+        assertEquals(400, assertThrows(ManagementProblem.class,
+                () -> userDao.updatePreferences(ADMIN, BUSINESS, Set.of())).getStatus());
+        assertEquals(400, assertThrows(ManagementProblem.class,
+                () -> userDao.updatePreferences(ADMIN, OWNER, Set.of())).getStatus());
+
+        // 管理者がメールアドレスを削除すると、有効だったメール通知設定も自動で無効化される。
+        try (var stmt = connection.createStatement()) {
+            stmt.execute("INSERT INTO notification_settings(user_id, email_enabled) VALUES (102, true) "
+                    + "ON CONFLICT (user_id) DO UPDATE SET email_enabled = true");
+        }
+        AdminUserItem.Profile resProfile = userDao.findRoleProfile("RESIDENT", RESIDENT);
+        userDao.updateProfile(ADMIN, RESIDENT, "住民", null, resProfile);
+        assertEquals(Boolean.FALSE, scalar("SELECT email_enabled FROM notification_settings WHERE user_id = ?", RESIDENT));
+
         assertNotNull(userDao.findRoleProfile("OWNER", OWNER));
         assertFalse(userDao.findOwnedPropertyHistory(OWNER, 26, 0).isEmpty());
         assertFalse(userDao.findOfferHistory(OWNER, 26, 0).isEmpty());
@@ -362,6 +380,20 @@ public class ManagementIntegrationTest {
         assertFalse(publicDirectoryDao.findPublicRequirements(industryId, 26, 0).isEmpty());
         assertFalse(catalogDao.findRequirements(industryId, 26, 0).isEmpty());
 
+        // 新規申込チェックへ2列未指定で挿入してもトリガーで必須区分・適用条件がスナップショットされ、後の変更に影響されないことを確認する。
+        catalogDao.saveRequirement(ADMIN, 11, qualificationId, true, "申込時の条件");
+        try (var stmt = connection.prepareStatement(
+                "INSERT INTO application_checks(application_id, qualification_id, requirement_name_snapshot) VALUES (301, ?, '必要書類の案内')")) {
+            stmt.setInt(1, qualificationId);
+            stmt.executeUpdate();
+        }
+        catalogDao.saveRequirement(ADMIN, 11, qualificationId, false, "後で変更した条件");
+        AdminApplicationDetail appDetail = dealDao.findApplicationById(301);
+        assertNotNull(appDetail);
+        assertEquals(1, appDetail.getChecks().size());
+        assertEquals(Boolean.TRUE, appDetail.getChecks().get(0).getRequired());
+        assertEquals("申込時の条件", appDetail.getChecks().get(0).getConditionText());
+
         // アンケートの回答履歴・改訂版作成・元版保護・受付終了を検証する。
         assertFalse(surveyDao.findSurveys("", "", "", 26, 0).isEmpty());
         AdminSurveyItem surveyDetail = surveyDao.findSurveyById(SURVEY_ID);
@@ -389,6 +421,12 @@ public class ManagementIntegrationTest {
                 OffsetDateTime.parse("2090-01-02T09:00:00+09:00"),
                 OffsetDateTime.parse("2090-01-03T09:00:00+09:00"),
                 20, null);
+        // 下書きクーポン編集の監査ログに変更前後の配布条件が記録されていることを確認する。
+        String editChanges = String.valueOf(scalar(
+                "SELECT changes::text FROM admin_audit_logs WHERE action = 'EDIT_COUPON' ORDER BY audit_log_id DESC LIMIT 1"));
+        assertTrue(editChanges.contains("before"));
+        assertTrue(editChanges.contains("after"));
+        assertTrue(editChanges.contains("更新した下書き"));
         couponDao.changeDistributionStatus(ADMIN, COUPON_ID, true, "一時停止の確認");
         assertFalse(Boolean.TRUE.equals(
                 scalar("SELECT revoked_at IS NOT NULL FROM coupon_recipients WHERE coupon_id = 601")));

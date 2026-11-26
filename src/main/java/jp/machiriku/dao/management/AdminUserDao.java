@@ -371,7 +371,7 @@ public class AdminUserDao extends ManagementBaseDao {
     /**
      * 地域住民の生活拠点一覧を取得する。
      * @param userId 会員ID。
-     * @return 生活拠点一覧（居住地→勤務先・学校→その他の順）。
+     * @return 生活拠点一覧（居住地→勤務先・学校の順）。
      * @throws SQLException DB照会に失敗した場合。
      */
     public List<AdminUserItem.Location> findLocations(int userId) throws SQLException {
@@ -379,7 +379,7 @@ public class AdminUserDao extends ManagementBaseDao {
                 SELECT location_kind, prefecture, municipality, address_line, latitude, longitude, updated_at
                 FROM user_locations
                 WHERE user_id = ?
-                ORDER BY CASE location_kind WHEN 'HOME' THEN 1 WHEN 'WORK' THEN 2 ELSE 3 END, location_kind
+                ORDER BY CASE location_kind WHEN 'HOME' THEN 1 ELSE 2 END, location_kind
                 """;
         List<AdminUserItem.Location> list = new ArrayList<>();
         try (Connection con = openConnection();
@@ -439,20 +439,22 @@ public class AdminUserDao extends ManagementBaseDao {
     }
 
     /**
-     * 事業主に登録可能な資格・許認可（有効または既に登録済み）の選択肢を取得する。
+     * 事業主へ新規追加できる有効な資格・許認可（未登録分のみ）の選択肢を取得する。
      * @param userId 事業主の会員ID。
      * @return 資格ID文字列をキー、名称を値とする選択肢マップ。
      * @throws SQLException DB照会に失敗した場合。
      */
-    public Map<String, String> findQualificationChoices(int userId) throws SQLException {
+    public Map<String, String> findAddableQualificationChoices(int userId) throws SQLException {
+        // 既存保有資格を新規追加欄から誤って上書きしないよう、未登録の有効項目だけを返す。
         String sql = """
                 SELECT q.qualification_id, q.qualification_name
                 FROM qualifications q
-                WHERE (q.is_active AND q.requirement_kind IN ('QUALIFICATION', 'PERMIT'))
-                   OR EXISTS (
-                       SELECT 1 FROM business_qualifications bq
-                       WHERE bq.business_user_id = ? AND bq.qualification_id = q.qualification_id
-                   )
+                WHERE q.is_active
+                  AND q.requirement_kind IN ('QUALIFICATION', 'PERMIT')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM business_qualifications bq
+                      WHERE bq.business_user_id = ? AND bq.qualification_id = q.qualification_id
+                  )
                 ORDER BY q.qualification_name, q.qualification_id
                 """;
         Map<String, String> choices = new LinkedHashMap<>();
@@ -1063,6 +1065,19 @@ public class AdminUserDao extends ManagementBaseDao {
                     stmt.executeUpdate();
                 }
 
+                // メールアドレスを削除した場合は、本人画面と整合させるためメール通知設定も無効化する。
+                if (email == null) {
+                    String disableNotifySql = """
+                            UPDATE notification_settings
+                            SET email_enabled = false, updated_at = CURRENT_TIMESTAMP
+                            WHERE user_id = ? AND email_enabled
+                            """;
+                    try (PreparedStatement stmt = con.prepareStatement(disableNotifySql)) {
+                        stmt.setInt(1, targetUserId);
+                        stmt.executeUpdate();
+                    }
+                }
+
                 // 区分別プロフィールが存在する会員のみ区分別テーブルを更新する。
                 if (hasRoleProfileInTx(con, locked.role, targetUserId)) {
                     if (roleProfile == null) {
@@ -1105,6 +1120,12 @@ public class AdminUserDao extends ManagementBaseDao {
                 AccountLock locked = lockUserRow(con, targetUserId);
                 if (locked.withdrawn) {
                     throw new ManagementProblem(409, "退会済み会員のプロフィールは変更できません。");
+                }
+                // 本登録済みの事業主・物件オーナーは本人画面で希望業種が1件以上必須のため、0件への更新を拒否する。
+                if (selectedIndustryIds.isEmpty()
+                        && ("BUSINESS".equals(locked.role) || "OWNER".equals(locked.role))
+                        && hasRoleProfileInTx(con, locked.role, targetUserId)) {
+                    throw new ManagementProblem(400, "本登録済みの事業主・物件オーナーの希望業種は1件以上選択してください。");
                 }
 
                 List<Integer> before = findPreferenceIdsInTx(con, targetUserId);
@@ -1155,7 +1176,7 @@ public class AdminUserDao extends ManagementBaseDao {
 
     /**
      * 地域住民の生活拠点（居住地：HOME必須、勤務先・学校：WORK任意）を一括保存し、監査ログを記録する。
-     * 勤務先・学校が未入力（null）の場合は既存のWORKレコードを削除し、未参照の旧SCHOOLレコードも整理する。
+     * 勤務先・学校が未入力（null）の場合は既存のWORKレコードを削除する。
      * @param actorId 操作した管理者の会員ID。
      * @param targetUserId 対象住民の会員ID。
      * @param home 居住地（HOME）の入力内容。必須。
@@ -1188,9 +1209,6 @@ public class AdminUserDao extends ManagementBaseDao {
                 } else {
                     deleteWorkLocationInTx(con, targetUserId);
                 }
-
-                // 旧画面で登録された未参照のSCHOOLレコードが残っている場合は統合後の重複を防ぐため削除する。
-                deleteUnreferencedLegacySchoolInTx(con, targetUserId);
 
                 auditDao.insertLog(con, actorId, "UPDATE_LOCATION", "USER",
                         Map.of("user_id", targetUserId), null,
@@ -1268,27 +1286,6 @@ public class AdminUserDao extends ManagementBaseDao {
             }
         }
         String deleteSql = "DELETE FROM user_locations WHERE user_id = ? AND location_kind = 'WORK'";
-        try (PreparedStatement stmt = con.prepareStatement(deleteSql)) {
-            stmt.setInt(1, targetUserId);
-            stmt.executeUpdate();
-        }
-    }
-
-    /**
-     * トランザクション内で投票履歴から未参照の旧SCHOOLレコードを削除し、WORKへの統合を完了する。
-     * @param con トランザクション中の接続。
-     * @param targetUserId 対象住民の会員ID。
-     * @throws SQLException DB削除に失敗した場合。
-     */
-    private static void deleteUnreferencedLegacySchoolInTx(Connection con, int targetUserId) throws SQLException {
-        String deleteSql = """
-                DELETE FROM user_locations ul
-                WHERE ul.user_id = ?
-                  AND ul.location_kind = 'SCHOOL'
-                  AND NOT EXISTS (
-                      SELECT 1 FROM property_votes pv WHERE pv.location_id = ul.location_id
-                  )
-                """;
         try (PreparedStatement stmt = con.prepareStatement(deleteSql)) {
             stmt.setInt(1, targetUserId);
             stmt.executeUpdate();

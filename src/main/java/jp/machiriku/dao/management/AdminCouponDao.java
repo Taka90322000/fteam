@@ -8,6 +8,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -257,6 +258,8 @@ public class AdminCouponDao extends ManagementBaseDao {
                 if (!"DRAFT".equals(locked.status) || hasAnyRecipient(con, couponId)) {
                     throw new ManagementProblem(409, "内容を編集できるのは、発行前の下書きです。");
                 }
+                // 監査ログへ変更前後の配布条件を残すため、更新前のスナップショットを取得する。
+                Map<String, Object> before = readDraftSnapshot(con, couponId);
 
                 String updateSql = """
                         UPDATE coupons
@@ -280,8 +283,12 @@ public class AdminCouponDao extends ManagementBaseDao {
                     stmt.executeUpdate();
                 }
 
+                Map<String, Object> after = buildDraftSnapshot(
+                        title, benefitKind, discountPercent, discountYen, serviceText,
+                        startsAt, endsAt, validUntil, usageLimit, termsText);
                 auditDao.insertLog(con, actorId, "EDIT_COUPON", "coupon",
-                        Map.of("coupon_id", couponId), null, Map.of());
+                        Map.of("coupon_id", couponId), null,
+                        Map.of("before", before, "after", after));
 
                 con.commit();
                 con.setAutoCommit(true);
@@ -438,6 +445,73 @@ public class AdminCouponDao extends ManagementBaseDao {
                 return new CouponLock(rs.getString("coupon_status"), rs.getBoolean("in_period"));
             }
         }
+    }
+
+    /**
+     * 監査ログ用に更新前の下書きクーポン配布条件を読み取る。
+     * @param con トランザクション中の接続。
+     * @param couponId クーポンID。
+     * @return 更新前条件のマップ。
+     * @throws SQLException DB照会に失敗した場合。
+     */
+    private static Map<String, Object> readDraftSnapshot(Connection con, int couponId) throws SQLException {
+        String sql = """
+                SELECT coupon_title, benefit_kind, discount_percent, discount_yen, service_text,
+                       distribution_starts_at, distribution_ends_at, valid_until, usage_limit, terms_text
+                FROM coupons
+                WHERE coupon_id = ?
+                """;
+        try (PreparedStatement stmt = con.prepareStatement(sql)) {
+            stmt.setInt(1, couponId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    throw new ManagementProblem(404, "指定されたクーポンが見つかりません。");
+                }
+                return buildDraftSnapshot(
+                        rs.getString("coupon_title"),
+                        rs.getString("benefit_kind"),
+                        rs.getBigDecimal("discount_percent"),
+                        getNullableInt(rs, "discount_yen"),
+                        rs.getString("service_text"),
+                        getOffsetDateTime(rs, "distribution_starts_at"),
+                        getOffsetDateTime(rs, "distribution_ends_at"),
+                        getOffsetDateTime(rs, "valid_until"),
+                        rs.getInt("usage_limit"),
+                        rs.getString("terms_text"));
+            }
+        }
+    }
+
+    /**
+     * 下書きクーポンの各配布条件を監査ログJSON記録用のマップへまとめる。
+     * @param title クーポン名。
+     * @param benefitKind 特典種別。
+     * @param discountPercent 割引率。
+     * @param discountYen 割引額。
+     * @param serviceText サービス特典文。
+     * @param startsAt 配布開始日時。
+     * @param endsAt 配布終了日時。
+     * @param validUntil 利用期限日時。
+     * @param usageLimit 発行枚数上限。
+     * @param termsText 利用条件。
+     * @return JSON変換可能な項目マップ。
+     */
+    private static Map<String, Object> buildDraftSnapshot(String title, String benefitKind,
+            BigDecimal discountPercent, Integer discountYen, String serviceText,
+            OffsetDateTime startsAt, OffsetDateTime endsAt, OffsetDateTime validUntil,
+            int usageLimit, String termsText) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("coupon_title", title);
+        snapshot.put("benefit_kind", benefitKind);
+        snapshot.put("discount_percent", discountPercent);
+        snapshot.put("discount_yen", discountYen);
+        snapshot.put("service_text", serviceText);
+        snapshot.put("distribution_starts_at", startsAt == null ? null : startsAt.toString());
+        snapshot.put("distribution_ends_at", endsAt == null ? null : endsAt.toString());
+        snapshot.put("valid_until", validUntil == null ? null : validUntil.toString());
+        snapshot.put("usage_limit", usageLimit);
+        snapshot.put("terms_text", termsText);
+        return snapshot;
     }
 
     /**

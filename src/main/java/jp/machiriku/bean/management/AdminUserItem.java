@@ -528,7 +528,7 @@ public class AdminUserItem {
 
     /** 地域住民の生活拠点（居住地・勤務先・学校）1件を表すデータモデル。 */
     public static class Location {
-        /** 生活拠点種別コード（HOME / WORK。旧データのSCHOOLにも対応）。 */
+        /** 生活拠点種別コード（HOME / WORK）。 */
         private String locationKind;
         /** 都道府県。 */
         private String prefecture;
@@ -572,9 +572,6 @@ public class AdminUserItem {
             }
             if ("WORK".equals(locationKind)) {
                 return "勤務先・学校";
-            }
-            if ("SCHOOL".equals(locationKind)) {
-                return "勤務先・学校（旧：学校）";
             }
             return locationKind;
         }

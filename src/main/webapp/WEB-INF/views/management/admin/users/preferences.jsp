@@ -47,10 +47,11 @@
             <div class="industry-picker"
                  data-taxonomy="${fn:escapeXml(preferenceTaxonomyJson)}"
                  data-selected="${fn:escapeXml(selectedPreferenceJson)}"
-                 data-input-name="industries">
+                 data-input-name="industries"
+                 data-required="${requirePreference ? 'true' : 'false'}">
                 <div class="industry-picker-head">
                     <span class="industry-picker-title">
-                        希望業種・ジャンル <span class="industry-picker-note">（複数選択可）</span>
+                        希望業種・ジャンル <span class="industry-picker-note"><c:out value="${requirePreference ? '（1件以上必須・複数選択可）' : '（複数選択可）'}" /></span>
                     </span>
                     <span id="admin-industry-count" class="industry-count">選択中: <c:out value="${fn:length(selectedPreferenceIds)}" />件</span>
                 </div>

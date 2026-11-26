@@ -64,7 +64,7 @@ public class AdminAuditDao extends ManagementBaseDao {
                   AND u.account_status = 'ACTIVE'
                   AND u.withdrawn_at IS NULL
                   AND a.is_active
-                """ + (lockRow ? " FOR SHARE OF u" : "");
+                """ + (lockRow ? " FOR SHARE OF a, u" : "");
         try (PreparedStatement stmt = con.prepareStatement(sql)) {
             stmt.setInt(1, userId);
             try (ResultSet rs = stmt.executeQuery()) {
