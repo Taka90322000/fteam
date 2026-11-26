@@ -977,34 +977,44 @@ window.MachirikuStore = (function() {
     if (!prop) return;
     const published = getOpeningPlans(propId).filter(p => p.publicationStatus === "PUBLISHED");
     const latest = published[0] || null;
+    const profile = prop.storeProfile || null;
     const tenancy = getTenancyByPropertyId(propId);
 
-    if (latest) {
-      const isOpen = latest.progressStatus === "OPENED";
+    if (profile || latest) {
+      const effectiveProg = profile?.progressStatus || latest?.progressStatus || "PREPARING";
+      const effectiveOpenDate = profile ? (profile.openDate || "") : (latest?.plannedOpenOn || "");
+      const effectiveStoreName = profile?.storeName || latest?.storeName || prop.contractedStoreName || tenancy?.storeName || "";
+      const isOpen = effectiveProg === "OPENED";
       prop.status = isOpen ? "opened" : "preparing";
       prop.listingStatus = "CONTRACTED";
-      prop.contractedStoreName = latest.storeName || prop.contractedStoreName;
+      if (effectiveStoreName) {
+        prop.contractedStoreName = effectiveStoreName;
+      }
       prop.statusLabel = isOpen
         ? "営業中"
-        : (latest.plannedOpenOn ? `${PROGRESS_STATUS_LABELS[latest.progressStatus] || "開店準備中"}（${latest.plannedOpenOn} OPEN予定）` : (PROGRESS_STATUS_LABELS[latest.progressStatus] || "開店準備中"));
+        : (effectiveOpenDate
+          ? `${PROGRESS_STATUS_LABELS[effectiveProg] || "開店準備中"}（${effectiveOpenDate} OPEN予定）`
+          : (PROGRESS_STATUS_LABELS[effectiveProg] || "開店準備中"));
       prop.storePlan = {
-        planId: latest.id,
-        storeName: latest.storeName,
-        operatorName: latest.operatorName || state.users?.business?.name || "",
-        progressStatus: latest.progressStatus,
-        progressLabel: PROGRESS_STATUS_LABELS[latest.progressStatus] || latest.progressStatus,
-        title: latest.title,
-        concept: latest.body,
-        openDate: latest.plannedOpenOn || "",
-        message: latest.body,
-        publishedAt: latest.publishedAt || "",
-        photos: Array.isArray(latest.photos) ? latest.photos : []
+        planId: latest?.id || "",
+        storeName: effectiveStoreName,
+        operatorName: profile?.operatorName || latest?.operatorName || state.users?.business?.name || "",
+        progressStatus: effectiveProg,
+        progressLabel: PROGRESS_STATUS_LABELS[effectiveProg] || effectiveProg,
+        title: latest?.title || "",
+        concept: latest?.body || "",
+        openDate: effectiveOpenDate,
+        message: latest?.body || "",
+        publishedAt: latest?.publishedAt || "",
+        updatedAt: profile?.updatedAt || latest?.updatedAt || "",
+        photos: Array.isArray(latest?.photos) ? latest.photos : []
       };
       if (tenancy) {
+        if (effectiveStoreName) tenancy.storeName = effectiveStoreName;
         if (isOpen) {
           tenancy.tenancyStatus = "OPEN";
           tenancy.statusLabel = TENANCY_STATUS_LABELS.OPEN;
-          tenancy.openedOn = latest.plannedOpenOn || tenancy.openedOn || new Date().toISOString().slice(0, 10);
+          tenancy.openedOn = effectiveOpenDate || tenancy.openedOn || new Date().toISOString().slice(0, 10);
         } else if (tenancy.tenancyStatus === "OPEN") {
           tenancy.tenancyStatus = "HANDED_OVER";
           tenancy.statusLabel = TENANCY_STATUS_LABELS.HANDED_OVER;
@@ -1021,38 +1031,91 @@ window.MachirikuStore = (function() {
     }
   }
 
+  function saveOpeningProfile(profileData) {
+    const prop = getPropertyById(profileData?.propId);
+    if (!prop) return { success: false, message: "対象物件が見つかりません。" };
+
+    const storeName = String(profileData.storeName || "").trim();
+    if (!storeName) return { success: false, message: "店舗正式名称を入力してください。" };
+
+    const progressStatus = ["PREPARING", "CONSTRUCTION", "DATE_FIXED", "OPENED"].includes(profileData.progressStatus)
+      ? profileData.progressStatus
+      : "PREPARING";
+    const openDate = String(profileData.plannedOpenOn ?? profileData.openDate ?? "").trim();
+
+    if (progressStatus === "OPENED" && !openDate) {
+      return { success: false, message: "「開店・営業中」として保存する場合は実開店日を入力してください。" };
+    }
+
+    const prevProg = prop.storeProfile?.progressStatus || prop.storePlan?.progressStatus || "";
+    const nowText = new Date().toLocaleString("ja-JP");
+    prop.storeProfile = {
+      storeName,
+      progressStatus,
+      progressLabel: PROGRESS_STATUS_LABELS[progressStatus] || progressStatus,
+      openDate,
+      operatorName: state.currentUser?.name || state.users?.business?.name || "出店事業主",
+      updatedAt: nowText
+    };
+
+    syncPropertyStorePlan(prop.id);
+
+    if (progressStatus === "OPENED" && prevProg !== "OPENED") {
+      state.notifications.unshift({
+        id: "notif-" + Date.now(),
+        type: "progress",
+        title: `【開店のお知らせ】『${storeName}』が開店しました`,
+        body: `${prop.title}で『${storeName}』が営業を開始しました（開店日: ${openDate}）。`,
+        date: "たった今",
+        linkScreen: "s05",
+        isRead: false
+      });
+    }
+
+    notify();
+    return { success: true, storeProfile: prop.storeProfile };
+  }
+
   function saveOpeningPlan(planData) {
     if (!Array.isArray(state.openingPlans)) state.openingPlans = [];
     const prop = getPropertyById(planData.propId);
     if (!prop) return { success: false, message: "対象物件が見つかりません。" };
 
-    const progressStatus = ["PREPARING", "CONSTRUCTION", "DATE_FIXED", "OPENED"].includes(planData.progressStatus)
+    const tenancy = getTenancyByPropertyId(prop.id);
+    const nowText = new Date().toLocaleString("ja-JP");
+    let record = planData.id ? getOpeningPlanById(planData.id) : null;
+    const wasPublished = Boolean(record && record.publicationStatus === "PUBLISHED");
+
+    const progressSource = planData.progressStatus !== undefined
       ? planData.progressStatus
+      : (record ? record.progressStatus : (prop.storeProfile?.progressStatus || "PREPARING"));
+    const progressStatus = ["PREPARING", "CONSTRUCTION", "DATE_FIXED", "OPENED"].includes(progressSource)
+      ? progressSource
       : "PREPARING";
     const publicationStatus = ["DRAFT", "PUBLISHED", "ARCHIVED"].includes(planData.publicationStatus)
       ? planData.publicationStatus
       : "PUBLISHED";
-    const plannedOpenOn = String(planData.plannedOpenOn || planData.openDate || "").trim();
+    const plannedOpenOn = (planData.plannedOpenOn !== undefined || planData.openDate !== undefined)
+      ? String(planData.plannedOpenOn ?? planData.openDate ?? "").trim()
+      : (record ? String(record.plannedOpenOn || "") : String(prop.storeProfile?.openDate || ""));
 
-    if (progressStatus === "OPENED" && publicationStatus === "PUBLISHED" && !plannedOpenOn) {
+    if (!record && progressStatus === "OPENED" && publicationStatus === "PUBLISHED" && !plannedOpenOn) {
       return { success: false, message: "「開店・営業中」として公開する場合は実開店日を入力してください。" };
     }
 
-    const tenancy = getTenancyByPropertyId(prop.id);
-    const nowText = new Date().toLocaleString("ja-JP");
-    const storeName = String(planData.storeName || tenancy?.storeName || prop.contractedStoreName || "").trim();
-    const title = String(planData.title || `${storeName || prop.title} 開店準備のお知らせ`).trim();
+    const storeName = planData.storeName !== undefined
+      ? String(planData.storeName || "").trim()
+      : (record ? String(record.storeName || "") : String(prop.storeProfile?.storeName || tenancy?.storeName || prop.contractedStoreName || "").trim());
+    const resolvedStoreName = storeName || tenancy?.storeName || prop.contractedStoreName || prop.title;
+    const title = String(planData.title || `${resolvedStoreName} 開店準備のお知らせ`).trim();
     const body = String(planData.body || planData.message || "").trim();
     const photos = Array.isArray(planData.photos) ? planData.photos.filter(ph => ph && ph.url) : [];
-
-    let record = planData.id ? getOpeningPlanById(planData.id) : null;
-    const wasPublished = Boolean(record && record.publicationStatus === "PUBLISHED");
 
     if (record) {
       record.propId = prop.id;
       record.propTitle = prop.title;
       record.tenancyId = tenancy ? tenancy.id : (record.tenancyId || "");
-      record.storeName = storeName;
+      record.storeName = resolvedStoreName;
       record.title = title;
       record.body = body;
       record.plannedOpenOn = plannedOpenOn;
@@ -1071,7 +1134,7 @@ window.MachirikuStore = (function() {
         tenancyId: tenancy ? tenancy.id : "",
         propId: prop.id,
         propTitle: prop.title,
-        storeName,
+        storeName: resolvedStoreName,
         operatorName: state.currentUser?.name || state.users?.business?.name || "出店事業主",
         title,
         body,
@@ -1094,7 +1157,7 @@ window.MachirikuStore = (function() {
       state.notifications.unshift({
         id: "notif-" + Date.now(),
         type: "progress",
-        title: `【開店のようす更新】『${storeName}』${title}`,
+        title: `【開店のようす更新】『${resolvedStoreName}』${title}`,
         body: plannedOpenOn
           ? `${record.progressLabel}（${plannedOpenOn} 予定）。開店のようすページで最新情報をご覧いただけます。`
           : `${record.progressLabel}の最新お知らせが公開されました。`,
@@ -1622,6 +1685,7 @@ window.MachirikuStore = (function() {
     updateTenancyChecklist,
     getOpeningPlans,
     getOpeningPlanById,
+    saveOpeningProfile,
     saveOpeningPlan,
     updateOpeningPlanPublication,
     publishStorePlan,

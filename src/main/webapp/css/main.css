@@ -8519,6 +8519,53 @@ dialog.o01-confirm-dialog::backdrop {
   overflow-wrap: anywhere;
 }
 
+.s15-card-head-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.s15-card-lead {
+  margin: 0.4rem 0 0;
+  font-size: 0.86rem;
+  color: var(--text-sub);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.s15-profile-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block-start: 1.5rem;
+}
+
+.s15-profile-saved-meta {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.s15-profile-saved-meta.is-dirty {
+  color: var(--primary-800);
+  font-weight: 700;
+}
+
+.s15-history-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.matching-preview-post .s15-preview-placeholder {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
 .matching-preview-photos {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -9244,13 +9291,15 @@ dialog.o01-confirm-dialog::backdrop {
     gap: 0.35rem;
   }
 
-  .s14-view .analytics-selector-group {
+  .s14-view .analytics-selector-group,
+  .s15-view .analytics-selector-group {
     inline-size: 100%;
     min-inline-size: 0;
     gap: 0.3rem;
   }
 
-  .s14-view .analytics-select {
+  .s14-view .analytics-select,
+  .s15-view .analytics-select {
     inline-size: 100%;
     max-inline-size: 100%;
     min-inline-size: 0;
@@ -9424,6 +9473,26 @@ dialog.o01-confirm-dialog::backdrop {
 }
 
 @media (max-width: 640px) {
+  .s15-profile-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .s15-view .analytics-quick-links {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .s15-view .analytics-quick-links > a {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 0.5rem;
+    font-size: 0.84rem;
+    text-align: center;
+  }
+
   :is(.s13-view, .s14-view, .s15-view) .form-actions-bar.form-actions-split {
     display: flex;
     flex-direction: column-reverse;

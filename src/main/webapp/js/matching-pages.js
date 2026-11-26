@@ -1498,36 +1498,70 @@ window.MachirikuMatchingPages = (function () {
       }
     }
 
-    const form = document.getElementById("s15-plan-form");
+    const profileForm = document.getElementById("s15-profile-form");
+    const noticeForm = document.getElementById("s15-plan-form");
     const storeNameEl = document.getElementById("s15-store-name");
     const openDateEl = document.getElementById("s15-open-date");
     const openDateLabel = document.getElementById("s15-open-date-label");
     const genreEl = document.getElementById("s15-genre-display");
+    const profileStatusPill = document.getElementById("s15-profile-status-pill");
+    const profileSavedMetaEl = document.getElementById("s15-profile-saved-meta");
+    const formHeadingEl = document.getElementById("s15-form-heading");
+    const noticeLeadEl = document.getElementById("s15-notice-lead");
+    const publishBtnEl = document.getElementById("s15-publish-btn");
     const titleEl = document.getElementById("s15-title");
     const bodyEl = document.getElementById("s15-body");
+    const savedProfile = activeProp.storeProfile || null;
 
-    if (s15BoundPropForDraft !== activeProp.id && !s15EditingPlanId) {
+    if (s15BoundPropForDraft !== activeProp.id) {
       s15BoundPropForDraft = activeProp.id;
       const appForProp = (state.applications || []).find((a) => a.propId === activeProp.id && a.status !== "rejected");
       if (storeNameEl) {
-        storeNameEl.value = tenancy?.storeName || activeProp.storePlan?.storeName || appForProp?.storeName || activeProp.contractedStoreName || "";
+        storeNameEl.value = savedProfile?.storeName || tenancy?.storeName || activeProp.storePlan?.storeName || appForProp?.storeName || activeProp.contractedStoreName || "";
       }
       if (openDateEl) {
-        openDateEl.value = activeProp.storePlan?.openDate || appForProp?.targetOpenDate || "";
+        openDateEl.value = savedProfile
+          ? (savedProfile.openDate || "")
+          : (activeProp.storePlan?.openDate || appForProp?.targetOpenDate || "");
       }
       if (genreEl) {
         genreEl.value = tenancy?.genreName || appForProp?.genreName || activeProp.topDemands?.[0]?.label || "未設定";
       }
-      const initProg = activeProp.storePlan?.progressStatus || "PREPARING";
-      const progRadio = form?.querySelector(`input[name="progressStatus"][value="${initProg}"]`);
+      const initProg = savedProfile?.progressStatus || activeProp.storePlan?.progressStatus || (activeProp.status === "opened" ? "OPENED" : "PREPARING");
+      const progRadio = profileForm?.querySelector(`input[name="progressStatus"][value="${initProg}"]`);
       if (progRadio) progRadio.checked = true;
     }
 
-    const validationCtrl = initAccessibleFormValidation(form, { announcerId: "s15-live-announcer" });
+    const profileValidationCtrl = initAccessibleFormValidation(profileForm, { announcerId: "s15-profile-announcer" });
+    const validationCtrl = initAccessibleFormValidation(noticeForm, { announcerId: "s15-live-announcer" });
 
     const getSelectedProgress = () => {
-      const checked = form?.querySelector('input[name="progressStatus"]:checked');
+      const checked = profileForm?.querySelector('input[name="progressStatus"]:checked');
       return checked ? checked.value : "PREPARING";
+    };
+
+    const syncProfileStatusUi = (isDirty = false) => {
+      const prog = getSelectedProgress();
+      const progLabel = PROGRESS_LABEL_MAP[prog] || "開店準備中";
+      if (profileStatusPill) {
+        profileStatusPill.textContent = progLabel;
+        profileStatusPill.className = `badge-status ${prog === "OPENED" ? "status-opened" : "status-preparing"}`;
+      }
+      if (profileSavedMetaEl) {
+        if (isDirty) {
+          profileSavedMetaEl.textContent = "未保存の変更があります（「基本情報・進捗を保存する」で反映されます）";
+          profileSavedMetaEl.classList.add("is-dirty");
+        } else if (activeProp.storeProfile?.updatedAt) {
+          profileSavedMetaEl.textContent = `最終保存: ${activeProp.storeProfile.updatedAt}`;
+          profileSavedMetaEl.classList.remove("is-dirty");
+        } else if (activeProp.storePlan?.storeName) {
+          profileSavedMetaEl.textContent = "公開中の店舗情報を表示中";
+          profileSavedMetaEl.classList.remove("is-dirty");
+        } else {
+          profileSavedMetaEl.textContent = "基本情報のみでも保存して公開ページへ反映できます";
+          profileSavedMetaEl.classList.remove("is-dirty");
+        }
+      }
     };
 
     const syncOpenDateRequirement = () => {
@@ -1536,7 +1570,7 @@ window.MachirikuMatchingPages = (function () {
         openDateEl.required = isOpened;
         if (!isOpened) {
           openDateEl.setCustomValidity("");
-          validationCtrl?.resetField(openDateEl);
+          profileValidationCtrl?.resetField(openDateEl);
         }
       }
       if (openDateLabel) {
@@ -1553,8 +1587,9 @@ window.MachirikuMatchingPages = (function () {
       const progLabel = PROGRESS_LABEL_MAP[prog] || "開店準備中";
       const storeName = storeNameEl?.value.trim() || "（店舗名がここに入ります）";
       const openDate = openDateEl?.value.trim();
-      const title = titleEl?.value.trim() || "（お知らせ見出しがここに入ります）";
-      const body = bodyEl?.value.trim() || "住民へのメッセージや準備状況がここに表示されます。";
+      const rawTitle = titleEl?.value.trim() || "";
+      const rawBody = bodyEl?.value.trim() || "";
+      const hasNoticeDraft = Boolean(rawTitle || rawBody || s15Photos.length);
 
       previewEl.innerHTML = `
         <div class="matching-preview-header">
@@ -1564,13 +1599,17 @@ window.MachirikuMatchingPages = (function () {
         <div class="matching-preview-prop">${escapeHtml(activeProp.title)}（${escapeHtml(activeProp.address)}）</div>
         <h3 class="matching-preview-store">${escapeHtml(storeName)}</h3>
         <div class="matching-preview-post">
-          <h4>${escapeHtml(title)}</h4>
-          <p>${escapeHtml(body)}</p>
-          ${s15Photos.length ? `
-            <div class="matching-preview-photos">
-              ${s15Photos.map((ph) => `<img src="${escapeHtml(resolveAssetUrl(ph.url))}" alt="${escapeHtml(ph.label || "準備写真")}">`).join("")}
-            </div>
-          ` : ""}
+          ${hasNoticeDraft ? `
+            <h4>${escapeHtml(rawTitle || "（お知らせ見出しがここに入ります）")}</h4>
+            <p>${escapeHtml(rawBody || "住民へのメッセージや準備状況がここに表示されます。")}</p>
+            ${s15Photos.length ? `
+              <div class="matching-preview-photos">
+                ${s15Photos.map((ph) => `<img src="${escapeHtml(resolveAssetUrl(ph.url))}" alt="${escapeHtml(ph.label || "準備写真")}">`).join("")}
+              </div>
+            ` : ""}
+          ` : `
+            <p class="s15-preview-placeholder">お知らせ見出し・本文を入力すると、タイムライン投稿のプレビューが表示されます（店舗名・進捗・開店予定日のみの保存も可能です）。</p>
+          `}
         </div>
       `;
     };
@@ -1622,13 +1661,26 @@ window.MachirikuMatchingPages = (function () {
       };
     }
 
-    form?.querySelectorAll('input[name="progressStatus"]').forEach((r) => {
+    profileForm?.querySelectorAll('input[name="progressStatus"]').forEach((r) => {
       r.onchange = () => {
         syncOpenDateRequirement();
+        syncProfileStatusUi(true);
         renderLivePreview();
       };
     });
-    [storeNameEl, openDateEl, titleEl, bodyEl].forEach((el) => {
+    [storeNameEl, openDateEl].forEach((el) => {
+      if (el) {
+        el.oninput = () => {
+          syncProfileStatusUi(true);
+          renderLivePreview();
+        };
+        el.onchange = () => {
+          syncProfileStatusUi(true);
+          renderLivePreview();
+        };
+      }
+    });
+    [titleEl, bodyEl].forEach((el) => {
       if (el) {
         el.oninput = renderLivePreview;
         el.onchange = renderLivePreview;
@@ -1636,85 +1688,154 @@ window.MachirikuMatchingPages = (function () {
     });
 
     syncOpenDateRequirement();
+    syncProfileStatusUi(false);
     renderS15PhotoGrid();
+
+    if (profileForm) {
+      profileForm.onsubmit = (e) => {
+        e.preventDefault();
+        syncOpenDateRequirement();
+        if (!profileForm.checkValidity()) {
+          const inv = profileValidationCtrl?.focusFirstInvalid();
+          if (inv) {
+            const m = inv.validationMessage || "基本情報の入力内容を確認してください";
+            profileValidationCtrl?.announce(m);
+            window.MachirikuApp?.showToast?.(m);
+          }
+          return;
+        }
+        const res = store.saveOpeningProfile({
+          propId: activeProp.id,
+          storeName: storeNameEl?.value.trim() || "",
+          progressStatus: getSelectedProgress(),
+          plannedOpenOn: openDateEl?.value.trim() || ""
+        });
+        if (!res.success) {
+          window.MachirikuApp?.showToast?.(res.message || "基本情報の保存に失敗しました");
+          return;
+        }
+        profileValidationCtrl?.resetAll();
+        syncProfileStatusUi(false);
+        window.MachirikuApp?.showToast?.("基本情報・現在の進捗を保存しました（公開ページへ反映されました）");
+      };
+    }
 
     const resetS15Editor = () => {
       s15EditingPlanId = "";
       s15Photos = [];
-      const keepStoreName = storeNameEl?.value || "";
-      const keepOpenDate = openDateEl?.value || "";
-      const keepGenre = genreEl?.value || "";
-      const keepProg = getSelectedProgress();
-      if (form) form.reset();
-      if (storeNameEl) storeNameEl.value = keepStoreName;
-      if (openDateEl) openDateEl.value = keepOpenDate;
-      if (genreEl) genreEl.value = keepGenre;
-      const progR = form?.querySelector(`input[name="progressStatus"][value="${keepProg}"]`);
-      if (progR) progR.checked = true;
+      if (noticeForm) noticeForm.reset();
       const idEl = document.getElementById("s15-plan-id");
       if (idEl) idEl.value = "";
       const banner = document.getElementById("s15-edit-banner");
       if (banner) banner.hidden = true;
+      if (formHeadingEl) formHeadingEl.textContent = "2. 地域住民へのお知らせを新規投稿する";
+      if (noticeLeadEl) noticeLeadEl.hidden = false;
+      if (publishBtnEl) publishBtnEl.textContent = "住民に向けて公開する";
       if (titleEl) titleEl.value = "";
       if (bodyEl) bodyEl.value = "";
-      syncOpenDateRequirement();
       validationCtrl?.resetAll();
       renderS15PhotoGrid();
     };
 
+    const syncEditNoticeModeUi = (plan) => {
+      const banner = document.getElementById("s15-edit-banner");
+      if (plan) {
+        if (formHeadingEl) formHeadingEl.textContent = "2. 選択中のお知らせを編集する";
+        if (noticeLeadEl) noticeLeadEl.hidden = true;
+        if (banner) banner.hidden = false;
+        setText("s15-edit-banner-text", `「${plan.title}」を編集中です（上の基本情報・進捗は変更されません）`);
+        if (publishBtnEl) publishBtnEl.textContent = "変更内容を公開する";
+      } else {
+        if (formHeadingEl) formHeadingEl.textContent = "2. 地域住民へのお知らせを新規投稿する";
+        if (noticeLeadEl) noticeLeadEl.hidden = false;
+        if (banner) banner.hidden = true;
+        if (publishBtnEl) publishBtnEl.textContent = "住民に向けて公開する";
+      }
+    };
+
+    if (s15EditingPlanId) {
+      const activeEditPlan = store.getOpeningPlanById(s15EditingPlanId);
+      if (activeEditPlan && activeEditPlan.propId === activeProp.id) {
+        syncEditNoticeModeUi(activeEditPlan);
+      } else {
+        s15EditingPlanId = "";
+      }
+    }
+
     const cancelEditBtn = document.getElementById("s15-cancel-edit-btn");
     if (cancelEditBtn) cancelEditBtn.onclick = resetS15Editor;
 
-    const collectPlanPayload = (publicationStatus) => ({
-      id: s15EditingPlanId || undefined,
-      propId: activeProp.id,
-      storeName: storeNameEl?.value.trim() || "",
-      progressStatus: getSelectedProgress(),
-      plannedOpenOn: openDateEl?.value.trim() || "",
-      title: titleEl?.value.trim() || "",
-      body: bodyEl?.value.trim() || "",
-      photos: [...s15Photos],
-      publicationStatus
-    });
+    const collectPlanPayload = (publicationStatus) => {
+      if (s15EditingPlanId) {
+        return {
+          id: s15EditingPlanId,
+          propId: activeProp.id,
+          title: titleEl?.value.trim() || "",
+          body: bodyEl?.value.trim() || "",
+          photos: [...s15Photos],
+          publicationStatus
+        };
+      }
+      const savedProg = activeProp.storeProfile?.progressStatus || activeProp.storePlan?.progressStatus || "";
+      const fallbackProg = getSelectedProgress();
+      const snapshotOpenDate = activeProp.storeProfile
+        ? (activeProp.storeProfile.openDate || "")
+        : (activeProp.storePlan?.openDate || openDateEl?.value.trim() || "");
+      const snapshotProg = savedProg || ((fallbackProg === "OPENED" && !snapshotOpenDate) ? "PREPARING" : fallbackProg);
+      const snapshotStoreName = activeProp.storeProfile?.storeName || storeNameEl?.value.trim() || tenancy?.storeName || activeProp.contractedStoreName || activeProp.title;
+      return {
+        propId: activeProp.id,
+        storeName: snapshotStoreName,
+        progressStatus: snapshotProg,
+        plannedOpenOn: snapshotOpenDate,
+        title: titleEl?.value.trim() || "",
+        body: bodyEl?.value.trim() || "",
+        photos: [...s15Photos],
+        publicationStatus
+      };
+    };
 
     const draftBtn = document.getElementById("s15-draft-btn");
     if (draftBtn) {
       draftBtn.onclick = () => {
-        if (!storeNameEl?.value.trim() || !titleEl?.value.trim()) {
-          validationCtrl?.markTouched(storeNameEl, !storeNameEl?.value.trim());
-          validationCtrl?.markTouched(titleEl, !titleEl?.value.trim());
-          window.MachirikuApp?.showToast?.("下書き保存には店舗正式名称と見出しを入力してください");
-          (!storeNameEl?.value.trim() ? storeNameEl : titleEl)?.focus();
+        if (!titleEl?.value.trim()) {
+          validationCtrl?.markTouched(titleEl, true);
+          window.MachirikuApp?.showToast?.("下書き保存にはお知らせ見出しを入力してください");
+          titleEl?.focus();
           return;
         }
         const res = store.saveOpeningPlan(collectPlanPayload("DRAFT"));
         if (res.success) {
           resetS15Editor();
           window.MachirikuApp?.showToast?.("お知らせを下書き保存しました（住民画面には非公開です）");
+        } else {
+          window.MachirikuApp?.showToast?.(res.message || "下書き保存に失敗しました");
         }
       };
     }
 
-    if (form) {
-      form.onsubmit = (e) => {
+    if (noticeForm) {
+      noticeForm.onsubmit = (e) => {
         e.preventDefault();
-        syncOpenDateRequirement();
-        if (!form.checkValidity()) {
+        if (!noticeForm.checkValidity()) {
           const inv = validationCtrl?.focusFirstInvalid();
           if (inv) {
-            const m = inv.validationMessage || "入力内容を確認してください";
+            const m = inv.validationMessage || "お知らせの入力内容を確認してください";
             validationCtrl?.announce(m);
             window.MachirikuApp?.showToast?.(m);
           }
           return;
         }
         const payload = collectPlanPayload("PUBLISHED");
+        const isEditing = Boolean(payload.id);
         openConfirmDialog({
           id: "s15-publish-dialog",
-          title: "この出店計画・お知らせを住民に公開しますか？",
-          subtitle: `${payload.storeName} ／ ${payload.title}`,
-          desc: "公開すると「開店のようす」ページに反映され、物件をフォローしている地域住民へお知らせが届きます。",
-          confirmLabel: "公開する",
+          title: isEditing ? "このお知らせの変更内容を公開しますか？" : "このお知らせを住民に公開しますか？",
+          subtitle: payload.storeName ? `${payload.storeName} ／ ${payload.title}` : payload.title,
+          desc: isEditing
+            ? "記事の本文・写真などの更新内容を「開店のようす」ページへ反映します（店舗の基本情報・進捗は変更されません）。"
+            : "公開すると「開店のようす」ページに反映され、物件をフォローしている地域住民へお知らせが届きます。",
+          confirmLabel: isEditing ? "変更を公開する" : "公開する",
           onConfirm: () => {
             const res = store.saveOpeningPlan(payload);
             if (!res.success) {
@@ -1722,7 +1843,7 @@ window.MachirikuMatchingPages = (function () {
               return;
             }
             resetS15Editor();
-            window.MachirikuApp?.showToast?.("出店計画・お知らせを公開しました！");
+            window.MachirikuApp?.showToast?.(isEditing ? "お知らせの変更を公開しました！" : "お知らせを公開しました！");
           }
         });
       };
@@ -1793,19 +1914,14 @@ window.MachirikuMatchingPages = (function () {
           s15EditingPlanId = plan.id;
           const idEl = document.getElementById("s15-plan-id");
           if (idEl) idEl.value = plan.id;
-          if (storeNameEl) storeNameEl.value = plan.storeName || "";
-          if (openDateEl) openDateEl.value = plan.plannedOpenOn || "";
           if (titleEl) titleEl.value = plan.title || "";
           if (bodyEl) bodyEl.value = plan.body || "";
-          const progR = form?.querySelector(`input[name="progressStatus"][value="${plan.progressStatus || "PREPARING"}"]`);
-          if (progR) progR.checked = true;
           s15Photos = Array.isArray(plan.photos) ? plan.photos.map((ph) => ({ ...ph })) : [];
-          const banner = document.getElementById("s15-edit-banner");
-          if (banner) banner.hidden = false;
-          setText("s15-edit-banner-text", `お知らせ「${plan.title}」を編集中です`);
-          syncOpenDateRequirement();
+          validationCtrl?.resetAll();
+          syncEditNoticeModeUi(plan);
           renderS15PhotoGrid();
           document.getElementById("s15-form-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          titleEl?.focus({ preventScroll: true });
           return;
         }
         const pubBtn = e.target.closest("[data-s15-pub]");
@@ -1893,9 +2009,11 @@ window.MachirikuMatchingPages = (function () {
     const tenancy = store.getTenancyByPropertyId(targetProp.id);
     const app = (state.applications || []).find((a) => a.propId === targetProp.id && a.status !== "rejected" && a.status !== "withdrawn");
 
-    const storeName = latestUpdate?.storeName || targetProp.storePlan?.storeName || tenancy?.storeName || targetProp.contractedStoreName || app?.storeName || "出店計画の公開をお待ちください";
-    const openDate = latestUpdate?.plannedOpenOn || targetProp.storePlan?.openDate || tenancy?.openedOn || app?.targetOpenDate || "";
-    const progressCode = latestUpdate?.progressStatus || targetProp.storePlan?.progressStatus || (targetProp.status === "opened" ? "OPENED" : "PREPARING");
+    const storeName = targetProp.storeProfile?.storeName || targetProp.storePlan?.storeName || latestUpdate?.storeName || tenancy?.storeName || targetProp.contractedStoreName || app?.storeName || "出店計画の公開をお待ちください";
+    const openDate = targetProp.storeProfile
+      ? (targetProp.storeProfile.openDate || "")
+      : (targetProp.storePlan?.openDate || latestUpdate?.plannedOpenOn || tenancy?.openedOn || app?.targetOpenDate || "");
+    const progressCode = targetProp.storeProfile?.progressStatus || targetProp.storePlan?.progressStatus || latestUpdate?.progressStatus || (targetProp.status === "opened" ? "OPENED" : "PREPARING");
     const progressLabel = PROGRESS_LABEL_MAP[progressCode] || targetProp.statusLabel || "開店準備中";
     const genreName = tenancy?.genreName || app?.genreName || targetProp.topDemands?.[0]?.label || "";
 
@@ -1977,7 +2095,7 @@ window.MachirikuMatchingPages = (function () {
           const photos = publishedUpdates[uIdx]?.photos || [];
           openPhotoLightbox(photos, pIdx);
         };
-      } else if (targetProp.storePlan) {
+      } else if (targetProp.storePlan && (targetProp.storePlan.title || targetProp.storePlan.message || targetProp.storePlan.concept)) {
         timelineEl.innerHTML = `
           <article class="s05-update-card">
             <div class="s05-update-head">
@@ -1987,6 +2105,8 @@ window.MachirikuMatchingPages = (function () {
             <p class="story-content-body">${escapeHtml(targetProp.storePlan.message || targetProp.storePlan.concept || "")}</p>
           </article>
         `;
+      } else if (targetProp.storeProfile || targetProp.storePlan) {
+        timelineEl.innerHTML = `<p class="sample-note">店舗の基本情報・現在の進捗は公開されています。店主からの詳しいお知らせ記事の投稿をお待ちください。</p>`;
       } else {
         timelineEl.innerHTML = `<p class="sample-note">出店が決定しました。店舗名や工事進捗の詳しいお知らせは、事業主からの公開をお待ちください。</p>`;
       }
