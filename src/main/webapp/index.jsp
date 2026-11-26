@@ -1,5 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="jp.machiriku.bean.User,jp.machiriku.servlet.auth.LogoutAction,jp.machiriku.tool.Html,com.fasterxml.jackson.databind.ObjectMapper" %>
+<%@ page import="jp.machiriku.bean.User,jp.machiriku.servlet.auth.LogoutAction,jp.machiriku.servlet.management.ManagementPaths,jp.machiriku.tool.Html,com.fasterxml.jackson.databind.ObjectMapper" %>
 <%
   User currentUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
   String rawSessionRole = session.getAttribute("userRole") instanceof String ? (String) session.getAttribute("userRole") : null;
@@ -117,6 +117,10 @@
             <span id="header-notif-badge" class="badge-counter" hidden>0</span>
           </a>
           <a href="<%= profileActionUrl %>" class="btn-header-action profile-link" aria-label="アカウント設定"><span id="header-user-name"><%= Html.escape(displayName) %></span></a>
+          <%-- 実際に権限が付与されたLINE会員にだけ運営画面への入口を表示する。 --%>
+          <% if (Boolean.TRUE.equals(request.getAttribute("showAdminLink"))) { %>
+          <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.ADMIN) %>" class="btn-header-action"><span>管理画面</span></a>
+          <% } %>
         <% } %>
       </div>
     </div>

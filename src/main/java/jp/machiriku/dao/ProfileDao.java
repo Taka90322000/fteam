@@ -25,6 +25,9 @@ import jp.machiriku.tool.PhoneNumbers;
 public class ProfileDao extends Dao {
     private static final String USER_COLUMNS = "user_id, display_name, email, user_role, "
             + "line_subject, account_status, created_at, updated_at, withdrawn_at";
+    /** 管理画面の順序を優先し、列追加前のDBでは従来のID順で表示する。 */
+    private static final String INDUSTRY_DISPLAY_ORDER = "ORDER BY COALESCE((to_jsonb(c)->>'display_order')::integer,c.category_id),c.category_id, "
+            + "COALESCE((to_jsonb(i)->>'display_order')::integer,i.industry_type_id),i.industry_type_id";
 
     protected Connection openConnection() throws SQLException { return getConnection(); }
 
@@ -101,9 +104,13 @@ public class ProfileDao extends Dao {
             }
 
             // 業種・資格のIDを復元し、表示名や画面の並び順では照合しない。
-            Set<String> industries = new LinkedHashSet<>(); // 会員が選択した希望業種のID。
+            // 無効化中の業種は編集画面に表示しないため、現在有効な業種だけを選択済みとして読み込む。
+            Set<String> industries = new LinkedHashSet<>(); // 会員が選択した有効な希望業種のID。
             try (PreparedStatement statement = connection.prepareStatement(
-                    "SELECT industry_type_id FROM user_industry_preferences WHERE user_id=? ORDER BY industry_type_id")) {
+                    "SELECT u.industry_type_id FROM user_industry_preferences u "
+                    + "JOIN industry_types i ON i.industry_type_id=u.industry_type_id "
+                    + "JOIN industry_categories c ON c.category_id=i.category_id "
+                    + "WHERE u.user_id=? AND i.is_active AND c.is_active ORDER BY u.industry_type_id")) {
                 statement.setInt(1, userId);
                 try (ResultSet rows = statement.executeQuery()) {
                     while (rows.next()) { industries.add(rows.getString("industry_type_id")); }
@@ -186,7 +193,7 @@ public class ProfileDao extends Dao {
                     + "JOIN industry_types i ON i.industry_type_id=u.industry_type_id "
                     + "JOIN industry_categories c ON c.category_id=i.category_id "
                     + "WHERE u.user_id=? AND i.is_active AND c.is_active "
-                    + "ORDER BY c.category_id, i.industry_type_id")) {
+                    + INDUSTRY_DISPLAY_ORDER)) {
                 statement.setInt(1, userId);
                 try (ResultSet rows = statement.executeQuery()) {
                     List<String> codes = new ArrayList<>();
@@ -209,12 +216,16 @@ public class ProfileDao extends Dao {
         return result;
     }
 
-    /** 住民画面のタブ・ピル選択用に、DBで有効な業種カテゴリと業種コードの階層を取得する。 */
+    /**
+     * 住民画面の選択欄に表示する有効なカテゴリ・業種の階層を、マスターの設定順に取得する。
+     * @return カテゴリごとに業種コードと名称をまとめた一覧。
+     * @throws SQLException 業種マスターを参照できなかった場合。
+     */
     public List<Map<String, Object>> listResidentTaxonomy() throws SQLException {
         String sql = "SELECT c.category_id, c.category_code, c.category_name, i.industry_code, i.industry_name "
                 + "FROM industry_categories c JOIN industry_types i ON i.category_id = c.category_id "
                 + "WHERE c.is_active AND i.is_active AND i.industry_code IS NOT NULL "
-                + "ORDER BY c.category_id, i.industry_type_id";
+                + INDUSTRY_DISPLAY_ORDER;
         try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(sql);
                 ResultSet rows = statement.executeQuery()) {
             Map<Integer, Map<String, Object>> categories = new LinkedHashMap<>();
@@ -241,11 +252,15 @@ public class ProfileDao extends Dao {
         }
     }
 
-    /** 有効な業種だけを、DBのマスターID付きで画面へ渡す。 */
+    /**
+     * 有効なカテゴリに属する有効な業種を、マスターの設定順に取得する。
+     * @return フォームに表示する業種IDと名称の一覧。
+     * @throws SQLException 業種マスターを参照できなかった場合。
+     */
     public List<RegistrationChoice> listIndustries() throws SQLException {
         String sql = "SELECT i.industry_type_id, c.category_name || ' / ' || i.industry_name AS label "
                 + "FROM industry_types i JOIN industry_categories c ON c.category_id=i.category_id "
-                + "WHERE i.is_active AND c.is_active ORDER BY c.category_id,i.industry_type_id";
+                + "WHERE i.is_active AND c.is_active " + INDUSTRY_DISPLAY_ORDER;
         try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(sql);
                 ResultSet rows = statement.executeQuery()) {
             List<RegistrationChoice> choices = new ArrayList<>();
@@ -254,9 +269,16 @@ public class ProfileDao extends Dao {
         }
     }
 
+    /**
+     * 事業主の保有資格・許認可選択欄に表示する有効な資格・許認可（提出書類を除く）を取得する。
+     * @return 資格IDと名称の一覧。
+     * @throws SQLException 資格マスターを参照できなかった場合。
+     */
     public List<RegistrationChoice> listQualifications() throws SQLException {
+        // 提出書類（DOCUMENT）は保有資格ではないため、QUALIFICATION・PERMITのみを候補とする。
         try (Connection connection = openConnection(); PreparedStatement statement = connection.prepareStatement(
-                "SELECT qualification_id,qualification_name FROM qualifications WHERE is_active ORDER BY qualification_id");
+                "SELECT qualification_id,qualification_name FROM qualifications "
+                + "WHERE is_active AND requirement_kind IN ('QUALIFICATION','PERMIT') ORDER BY qualification_id");
                 ResultSet rows = statement.executeQuery()) {
             List<RegistrationChoice> choices = new ArrayList<>();
             while (rows.next()) { choices.add(new RegistrationChoice(rows.getInt(1), rows.getString(2))); }
@@ -454,19 +476,7 @@ public class ProfileDao extends Dao {
                 statement.setString(11, nullable(input.secondaryPhoneE164()));
                 statement.executeUpdate();
             }
-            try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_industry_preferences WHERE user_id=?")) {
-                statement.setInt(1, userId);
-                statement.executeUpdate();
-            }
-            try (PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO user_industry_preferences (user_id,industry_type_id) VALUES (?,?)")) {
-                for (int industryId : industries) {
-                    statement.setInt(1, userId);
-                    statement.setInt(2, industryId);
-                    statement.addBatch();
-                }
-                statement.executeBatch();
-            }
+            saveIndustryPreferences(connection, userId, industries);
             // 選択解除した資格は非表示にし、資格番号や取得日など既存の詳細は消さない。
             try (PreparedStatement statement = connection.prepareStatement(
                     "UPDATE business_qualifications SET is_active=false,updated_at=CURRENT_TIMESTAMP WHERE business_user_id=?")) {
@@ -608,14 +618,26 @@ public class ProfileDao extends Dao {
         return List.copyOf(ids);
     }
 
+    /**
+     * 現在有効な業種に該当する希望業種だけを入れ替え、管理側で無効化中の業種選択は保持する。
+     * @param connection トランザクション中の接続。
+     * @param userId 対象会員ID。
+     * @param ids 本人が選択した有効な業種ID一覧。
+     * @throws SQLException DB更新に失敗した場合。
+     */
     private void saveIndustryPreferences(Connection connection, int userId, List<Integer> ids) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("DELETE FROM user_industry_preferences WHERE user_id=?")) {
+        // 本人画面に表示されない無効業種の選択まで消してしまわないよう、有効業種に紐づく行だけを削除する。
+        try (PreparedStatement statement = connection.prepareStatement(
+                "DELETE FROM user_industry_preferences p WHERE p.user_id=? AND EXISTS ("
+                + "SELECT 1 FROM industry_types i JOIN industry_categories c ON c.category_id=i.category_id "
+                + "WHERE i.industry_type_id=p.industry_type_id AND i.is_active AND c.is_active)")) {
             statement.setInt(1, userId);
             statement.executeUpdate();
         }
         if (ids.isEmpty()) { return; }
         try (PreparedStatement statement = connection.prepareStatement(
-                "INSERT INTO user_industry_preferences (user_id,industry_type_id) VALUES (?,?)")) {
+                "INSERT INTO user_industry_preferences (user_id,industry_type_id) VALUES (?,?) "
+                + "ON CONFLICT (user_id,industry_type_id) DO NOTHING")) {
             for (int id : ids) {
                 statement.setInt(1, userId);
                 statement.setInt(2, id);
@@ -636,7 +658,7 @@ public class ProfileDao extends Dao {
     private void validateMasterIds(Connection connection, List<Integer> ids, boolean industries) throws SQLException {
         String sql = industries
                 ? "SELECT 1 FROM industry_types i JOIN industry_categories c ON c.category_id=i.category_id WHERE i.industry_type_id=? AND i.is_active AND c.is_active"
-                : "SELECT 1 FROM qualifications WHERE qualification_id=? AND is_active";
+                : "SELECT 1 FROM qualifications WHERE qualification_id=? AND is_active AND requirement_kind IN ('QUALIFICATION','PERMIT')";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             for (int id : ids) {
                 statement.setInt(1, id);

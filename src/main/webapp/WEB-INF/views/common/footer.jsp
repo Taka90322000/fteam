@@ -1,5 +1,5 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@ page import="jp.machiriku.bean.User,jp.machiriku.servlet.auth.LogoutAction,jp.machiriku.tool.Html" %>
+<%@ page import="jp.machiriku.bean.User,jp.machiriku.servlet.auth.LogoutAction,jp.machiriku.servlet.management.ManagementPaths,jp.machiriku.tool.Html" %>
 <%
   User footerUser = session.getAttribute("user") instanceof User ? (User) session.getAttribute("user") : null;
   String rawFooterRole = session.getAttribute("userRole") instanceof String ? (String) session.getAttribute("userRole") : null;
@@ -16,6 +16,9 @@
       </div>
       <nav class="footer-links" aria-label="関連メニュー">
         <a href="${pageContext.request.contextPath}/index.jsp">ホーム</a>
+        <% if (Boolean.TRUE.equals(request.getAttribute("showAdminLink"))) { %>
+        <a href="<%= Html.escape(request.getContextPath() + ManagementPaths.ADMIN) %>">管理画面</a>
+        <% } %>
         <% if (footerUser == null && !isFooterDemo) { %>
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Login.action">ログイン</a>
         <a href="${pageContext.request.contextPath}/jp/machiriku/servlet/auth/Register.action">新規会員登録</a>

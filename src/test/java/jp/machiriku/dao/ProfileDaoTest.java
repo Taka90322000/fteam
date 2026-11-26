@@ -551,6 +551,36 @@ public class ProfileDaoTest {
         assertEquals(List.of("I0101", "I0201"), subs.stream().map(s -> s.get("id")).toList());
     }
 
+    @Test
+    public void documentRequirementsAreExcludedFromBusinessQualificationsAndInactiveIndustriesArePreserved() throws Exception {
+        // 有効なDOCUMENTは事業主の保有資格候補に表示されず、保存時も拒否されることを確認する。
+        execute("INSERT INTO qualifications (qualification_id,qualification_name,requirement_kind,is_active) "
+                + "VALUES (103,'営業許可申請書','DOCUMENT',true)");
+        assertEquals(List.of(100, 101), dao.listQualifications().stream().map(choice -> choice.id()).toList());
+        assertThrows(IllegalArgumentException.class,
+                () -> dao.saveBusiness(2, business(null, List.of(10), List.of(103), AREA, false)));
+
+        // 管理側で業種を一時的に無効化した状態で本人が別項目を保存しても、元の業種選択が保持されることを確認する。
+        dao.saveResident(1, new ResidentProfileInput("変更前", null, "20代", "その他", null, home(), null, false,
+                List.of("I0101", "I0201")));
+        execute("UPDATE industry_types SET is_active=false WHERE industry_type_id=11");
+        Map<String, String> residentFields = new LinkedHashMap<>(dao.findResidentFields(1));
+        residentFields.put("name", "ニックネームのみ変更");
+        dao.saveResident(1, RegistrationForms.resident(residentFields));
+        assertEquals(2, count("SELECT count(*) FROM user_industry_preferences WHERE user_id=1"));
+        execute("UPDATE industry_types SET is_active=true WHERE industry_type_id=11");
+        assertTrue(dao.findResidentFields(1).get("preferredIndustries").contains("I0201"));
+
+        // 事業主でも同様に、無効化中の業種選択が別項目の保存で消えないことを確認する。
+        dao.saveBusiness(2, business(null, List.of(10, 11), List.of(100), AREA, false));
+        execute("UPDATE industry_types SET is_active=false WHERE industry_type_id=11");
+        ProfileSettings bizSettings = dao.findProfileSettings(2, "BUSINESS");
+        assertEquals(Set.of("10"), bizSettings.selectedIndustries());
+        dao.saveBusiness(2, RegistrationForms.business(bizSettings.fields(),
+                new ArrayList<>(bizSettings.selectedIndustries()), new ArrayList<>(bizSettings.selectedQualifications())));
+        assertEquals(2, count("SELECT count(*) FROM user_industry_preferences WHERE user_id=2"));
+    }
+
     private ResidentProfileInput resident(String name, String email, LocationInput home, LocationInput work, boolean notify) {
         return new ResidentProfileInput(name, email, "20代", "その他", null, home, work, notify);
     }
