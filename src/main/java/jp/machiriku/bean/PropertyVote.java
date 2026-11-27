@@ -2,9 +2,12 @@ package jp.machiriku.bean;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+
+import jp.machiriku.logic.DemandScoreCalculator;
 
 /** property_votes(物件投票)の1行と、その希望明細。取消済みなら withdrawnAt に日時が入る。 */
 public class PropertyVote implements Serializable {
@@ -43,4 +46,14 @@ public class PropertyVote implements Serializable {
     public List<VoteChoice> getChoices() { return choices; }
     public void setChoices(List<VoteChoice> choices) { this.choices = choices; }
     public boolean isWithdrawn() { return withdrawnAt != null; }
+
+    /** 画面表示用の、この投票のスコア(希望明細ごとのスコアの合計、小数第3位まで)。 */
+    public BigDecimal getScore() {
+        if (distanceKm == null || distanceScaleKm == null) { return BigDecimal.ZERO.setScale(3); }
+        double total = 0;
+        for (VoteChoice choice : choices) {
+            total += DemandScoreCalculator.score(choice.getPreferenceRank(), distanceKm.doubleValue(), distanceScaleKm.doubleValue());
+        }
+        return BigDecimal.valueOf(total).setScale(3, RoundingMode.HALF_UP);
+    }
 }

@@ -4,34 +4,39 @@ import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jp.machiriku.bean.PropertyVote;
+import jakarta.servlet.http.HttpSession;
 import jp.machiriku.bean.User;
+import jp.machiriku.dao.IndustryMasterDao;
+import jp.machiriku.dao.VoteContextDao;
 import jp.machiriku.dao.VoteDao;
 import jp.machiriku.dao.VoteException;
 import jp.machiriku.tool.Action;
 
 /**
- * 地域住民の物件投票API。結果はすべてJSONで返す(画面のS03から呼ばれる想定)。
+ * 投票フォームの送信を受け取って保存するAction。地域住民のみ、POSTのみ。
+ * <p>URL: {@code /jp/machiriku/servlet/vote/Vote.action}(POST)</p>
  * <ul>
- *   <li>GET  ?propertyId=N                       自分の投票内容を取得(未投票なら vote が null)</li>
- *   <li>POST propertyId, rank1〜rank3, frequency, comment [, locationId]   投票・再投票(locationId は距離の基準にする生活拠点。省略すると一番近い拠点)</li>
- *   <li>POST propertyId, withdraw=1              投票の取消</li>
+ *   <li>投票・再投票: propertyId, rank1〜rank3, frequency, comment, locationId(省略可), csrfToken →
+ *       保存して {@code VoteDone.action} へリダイレクト</li>
+ *   <li>取消: propertyId, withdraw=1, csrfToken → 取り消して {@code VoteHistory.action} へリダイレクト</li>
+ *   <li>入力エラー: 同じ投票画面(vote_form.jsp)を、入力値とエラー文つきで再表示</li>
  * </ul>
- * POSTは画面のJavaScriptから送り、ヘッダー X-Requested-With: XMLHttpRequest を付ける。
+ * 保存後はリダイレクトするので、完了画面を更新(リロード)しても二重に投票されない。
  */
 public class VoteAction extends Action {
     private final VoteDao voteDao;
+    private final VoteFormPage page;
 
     public VoteAction() {
-        this(new VoteDao());
+        this(new VoteDao(), new VoteContextDao(), new IndustryMasterDao());
     }
 
-    public VoteAction(VoteDao voteDao) {
+    public VoteAction(VoteDao voteDao, VoteContextDao contextDao, IndustryMasterDao industryDao) {
         this.voteDao = voteDao;
+        this.page = new VoteFormPage(contextDao, industryDao, voteDao);
     }
 
     @Override
@@ -39,89 +44,76 @@ public class VoteAction extends Action {
         User user = VoteSupport.requireResident(req, res);
         if (user == null) { return; }
 
-        String method = req.getMethod();
-        boolean post = "POST".equalsIgnoreCase(method);
-        if (!post && !"GET".equalsIgnoreCase(method)) {
-            VoteSupport.error(res, 405, "METHOD_NOT_ALLOWED", "GETまたはPOSTで呼び出してください。");
-            return;
-        }
-        if (post && !VoteSupport.hasAjaxHeader(req)) {
-            VoteSupport.error(res, 403, "CSRF", "不正なリクエストです。画面から操作してください。");
-            return;
-        }
-
-        int propertyId;
-        try {
-            propertyId = Integer.parseInt(req.getParameter("propertyId").strip());
-        } catch (RuntimeException e) {
-            VoteSupport.error(res, 400, VoteException.INVALID_INPUT, "物件IDが正しくありません。");
-            return;
-        }
-
-        try {
-            if (!post) {
-                respondCurrentVote(res, user, propertyId);
-            } else if ("1".equals(req.getParameter("withdraw"))) {
-                respondWithdraw(res, user, propertyId);
+        if (!"POST".equalsIgnoreCase(req.getMethod())) {
+            // アドレスを直接開いた場合は、投票画面へ案内する。
+            Integer id = VoteSupport.positiveInt(req.getParameter("propertyId"));
+            if ("GET".equalsIgnoreCase(req.getMethod()) && id != null) {
+                res.sendRedirect(VoteSupport.url(req, "VoteForm") + "?propertyId=" + id);
             } else {
-                respondSave(req, res, user, propertyId);
+                res.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
             }
-        } catch (VoteException e) {
-            VoteSupport.error(res, statusOf(e.getCode()), e.getCode(), e.getMessage());
+            return;
+        }
+
+        req.setCharacterEncoding("UTF-8");
+        if (!VoteSupport.validCsrf(req)) {
+            res.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
+        Integer propertyId = VoteSupport.positiveInt(req.getParameter("propertyId"));
+        if (propertyId == null) {
+            res.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return;
+        }
+
+        try {
+            if ("1".equals(req.getParameter("withdraw"))) {
+                voteDao.withdrawVote(user.getUserId(), propertyId);
+                res.sendRedirect(VoteSupport.url(req, "VoteHistory") + "?withdrawn=1");
+            } else {
+                save(req, res, user, propertyId);
+            }
         } catch (SQLException e) {
             VoteSupport.logDatabaseError(req, e);
-            VoteSupport.error(res, 500, "SERVER_ERROR", "投票を処理できませんでした。時間をおいてもう一度お試しください。");
+            if (!res.isCommitted()) { res.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR); }
         }
     }
 
-    private void respondCurrentVote(HttpServletResponse res, User user, int propertyId) throws Exception {
-        Optional<PropertyVote> vote = voteDao.findVote(user.getUserId(), propertyId);
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("success", true);
-        // 取消済みの投票は「投票していない」として返す(画面はフォームを空で表示する)。
-        body.put("vote", vote.filter(v -> !v.isWithdrawn()).map(VoteSupport::toMap).orElse(null));
-        VoteSupport.write(res, 200, body);
-    }
-
-    private void respondWithdraw(HttpServletResponse res, User user, int propertyId) throws Exception {
-        boolean withdrawn = voteDao.withdrawVote(user.getUserId(), propertyId);
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("success", true);
-        body.put("withdrawn", withdrawn);
-        VoteSupport.write(res, 200, body);
-    }
-
-    private void respondSave(HttpServletRequest req, HttpServletResponse res, User user, int propertyId) throws Exception {
-        boolean updated = voteDao.findVote(user.getUserId(), propertyId).filter(v -> !v.isWithdrawn()).isPresent();
-        String frequency = req.getParameter("frequency");
-        if (frequency == null) { frequency = req.getParameter("visitFrequency"); }
-        Integer locationId = null;
-        String rawLocation = req.getParameter("locationId");
-        if (rawLocation != null && !rawLocation.isBlank()) {
-            try {
-                locationId = Integer.valueOf(rawLocation.strip());
-                if (locationId < 1) { throw new NumberFormatException(); }
-            } catch (NumberFormatException e) {
-                throw new VoteException(VoteException.INVALID_INPUT, "生活拠点が正しくありません。");
+    private void save(HttpServletRequest req, HttpServletResponse res, User user, int propertyId) throws Exception {
+        Map<String, String> entered = enteredValues(req);
+        try {
+            Integer locationId = null;
+            String rawLocation = entered.get("locationId");
+            if (!rawLocation.isBlank()) {
+                locationId = VoteSupport.positiveInt(rawLocation);
+                if (locationId == null) { throw new VoteException(VoteException.INVALID_INPUT, "生活拠点が正しくありません。"); }
+            }
+            boolean updated = voteDao.findVote(user.getUserId(), propertyId).filter(v -> !v.isWithdrawn()).isPresent();
+            voteDao.saveVote(user.getUserId(), propertyId, locationId,
+                    List.of(entered.get("rank1"), entered.get("rank2"), entered.get("rank3")),
+                    entered.get("frequency"), entered.get("comment"));
+            res.sendRedirect(VoteSupport.url(req, "VoteDone") + "?propertyId=" + propertyId + (updated ? "&updated=1" : ""));
+        } catch (VoteException e) {
+            switch (e.getCode()) {
+                case VoteException.PROPERTY_NOT_FOUND -> res.sendError(HttpServletResponse.SC_NOT_FOUND);
+                case VoteException.NOT_RESIDENT -> res.sendError(HttpServletResponse.SC_FORBIDDEN);
+                default -> page.show(req, res, user, propertyId, entered, e.getMessage(), statusOf(e.getCode()));
             }
         }
-        PropertyVote saved = voteDao.saveVote(user.getUserId(), propertyId, locationId,
-                List.of(nullToEmpty(req.getParameter("rank1")), nullToEmpty(req.getParameter("rank2")), nullToEmpty(req.getParameter("rank3"))),
-                frequency, req.getParameter("comment"));
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("success", true);
-        body.put("updated", updated);
-        body.put("vote", VoteSupport.toMap(saved));
-        VoteSupport.write(res, 200, body);
     }
 
-    private static String nullToEmpty(String value) { return value == null ? "" : value; }
+    /** フォームの入力値。再表示のときに、そのまま入力欄へ戻すために使う。 */
+    private static Map<String, String> enteredValues(HttpServletRequest req) {
+        Map<String, String> values = new LinkedHashMap<>();
+        for (String name : new String[] {"rank1", "rank2", "rank3", "frequency", "comment", "locationId"}) {
+            String value = req.getParameter(name);
+            values.put(name, value == null ? "" : value);
+        }
+        return values;
+    }
 
     private static int statusOf(String code) {
         return switch (code) {
-            case VoteException.INVALID_INPUT, VoteException.BAD_CHOICES, VoteException.BAD_LOCATION -> 400;
-            case VoteException.NOT_RESIDENT -> 403;
-            case VoteException.PROPERTY_NOT_FOUND -> 404;
             case VoteException.PROPERTY_CLOSED, VoteException.PROPERTY_NO_LOCATION, VoteException.NO_LOCATION -> 409;
             default -> 400;
         };

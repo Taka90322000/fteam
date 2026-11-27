@@ -1,56 +1,60 @@
 package jp.machiriku.servlet.vote;
 
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.HexFormat;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
-import jp.machiriku.bean.PropertyVote;
 import jp.machiriku.bean.User;
-import jp.machiriku.bean.VoteChoice;
-import jp.machiriku.logic.DemandScoreCalculator;
 
-/** 投票API共通の、本人確認・JSON応答・投票内容のJSON変換。 */
+/** 投票機能の各Actionに共通する、本人確認・CSRF対策・URLの組み立て。 */
 final class VoteSupport {
-    private static final ObjectMapper JSON = new ObjectMapper();
+    static final String CSRF_KEY = "voteCsrfToken";
+    private static final String BASE = "/jp/machiriku/servlet/vote/";
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private VoteSupport() { }
 
-    /** ログイン中の有効な地域住民を返す。条件を満たさない場合はJSONでエラーを返して null。 */
-    static User requireResident(HttpServletRequest req, HttpServletResponse res) throws IOException {
+    /**
+     * ログイン中の有効な地域住民を返す。条件を満たさなければ、ログイン画面・初期設定画面への案内、
+     * またはエラー応答を出して null を返す(呼び出し側はそのまま処理を終える)。
+     */
+    static User requireResident(HttpServletRequest req, HttpServletResponse res) throws Exception {
         res.setHeader("Cache-Control", "no-store");
         HttpSession session = req.getSession(false);
         if (session == null || !(session.getAttribute("user") instanceof User user)) {
-            error(res, 401, "UNAUTHENTICATED", "ログインが必要です。");
+            res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/Login.action");
             return null;
         }
         if (user.getWithdrawnAt() != null) {
-            error(res, 403, "FORBIDDEN", "この会員は利用できません。");
+            res.sendError(HttpServletResponse.SC_FORBIDDEN);
             return null;
         }
+        // 初期設定がまだ完了していない会員は、初期設定画面へ案内する。
         if ("PENDING".equals(user.getAccountStatus())) {
-            error(res, 403, "SETUP_REQUIRED", "初期設定を完了してください。");
+            String target = switch (String.valueOf(user.getUserRole())) {
+                case "BUSINESS" -> "BusinessSetup";
+                case "OWNER" -> "OwnerSetup";
+                default -> "ResidentSetup";
+            };
+            res.sendRedirect(req.getContextPath() + "/jp/machiriku/servlet/auth/" + target + ".action");
             return null;
         }
+        // 投票できるのは、有効な地域住民の会員だけ。
         if (!"RESIDENT".equals(user.getUserRole()) || !"ACTIVE".equals(user.getAccountStatus())) {
-            error(res, 403, "NOT_RESIDENT", "投票できるのは地域住民の会員だけです。");
+            res.sendError(HttpServletResponse.SC_FORBIDDEN);
             return null;
         }
         return user;
     }
 
     /**
-     * ログイン中で、初期設定済み・退会していない会員を返す。条件を満たさなければ null(エラー応答は出さない)。
-     * 集計の閲覧のように、ログインなしでも見られる情報で「ログイン中ならここまで見せる」を分けるときに使う。
+     * ログイン中で、初期設定済み・退会していない会員を返す。条件を満たさなければ null(応答は出さない)。
+     * 集計の閲覧のように、ログインなしでも見られる画面で「会員ならここまで見せる」を分けるときに使う。
      */
     static User currentActiveMember(HttpServletRequest req) {
         HttpSession session = req.getSession(false);
@@ -59,59 +63,44 @@ final class VoteSupport {
         return user;
     }
 
-    /**
-     * 他サイトからのフォーム送信(CSRF)を防ぐため、更新系は画面のJavaScriptからだけ受け付ける。
-     * ブラウザは別サイトからカスタムヘッダー付きの送信を許可しないため、このヘッダーの有無で判別できる。
-     */
-    static boolean hasAjaxHeader(HttpServletRequest req) {
-        return "XMLHttpRequest".equals(req.getHeader("X-Requested-With"));
+    /** 画面のフォームに埋め込むCSRFトークン。セッションごとに1つ作って使い回す。 */
+    static String csrfToken(HttpSession session) {
+        synchronized (session) {
+            if (!(session.getAttribute(CSRF_KEY) instanceof String)) {
+                byte[] random = new byte[32];
+                RANDOM.nextBytes(random);
+                session.setAttribute(CSRF_KEY, HexFormat.of().formatHex(random));
+            }
+            return (String) session.getAttribute(CSRF_KEY);
+        }
     }
 
-    static void error(HttpServletResponse res, int status, String code, String message) throws IOException {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("success", false);
-        body.put("code", code);
-        body.put("message", message);
-        write(res, status, body);
+    /** フォームで送られた csrfToken が、セッションのものと一致するか。 */
+    static boolean validCsrf(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        if (session == null || !(session.getAttribute(CSRF_KEY) instanceof String expected)) { return false; }
+        String actual = req.getParameter("csrfToken");
+        return actual != null
+                && MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
     }
 
-    static void write(HttpServletResponse res, int status, Map<String, Object> body) throws IOException {
-        res.setStatus(status);
-        res.setContentType("application/json");
-        res.setCharacterEncoding("UTF-8");
-        res.getWriter().write(JSON.writeValueAsString(body));
+    /** 投票機能のActionのURL(例: /machiriku/jp/machiriku/servlet/vote/VoteForm.action)。 */
+    static String url(HttpServletRequest req, String actionName) {
+        return req.getContextPath() + BASE + actionName + ".action";
     }
 
     static void logDatabaseError(HttpServletRequest req, SQLException error) {
         req.getServletContext().log("Vote failed (SQLState=" + error.getSQLState() + ").");
     }
 
-    /** 投票1件を画面へ返す形に変換する。score は明細スコアの合計(小数第3位まで)。 */
-    static Map<String, Object> toMap(PropertyVote vote) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        map.put("voteId", vote.getVoteId());
-        map.put("propertyId", vote.getPropertyId());
-        map.put("withdrawn", vote.isWithdrawn());
-        map.put("distanceKm", vote.getDistanceKm());
-        map.put("distanceScaleKm", vote.getDistanceScaleKm());
-        map.put("frequency", vote.getVisitFrequency());
-        map.put("comment", vote.getRequestComment());
-        map.put("updatedAt", vote.getUpdatedAt() == null ? null : vote.getUpdatedAt().toString());
-
-        List<Map<String, Object>> choices = new ArrayList<>();
-        double total = 0;
-        for (VoteChoice choice : vote.getChoices()) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("rank", choice.getPreferenceRank());
-            item.put("industryCode", choice.getIndustryCode());
-            item.put("industryName", choice.getIndustryName());
-            item.put("rankWeight", choice.getRankWeight());
-            choices.add(item);
-            total += DemandScoreCalculator.score(choice.getPreferenceRank(),
-                    vote.getDistanceKm().doubleValue(), vote.getDistanceScaleKm().doubleValue());
+    /** 物件IDなど、1以上の整数のパラメーターを読む。正しくなければ null。 */
+    static Integer positiveInt(String raw) {
+        if (raw == null) { return null; }
+        try {
+            int value = Integer.parseInt(raw.strip());
+            return value >= 1 ? value : null;
+        } catch (NumberFormatException e) {
+            return null;
         }
-        map.put("choices", choices);
-        map.put("score", BigDecimal.valueOf(total).setScale(3, RoundingMode.HALF_UP));
-        return map;
     }
 }
