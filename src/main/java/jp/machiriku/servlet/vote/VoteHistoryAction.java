@@ -100,7 +100,7 @@ public class VoteHistoryAction extends Action {
     private static int parseInt(String raw, int fallback, int min, int max, String label) {
         if (raw == null || raw.isBlank()) { return fallback; }
         try {
-            int value = Integer.parseInt(raw.strip());
+            int value = Integer.parseInt(raw.strip())  ;
             if (value < min || value > max) { throw new NumberFormatException(); }
             return value;
         } catch (NumberFormatException e) {
